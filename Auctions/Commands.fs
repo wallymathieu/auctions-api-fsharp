@@ -7,9 +7,9 @@ open Either
 
 type Command =
     | Empty of at:DateTime
-    | AddAuction of id:AuctionId *at:DateTime* title:string * endsAt:DateTime 
-    | PlaceBid of auction:AuctionId* id: BidId* at: DateTime * amount:Amount* user:UserId
-    | RemoveBid of id: BidId* user:UserId* at: DateTime 
+    | AddAuction of id:AuctionId *at:DateTime* title:string * endsAt:DateTime * user:User 
+    | PlaceBid of auction:AuctionId* id: BidId* at: DateTime * amount:Amount* user:User
+    | RemoveBid of id: BidId* user:User* at: DateTime 
     with
         /// the time when the command was issued
         static member getAt command=
@@ -22,15 +22,14 @@ type Command =
 let handleCommand (r:Repository) command=
     match command with
     | Empty(at=at)-> Success()
-    | AddAuction(id=id;title=title;endsAt=endsAt)->
+    | AddAuction(id=id;title=title;endsAt=endsAt;user=user)->
         either{
             match r.TryGetAuction id with
             | Some _-> return! Failure(AuctionAlreadyExists id)
-            | None -> return! r.SaveAuction {id=id;title=title;endsAt=endsAt}
+            | None -> return! r.SaveAuction {id=id;title=title;endsAt=endsAt;user=User.getId user}
         }
     | PlaceBid(id=id;auction=auction;amount=amount;user=user;at=at)->
         either{
-            let! user = r.GetUser user
             let! auction = r.GetAuction auction
             let placeBid ()=
                 match r.TryGetBid id with
@@ -38,7 +37,10 @@ let handleCommand (r:Repository) command=
                     if at > auction.endsAt then
                         Failure(AuctionHasEnded auction.id)
                     else
-                        r.SaveBid {id=id;auction=auction;amount=amount;user=user;at=at;retracted=None}
+                        if User.getId user = auction.user then
+                            Failure(SellerCannotPlaceBids (User.getId user, auction.id ))
+                        else
+                            r.SaveBid {id=id;auction=auction;amount=amount;user=User.getId user;at=at;retracted=None}
                 | Some _ ->
                     Failure(BidAlreadyExists id)
 
@@ -53,7 +55,6 @@ let handleCommand (r:Repository) command=
 
         either{
             let! bid = r.GetBid id
-            let! user = r.GetUser user
             let retract()=
                 if at > bid.auction.endsAt then
                     Failure(AuctionHasEnded bid.auction.id)
@@ -63,7 +64,7 @@ let handleCommand (r:Repository) command=
 
             match user with
             | BuyerOrSeller(id=id;name=_)-> 
-                if id <> User.getId bid.user then
+                if id <> bid.user then
                     return! Failure(CannotRemoveOtherPeoplesBids(id,bid.id))
                 else
                     return! retract()

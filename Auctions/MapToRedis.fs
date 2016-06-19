@@ -83,18 +83,19 @@ let mapFromHashEntries entries : Command=
         let title = entries|>findEntryStr "Title"
         let endsAt = entries|>findEntryInt64 "EndsAt" |> DateTime
         let at = entries|>findEntryInt64 "At" |> DateTime
-        AddAuction(id=id,title=title,endsAt=endsAt,at=at)
+        let user = entries|>findEntryStr "User" |> Domain.User.parse
+        AddAuction(id=id,title=title,endsAt=endsAt,at=at,user=user)
     | "PlaceBid" ->
         let id = entries|>findEntryStr "Id" |> Guid.Parse
         let auction = entries|>findEntryStr "Auction" |> Guid.Parse
         let amount = entries|>findEntryFloat "AmountValue" 
         let currency = entries|>findEntryStr "AmountCurrency" 
-        let user = entries|>findEntryStr "User" |> Guid.Parse
+        let user = entries|>findEntryStr "User" |> Domain.User.parse
         let at = entries|>findEntryInt64 "At" |> DateTime
         PlaceBid(id=id,auction=auction,amount={value=amount;currency=currency},user=user,at=at)
     | "RemoveBid" ->
         let id = entries|>findEntryStr "Id" |> Guid.Parse
-        let user = entries|>findEntryStr "User" |> Guid.Parse
+        let user = entries|>findEntryStr "User" |> Domain.User.parse
         let at = entries|>findEntryInt64 "At" |> DateTime
         RemoveBid(id=id,user=user,at=at)
     | v -> failwithf "Unknown type %s" v
