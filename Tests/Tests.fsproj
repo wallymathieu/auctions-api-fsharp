@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -17,16 +17,19 @@
     <DefineConstants>DEBUG</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <ConsolePause>false</ConsolePause>
-    <PlatformTarget></PlatformTarget>
+    <PlatformTarget>
+    </PlatformTarget>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <Optimize>true</Optimize>
     <OutputPath>bin\Release</OutputPath>
-    <DefineConstants></DefineConstants>
+    <DefineConstants>
+    </DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <ConsolePause>false</ConsolePause>
     <GenerateTailCalls>true</GenerateTailCalls>
-    <PlatformTarget></PlatformTarget>
+    <PlatformTarget>
+    </PlatformTarget>
   </PropertyGroup>
   <PropertyGroup>
     <FSharpTargetsPath>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets</FSharpTargetsPath>
@@ -34,25 +37,41 @@
   <PropertyGroup Condition="'$(VisualStudioVersion)' == '10.0' OR '$(VisualStudioVersion)' == '11.0'">
     <FSharpTargetsPath>$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets</FSharpTargetsPath>
   </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-        <Reference Include="StackExchange.Redis">
-      <HintPath>..\StackExchange.Redis\StackExchange.Redis\bin\Debug\StackExchange.Redis.dll</HintPath>
-    </Reference>
-        <Reference Include="FSharp.Core">
-          <HintPath>..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
-        </Reference>
-  </ItemGroup>
+  <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Component1.fs" />
     <Compile Include="Script.fsx" />
+    <None Include="packages.config" />
+    <Content Include="TestData.xml" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <Reference Include="FSharp.Data">
+      <HintPath>..\packages\FSharp.Data.2.3.0\lib\net40\FSharp.Data.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="FsUnit.NUnit">
+      <HintPath>..\packages\FsUnit.1.4.1.0\lib\net45\FsUnit.NUnit.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="mscorlib" />
+    <Reference Include="NHamcrest">
+      <HintPath>..\packages\FsUnit.1.4.1.0\lib\net45\NHamcrest.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="nunit.framework">
+      <HintPath>..\packages\NUnit.2.6.4\lib\nunit.framework.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Numerics" />
+    <Reference Include="StackExchange.Redis">
+      <HintPath>..\StackExchange.Redis\StackExchange.Redis\bin\Debug\StackExchange.Redis.dll</HintPath>
+    </Reference>
+    <Reference Include="FSharp.Core">
+      <HintPath>..\packages\FSharp.Core.4.0.0.1\lib\net40\FSharp.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Xml.Linq" />
   </ItemGroup>
-  <Import Project="$(FSharpTargetsPath)" />
 </Project>
