@@ -33,13 +33,3 @@ type Error=
     |SupportCantPlaceBids
     |CannotRemoveOtherPeoplesBids of UserId*BidId
 
-
-
-
-
-                    
-(*        member Save:User->Result<unit,Error>
-        member Save:Bid->Result<unit,Error>
-        member Save:Auction->Result<unit,Error>
-        *)
-    //new ConcurrentDictionary<long, Customer>()
