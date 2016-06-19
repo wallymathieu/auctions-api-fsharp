@@ -31,11 +31,12 @@ module MapToRedis=
             hashEntryStr "Type" t :: xs
 
         match command with
-        | AddAuction(id=id;title=title;endsAt=endsAt)->
+        | AddAuction(id=id;title=title;endsAt=endsAt;at=at)->
             [
             hashEntryStr "Id" (id.ToString())
             hashEntryStr "Title" (title)
             hashEntryInt64 "EndsAt" endsAt.Ticks
+            hashEntryInt64 "EndsAt" at.Ticks
             ] |> withType "AddAuction"
         | PlaceBid(id=id;auction=auction;amount=amount;user=user;at=at)->
             [
@@ -80,7 +81,8 @@ module MapToRedis=
             let id = entries|>findEntryStr "Id" |> Domain.AuctionId.Parse
             let title = entries|>findEntryStr "Title"
             let endsAt = entries|>findEntryInt64 "EndsAt" |> DateTime
-            AddAuction(id=id,title=title,endsAt=endsAt)
+            let at = entries|>findEntryInt64 "At" |> DateTime
+            AddAuction(id=id,title=title,endsAt=endsAt,at=at)
         | "PlaceBid" ->
             let id = entries|>findEntryStr "Id" |> Guid.Parse
             let auction = entries|>findEntryStr "Auction" |> Guid.Parse

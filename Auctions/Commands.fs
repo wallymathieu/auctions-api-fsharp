@@ -4,11 +4,18 @@ open Auctions
 open System
 open Either
 
-type Command =
-    | AddAuction of id:AuctionId * title:string * endsAt:DateTime
-    | PlaceBid of auction:AuctionId* id: BidId* amount:Amount* user:UserId* at: DateTime
-    | RemoveBid of id: BidId* user:UserId* at: DateTime 
 
+type Command =
+    | AddAuction of id:AuctionId *at:DateTime* title:string * endsAt:DateTime 
+    | PlaceBid of auction:AuctionId* id: BidId* at: DateTime * amount:Amount* user:UserId
+    | RemoveBid of id: BidId* user:UserId* at: DateTime 
+    with
+        /// the time when the command was issued
+        static member getAt command=
+            match command with
+            | AddAuction(at=at) -> at
+            | PlaceBid(at=at) -> at
+            | RemoveBid(at=at) -> at
 
 let handleCommand (r:Repository) command=
     match command with
