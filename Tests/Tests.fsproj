@@ -74,4 +74,11 @@
     </Reference>
     <Reference Include="System.Xml.Linq" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Auctions\Auctions.fsproj">
+      <Name>Auctions</Name>
+      <Project>{d2034153-96b4-4a5a-8750-c41afbe59bec}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
 </Project>
