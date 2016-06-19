@@ -1,0 +1,12 @@
+sudo: false
+language: csharp 
+services:
+  - redis-server 
+  
+solution: ./auction-site.sln
+install:
+    - bundle install
+    - rake restore
+
+script: 
+  - rake test
