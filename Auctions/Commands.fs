@@ -4,7 +4,6 @@ open Auctions
 open System
 open Either
 
-
 type Command =
     | Empty of at:DateTime
     | AddAuction of id:AuctionId *at:DateTime* title:string * endsAt:DateTime * user:User 

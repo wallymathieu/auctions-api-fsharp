@@ -1,10 +1,17 @@
 ﻿namespace Tests
 open NUnit.Framework
-open FsUnit
-open Commands
-
+open Domain
+open System
 [<TestFixture>]
-type ``Should map commands`` ()=
+type ``Can parse user`` ()=
     [<Test>] member test.
-     ``map add bid`` ()=
-        11 |> should be (greaterThanOrEqualTo 10)
+     ``Buyer or seller`` ()=
+        let user = BuyerOrSeller(Guid.NewGuid(),"seller")
+        in
+            Assert.AreEqual(user, user.ToString() |> User.parse)
+
+    [<Test>] member test.
+     ``Support`` ()=
+        let user = Support(Guid.NewGuid())
+        in
+            Assert.AreEqual(user, user.ToString() |> User.parse)
