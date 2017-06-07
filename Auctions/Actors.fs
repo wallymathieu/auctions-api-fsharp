@@ -38,7 +38,7 @@ type Agent<'T> = MailboxProcessor<'T>
 
 let createAgent (errorQueue : MailboxProcessor<Error>) = 
   Agent<Command* AsyncReplyChannel<Error option>>.Start(fun inbox -> 
-    (let r = Repository()
+    (let r = ConcurrentRepository()
      
      let rec messageLoop() = 
        async { 
