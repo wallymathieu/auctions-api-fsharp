@@ -1,6 +1,5 @@
-﻿module Commands
+﻿module Auctions.Commands
 open Domain
-open Auctions
 open System
 open Either
 
@@ -16,6 +15,12 @@ type Command =
     | PlaceBid(at = at) -> at
     | RemoveBid(at = at) -> at
     | Empty(at = at) -> at
+  static member getAuction command =
+    match command with
+    | AddAuction(id = id) -> Some id
+    | PlaceBid(id = id) -> Some id
+    | RemoveBid(id = id) -> Some id
+    | Empty _ -> None
 
 let handleCommand (r : Repository) command = 
   match command with

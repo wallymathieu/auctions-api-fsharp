@@ -1,4 +1,5 @@
-﻿module Domain
+﻿module Auctions.Domain
+
 open System
 
 type Currency = string

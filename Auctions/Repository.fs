@@ -1,8 +1,7 @@
 ﻿namespace Auctions
 
 open System.Collections.Concurrent
-open Domain
-open Either
+open Auctions.Domain
 
 type Repository() = 
   // in memory repository

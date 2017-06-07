@@ -1,4 +1,4 @@
-﻿module MapToRedis
+﻿module Auctions.MapToRedis
 open StackExchange.Redis
 open System
 open Commands

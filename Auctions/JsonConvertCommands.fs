@@ -1,4 +1,5 @@
-﻿module JsonConvertCommands
+﻿module Auctions.JsonConvertCommands
+
 open System
 open Newtonsoft.Json
 open System.Runtime.Serialization

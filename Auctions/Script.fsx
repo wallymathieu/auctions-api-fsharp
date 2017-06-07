@@ -2,5 +2,5 @@
 // for more guidance on F# programming.
 
 #load "Domain.fs"
-open Domain
+open Auctions.Domain
 

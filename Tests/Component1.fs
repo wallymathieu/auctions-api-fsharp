@@ -1,7 +1,6 @@
 ﻿namespace Tests
-
+open Auctions.Domain
 open NUnit.Framework
-open Domain
 open System
 
 [<TestFixture>]

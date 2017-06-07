@@ -1,5 +1,4 @@
-﻿module Either
-open FSharp.Core
+﻿module Auctions.Either
 
 type EitherBuilder() = 
   member this.Bind(x, f) = Result.bind f x
