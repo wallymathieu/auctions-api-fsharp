@@ -33,11 +33,11 @@ let mapToHashEntries command =
       hashEntryInt64 "At" at.Ticks
       hashEntryStr "User" (user.ToString()) ]
     |> withType "PlaceBid"
-  | RemoveBid (id = id; user = user; at = at) -> 
+  | RetractBid (id = id; user = user; at = at) -> 
     [ hashEntryStr "Id" (id.ToString())
       hashEntryInt64 "At" at.Ticks
       hashEntryStr "User" (user.ToString()) ]
-    |> withType "RemoveBid"
+    |> withType "RetractBid"
 
 let findEntry key (entries : HashEntry array) = 
   let k = redisValueStr key
@@ -120,7 +120,7 @@ let mapFromHashEntries entries : Command =
     PlaceBid(id = id, auction = auction, 
              amount = { value = amount
                         currency = currency }, user = user, at = at)
-  | "RemoveBid" -> 
+  | "RetractBid" -> 
     let id = 
       entries
       |> findEntryStr "Id"
@@ -136,5 +136,5 @@ let mapFromHashEntries entries : Command =
       |> findEntryInt64 "At"
       |> DateTime
     
-    RemoveBid(id = id, user = user, at = at)
+    RetractBid(id = id, user = user, at = at)
   | v -> failwithf "Unknown type %s" v

@@ -4,6 +4,7 @@ open System.Threading
 open System.Threading.Tasks
 open Commands
 open Domain
+open Listeners
 (*
 Calculate running auctions : init agents
 
@@ -17,14 +18,17 @@ singal end auction ->
                         agents <- agents |> List.except [agent]
 
 
-command    -> agents.[x] --> Maybe error
+command    -> agents.[x] --> Maybe error  -> auction listeners
            \             \
-            \             \-> post auction update to clients
-             |            |
-             |            \-> send state to read model
+            \             \-> Auction Update -> auction listeners
+             |                               \
+             |                                \-> send state to read model
              |
              \- persisters.[...] -> persist command
 
+
+auction listener : only interested in changes that it does not know of, i.e.
+                   when it's started, it takes a param that tells 
 
 
 
@@ -35,13 +39,18 @@ Assumptions:
 - one dedicated thread per command persister (json, redis)
 
 
-query      -> agents.[x] --> Result<QueryResult,QueryError>
+query      -> query agent.[y] --> Result<QueryResult,QueryError>
 
 *)
 
 type Agent<'T> = MailboxProcessor<'T>
 
-let createAgent (errorQueue : MailboxProcessor<Error>) = 
+//let createDispatcher 
+
+let createAgent 
+    (errorQueue : MailboxProcessor<Error>) 
+    (listener : MailboxProcessor<CommandSuccess>)
+        = 
   Agent<Command* AsyncReplyChannel<Error option>>.Start(fun inbox -> 
     (let r = ConcurrentRepository()
      
@@ -50,7 +59,8 @@ let createAgent (errorQueue : MailboxProcessor<Error>) =
          let! (msg,reply) = inbox.Receive()
          let maybeError = handleCommand r msg
          match maybeError with
-         | Ok() -> ()
+         | Ok success -> 
+             listener.Post success
          | Error e -> 
              reply.Reply (Some e)
              errorQueue.Post e
@@ -64,9 +74,19 @@ let createErrorListener() =
     (let rec messageLoop() = 
        async { 
          let! msg = inbox.Receive()
-         printfn "%A" msg
+         printfn "%A" msg // send signal using websocket
          return! messageLoop()
        }
      messageLoop()))
 
-
+let createListener r = 
+  Agent<CommandSuccess>.Start(fun inbox -> 
+    (let rec messageLoop() = 
+       async { 
+         let! msg = inbox.Receive()
+         match listenTo r msg with
+         | Ok _ -> () // send signal using websocket
+         | Error err -> failwithf "%A" err // should not throw an error, should notify dispatcher 
+         return! messageLoop()
+       }
+     messageLoop()))

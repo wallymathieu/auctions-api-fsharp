@@ -1,10 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.0</TargetFramework>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageReference Include="FSharp.Core" Version="4.1.*" />
     <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
@@ -24,6 +22,7 @@
     <Compile Include="JsonConvertCommands.fs" />
     <Compile Include="JsonFileAppendBatch.fs" />
     <Compile Include="PersistCommands.fs" />
+    <Compile Include="Listeners.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Script.fsx" />
     <Compile Include="Program.fs" />

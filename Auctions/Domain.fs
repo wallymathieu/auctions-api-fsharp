@@ -47,7 +47,7 @@ type Auction =
 
 type Bid = 
   { id : BidId
-    auction : Auction
+    auction : Auction // the assumption is that you cannot end a running auction, so it's immutable
     at : DateTime
     user : UserId
     amount : Amount

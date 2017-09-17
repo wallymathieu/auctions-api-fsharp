@@ -1,6 +1,7 @@
 ﻿namespace Auctions
 
 open System.Collections.Concurrent
+open System.Collections.Generic
 open Auctions.Domain
 
 [<Interface>]
@@ -13,6 +14,12 @@ type IRepository =
     abstract SaveBid : Bid -> Result<unit, Error>
     abstract GetBidsForAuction : AuctionId -> Bid list
 
+module Dic=
+    let tryGet (c:IDictionary<_,_>) k = 
+        match c.TryGetValue(k) with
+        | true, value -> Some(value)
+        | false, _ -> None
+
 /// Concurrent version of repository.
 type ConcurrentRepository() = 
     // in memory repository
@@ -22,24 +29,18 @@ type ConcurrentRepository() =
     interface IRepository with
         
         member this.GetAuction auctionId = 
-            match auctions.TryGetValue(auctionId) with
-            | true, value -> Ok(value)
-            | false, _ -> Error(UnknownAuction(auctionId))
+            match Dic.tryGet auctions auctionId with
+            | Some value -> Ok(value)
+            | None -> Error(UnknownAuction(auctionId))
         
         member this.GetBid bidId = 
-            match bids.TryGetValue(bidId) with
-            | true, value -> Ok(value)
-            | false, _ -> Error(UnknownBid(bidId))
+            match Dic.tryGet bids bidId with
+            | Some value -> Ok(value)
+            | None -> Error(UnknownBid(bidId))
         
-        member this.TryGetBid bidId = 
-            match bids.TryGetValue(bidId) with
-            | true, value -> Some(value)
-            | false, _ -> None
+        member this.TryGetBid bidId = Dic.tryGet bids bidId
         
-        member this.TryGetAuction auctionId = 
-            match auctions.TryGetValue(auctionId) with
-            | true, value -> Some(value)
-            | false, _ -> None
+        member this.TryGetAuction auctionId = Dic.tryGet auctions auctionId
         
         member this.SaveBid bid = 
             let bidIds = auctionBids.AddOrUpdate(bid.auction.id, new ConcurrentBag<BidId>(), (fun key bag -> bag))
