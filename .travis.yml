@@ -1,12 +1,13 @@
 sudo: false
 language: csharp 
+dist: trusty
+dotnet: 2.0.0
 services:
   - redis-server 
-  
-solution: ./auction-site.sln
-install:
-    - bundle install
-    - rake restore
-
 script: 
-  - rake test
+  - dotnet restore
+  - dotnet build
+  - dotnet test Tests
+branches:
+  only: 
+    - master

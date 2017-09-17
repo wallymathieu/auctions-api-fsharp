@@ -4,16 +4,15 @@ before_build:
   - nuget install redis-64 -excludeversion -source http://www.nuget.org/api/v2/
   - Redis-64\tools\redis-server.exe --service-install
   - Redis-64\tools\redis-server.exe --service-start
-  - git submodule update --init --recursive
-  - bundle install
-  - rake restore
-build:
-  project: auction-site.sln
-  verbosity: minimal
-  publish_nuget: false
+  - dotnet restore
+build_script:
+  - dotnet build Auctions
 test_script:
-  - cmd: rake test_only
+  - dotnet test Tests
 nuget:
   account_feed: false
   project_feed: false
   disable_publish_on_pr: true
+branches:
+  only:
+  - master

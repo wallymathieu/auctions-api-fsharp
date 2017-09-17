@@ -22,7 +22,7 @@ type Command =
     | RemoveBid(id = id) -> Some id
     | Empty _ -> None
 
-let handleCommand (r : Repository) command = 
+let handleCommand (r : IRepository) command = 
   match command with
   | Empty(at = at) -> Ok()
   | AddAuction (id = id; title = title; endsAt = endsAt; user = user) -> 
