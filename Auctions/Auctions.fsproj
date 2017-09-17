@@ -10,7 +10,6 @@
     <PackageReference Include="Suave" Version="2.2.*" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Script.fsx" />
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="Either.fs" />
@@ -24,7 +23,7 @@
     <Compile Include="PersistCommands.fs" />
     <Compile Include="Listeners.fs" />
     <Compile Include="Actors.fs" />
-    <Compile Include="Script.fsx" />
+    <None Include="Script.fsx" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>
