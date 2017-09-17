@@ -4,14 +4,10 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="StackExchange.Redis">
-      <HintPath>..\StackExchange.Redis\StackExchange.Redis\bin\Debug\StackExchange.Redis.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\Auctions\Auctions.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.3.*" />
     <PackageReference Include="xunit" Version="2.2.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.2.0" />

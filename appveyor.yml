@@ -4,9 +4,7 @@ before_build:
   - nuget install redis-64 -excludeversion -source http://www.nuget.org/api/v2/
   - Redis-64\tools\redis-server.exe --service-install
   - Redis-64\tools\redis-server.exe --service-start
-  - git submodule update --init --recursive
-  - bundle install
-  - rake restore
+  - dotnet restore
 build:
   project: auction-site.sln
   verbosity: minimal
