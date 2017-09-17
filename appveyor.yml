@@ -12,7 +12,7 @@ build:
   verbosity: minimal
   publish_nuget: false
 test_script:
-  - cmd: rake test_only
+  - cmd: dotnet test Tests
 nuget:
   account_feed: false
   project_feed: false

@@ -5,8 +5,7 @@ services:
   
 solution: ./auction-site.sln
 install:
-    - bundle install
-    - rake restore
+    - dotnet restore
 
 script: 
-  - rake test
+  - dotnet test Tests

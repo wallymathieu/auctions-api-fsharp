@@ -1,17 +1,16 @@
 ﻿namespace Tests
 open Auctions.Domain
-open NUnit.Framework
 open System
+open Xunit
 
-[<TestFixture>]
 type ``Can parse user``() = 
   
-  [<Test>]
+  [<Fact>]
   member test.``Buyer or seller``() = 
     let user = BuyerOrSeller(Guid.NewGuid(), "seller")
-    Assert.AreEqual(user, user.ToString() |> User.parse)
+    Assert.Equal(user, user.ToString() |> User.parse)
   
-  [<Test>]
+  [<Fact>]
   member test.Support() = 
     let user = Support(Guid.NewGuid())
-    Assert.AreEqual(user, user.ToString() |> User.parse)
+    Assert.Equal(user, user.ToString() |> User.parse)
