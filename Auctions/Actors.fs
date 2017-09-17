@@ -18,16 +18,21 @@ singal end auction ->
 
 
 command    -> agents.[x] --> Maybe error
-                         \
-                          \-> post auction update to clients
-                          |
-                          \-> 
+           \             \
+            \             \-> post auction update to clients
+             |            |
+             |            \-> send state to read model
+             |
+             \- persisters.[...] -> persist command
+
+
+
 
 Assumptions:
 
 - each auction get 1 agent 
-- all commands are logged in json et.c. 
-- one dedicated thread per command persister
+- all commands are logged in redis, json et.c. 
+- one dedicated thread per command persister (json, redis)
 
 
 query      -> agents.[x] --> Result<QueryResult,QueryError>
