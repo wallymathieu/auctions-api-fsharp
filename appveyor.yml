@@ -5,12 +5,10 @@ before_build:
   - Redis-64\tools\redis-server.exe --service-install
   - Redis-64\tools\redis-server.exe --service-start
   - dotnet restore
-build:
-  project: auction-site.sln
-  verbosity: minimal
-  publish_nuget: false
+build_script:
+  - dotnet build Auctions
 test_script:
-  - cmd: dotnet test Tests
+  - dotnet test Tests
 nuget:
   account_feed: false
   project_feed: false

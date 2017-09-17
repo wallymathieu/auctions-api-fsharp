@@ -1,9 +1,10 @@
 sudo: false
 language: csharp 
+dist: trusty
+dotnet: 2.0.0
 services:
   - redis-server 
   
-solution: ./auction-site.sln
 install:
     - dotnet restore
 
