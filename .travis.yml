@@ -9,4 +9,5 @@ install:
     - dotnet restore
 
 script: 
+  - dotnet build
   - dotnet test Tests
