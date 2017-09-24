@@ -15,8 +15,6 @@ type EitherBuilder() =
     | Error err, _ -> Error err
     | _ , Error err -> Error err
     | Ok a1, Ok () -> Ok a1
-  member this.Yield x= Ok x
-  member this.YieldFrom x = x
   member this.Delay f= f()
 
 let either = new EitherBuilder()

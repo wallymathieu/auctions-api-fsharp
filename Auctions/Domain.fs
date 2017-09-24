@@ -40,26 +40,24 @@ type Amount =
 
 type Auction = 
   { id : AuctionId
+    startsAt: DateTime
     title : string
     endsAt : DateTime
-    user : UserId }
+    user : User }
   static member getId (auction : Auction) = auction.id
 
 type Bid = 
   { id : BidId
-    auction : Auction // the assumption is that you cannot end a running auction, so it's immutable
+    auction : AuctionId 
     at : DateTime
-    user : UserId
-    amount : Amount
-    retracted : DateTime option }
+    user : User
+    amount : Amount}
   static member getId (bid : Bid) = bid.id
 
-type Error = 
+type Errors = 
   | UnknownAuction of AuctionId
   | UnknownBid of BidId
   | BidAlreadyExists of BidId
   | AuctionAlreadyExists of AuctionId
   | AuctionHasEnded of AuctionId
-  | SupportCantPlaceBids
-  | CannotRemoveOtherPeoplesBids of UserId * BidId
   | SellerCannotPlaceBids of UserId * AuctionId

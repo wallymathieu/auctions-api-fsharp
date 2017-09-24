@@ -6,12 +6,12 @@ open Auctions.Domain
 
 [<Interface>]
 type IRepository = 
-    abstract GetAuction : AuctionId -> Result<Auction, Error>
+    abstract GetAuction : AuctionId -> Result<Auction, Errors>
     abstract TryGetAuction : AuctionId -> Auction option
-    abstract SaveAuction : Auction -> Result<unit, Error>
-    abstract GetBid : BidId -> Result<Bid, Error>
+    abstract SaveAuction : Auction -> Result<unit, Errors>
+    abstract GetBid : BidId -> Result<Bid, Errors>
     abstract TryGetBid : BidId -> Bid option
-    abstract SaveBid : Bid -> Result<unit, Error>
+    abstract SaveBid : Bid -> Result<unit, Errors>
     abstract GetBidsForAuction : AuctionId -> Bid list
 
 module Dic=
@@ -43,7 +43,7 @@ type ConcurrentRepository() =
         member this.TryGetAuction auctionId = Dic.tryGet auctions auctionId
         
         member this.SaveBid bid = 
-            let bidIds = auctionBids.AddOrUpdate(bid.auction.id, new ConcurrentBag<BidId>(), (fun key bag -> bag))
+            let bidIds = auctionBids.AddOrUpdate(bid.auction, new ConcurrentBag<BidId>(), (fun key bag -> bag))
             bidIds.Add(bid.id)
             bids.AddOrUpdate(Bid.getId bid, bid, (fun key oldvalue -> bid)) |> ignore
             Ok()

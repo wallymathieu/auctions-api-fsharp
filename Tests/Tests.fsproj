@@ -14,7 +14,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Component1.fs" />
-    <Compile Include="Program.fs" />
     <Content Include="TestData.xml" />
+    <Compile Include="CommandTests.fs" />
+    <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

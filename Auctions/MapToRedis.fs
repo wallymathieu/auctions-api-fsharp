@@ -1,6 +1,7 @@
 ﻿module Auctions.MapToRedis
 open StackExchange.Redis
 open System
+open Domain
 open Commands
 
 let redisKey (str : string) = RedisKey.op_Implicit (str)
@@ -19,25 +20,21 @@ let mapToHashEntries command =
     [ hashEntryStr "Id" (id.ToString())
       hashEntryInt64 "At" at.Ticks ]
     |> withType "Empty"
-  | AddAuction (id = id; title = title; endsAt = endsAt; at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryStr "Title" (title)
-      hashEntryInt64 "EndsAt" endsAt.Ticks
+  | AddAuction (at = at;auction=auction) -> 
+    [ hashEntryStr "Id" (auction.id.ToString())
+      hashEntryStr "Title" (auction.title)
+      hashEntryInt64 "EndsAt" auction.endsAt.Ticks
+      hashEntryInt64 "StartsAt" auction.startsAt.Ticks
       hashEntryInt64 "At" at.Ticks ]
     |> withType "AddAuction"
-  | PlaceBid (id = id; auction = auction; amount = amount; user = user; at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryStr "Auction" (auction.ToString())
-      hashEntryFloat "AmountValue" amount.value
-      hashEntryStr "AmountCurrency" (amount.currency.ToString())
-      hashEntryInt64 "At" at.Ticks
-      hashEntryStr "User" (user.ToString()) ]
+  | PlaceBid (bid) ->
+    [ hashEntryStr "Id" (bid.id.ToString())
+      hashEntryStr "Auction" (bid.auction.ToString())
+      hashEntryFloat "AmountValue" bid.amount.value
+      hashEntryStr "AmountCurrency" (bid.amount.currency.ToString())
+      hashEntryInt64 "At" bid.at.Ticks
+      hashEntryStr "User" (bid.user.ToString()) ]
     |> withType "PlaceBid"
-  | RetractBid (id = id; user = user; at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryInt64 "At" at.Ticks
-      hashEntryStr "User" (user.ToString()) ]
-    |> withType "RetractBid"
 
 let findEntry key (entries : HashEntry array) = 
   let k = redisValueStr key
@@ -81,7 +78,12 @@ let mapFromHashEntries entries : Command =
       entries
       |> findEntryInt64 "EndsAt"
       |> DateTime
-    
+
+    let startsAt = 
+      entries
+      |> findEntryInt64 "StartsAt"
+      |> DateTime
+
     let at = 
       entries
       |> findEntryInt64 "At"
@@ -91,8 +93,8 @@ let mapFromHashEntries entries : Command =
       entries
       |> findEntryStr "User"
       |> Domain.User.parse
-    
-    AddAuction(id = id, title = title, endsAt = endsAt, at = at, user = user)
+    let auction:Auction={id = id; title = title; startsAt = startsAt; endsAt = endsAt; user = user}
+    AddAuction(at = at, auction=auction)
   | "PlaceBid" -> 
     let id = 
       entries
@@ -116,25 +118,9 @@ let mapFromHashEntries entries : Command =
       entries
       |> findEntryInt64 "At"
       |> DateTime
-    
-    PlaceBid(id = id, auction = auction, 
-             amount = { value = amount
-                        currency = currency }, user = user, at = at)
-  | "RetractBid" -> 
-    let id = 
-      entries
-      |> findEntryStr "Id"
-      |> Guid.Parse
-    
-    let user = 
-      entries
-      |> findEntryStr "User"
-      |> Domain.User.parse
-    
-    let at = 
-      entries
-      |> findEntryInt64 "At"
-      |> DateTime
-    
-    RetractBid(id = id, user = user, at = at)
+    let bid :Bid= { id = id; auction = auction
+                    amount = { value = amount; currency = currency }
+                    user = user; at = at
+                  }
+    PlaceBid(bid=bid)
   | v -> failwithf "Unknown type %s" v
