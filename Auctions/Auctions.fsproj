@@ -3,6 +3,10 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.0</TargetFramework>
   </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugType>full</DebugType>
+    <DocumentationFile>bin\Debug\netcoreapp2.0\Auctions.XML</DocumentationFile>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="FSharp.Core" Version="4.1.*" />
     <PackageReference Include="StackExchange.Redis" Version="1.2.*" />

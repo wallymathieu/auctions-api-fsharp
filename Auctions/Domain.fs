@@ -32,7 +32,7 @@ type User =
 
 type BidId = Guid
 
-type AuctionId = Guid
+type AuctionId = int64
 
 type Amount = 
   { value : float

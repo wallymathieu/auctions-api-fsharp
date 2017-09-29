@@ -45,7 +45,7 @@ let createAgent
      let rec messageLoop() = 
        async { 
          let! (msg,reply) = inbox.Receive()
-         reply.Reply (handleCommand r msg)
+         reply.Reply (handleCommand r msg |> Result.map snd)
          return! messageLoop()
        }
      messageLoop()))

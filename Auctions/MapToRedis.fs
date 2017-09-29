@@ -17,11 +17,10 @@ let mapToHashEntries command =
   let withType t xs = hashEntryStr "Type" t :: xs
   match command with
   | Empty(at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryInt64 "At" at.Ticks ]
+    [ hashEntryInt64 "At" at.Ticks ]
     |> withType "Empty"
   | AddAuction (at = at;auction=auction) -> 
-    [ hashEntryStr "Id" (auction.id.ToString())
+    [ hashEntryInt64 "Id" (auction.id)
       hashEntryStr "Title" (auction.title)
       hashEntryInt64 "EndsAt" auction.endsAt.Ticks
       hashEntryInt64 "StartsAt" auction.startsAt.Ticks
@@ -29,7 +28,7 @@ let mapToHashEntries command =
     |> withType "AddAuction"
   | PlaceBid (bid) ->
     [ hashEntryStr "Id" (bid.id.ToString())
-      hashEntryStr "Auction" (bid.auction.ToString())
+      hashEntryInt64 "Auction" (bid.auction)
       hashEntryFloat "AmountValue" bid.amount.value
       hashEntryStr "AmountCurrency" (bid.amount.currency.ToString())
       hashEntryInt64 "At" bid.at.Ticks
@@ -69,9 +68,8 @@ let mapFromHashEntries entries : Command =
   | "AddAuction" -> 
     let id = 
       entries
-      |> findEntryStr "Id"
-      |> Domain.AuctionId.Parse
-    
+      |> findEntryInt64 "Id"
+      
     let title = entries |> findEntryStr "Title"
     
     let endsAt = 
@@ -99,12 +97,11 @@ let mapFromHashEntries entries : Command =
     let id = 
       entries
       |> findEntryStr "Id"
-      |> Guid.Parse
+      |> Domain.BidId.Parse
     
     let auction = 
       entries
-      |> findEntryStr "Auction"
-      |> Guid.Parse
+      |> findEntryInt64 "Auction"
     
     let amount = entries |> findEntryFloat "AmountValue"
     let currency = entries |> findEntryStr "AmountCurrency"

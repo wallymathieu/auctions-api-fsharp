@@ -6,13 +6,39 @@ open Auctions.Domain
 
 [<Interface>]
 type IRepository = 
-    abstract GetAuction : AuctionId -> Result<Auction, Errors>
+    abstract Auctions : unit -> Auction list
     abstract TryGetAuction : AuctionId -> Auction option
-    abstract SaveAuction : Auction -> Result<unit, Errors>
-    abstract GetBid : BidId -> Result<Bid, Errors>
+    abstract SaveAuction : Auction -> Result<IRepository, Errors>
     abstract TryGetBid : BidId -> Bid option
-    abstract SaveBid : Bid -> Result<unit, Errors>
+    abstract SaveBid : Bid -> Result<IRepository, Errors>
     abstract GetBidsForAuction : AuctionId -> Bid list
+
+/// Immutable version of the repository
+type ImmutableRepository = { 
+    auctions : Auction list
+    bids: Bid list
+} with
+    interface IRepository with
+        member this.Auctions ()=this.auctions
+        member this.TryGetBid bidId=this.bids |> List.tryFind (fun b->b.id = bidId)
+        member this.TryGetAuction auctionId=this.auctions |> List.tryFind (fun a->a.id = auctionId)
+        member this.SaveAuction auction= Ok({ this with auctions = auction:: this.auctions} :>IRepository)
+        member this.SaveBid bid= Ok({ this with bids = bid:: this.bids} :>IRepository)
+        member this.GetBidsForAuction auctionId= this.bids |> List.filter (fun b->b.auction=auctionId)
+
+[<AutoOpen>]
+module Repo=
+    type IRepository with
+        member this.GetAuction auctionId = 
+            match this.TryGetAuction auctionId with
+            | Some value -> Ok(value)
+            | None -> Error(UnknownAuction(auctionId))
+        
+        member this.GetBid bidId = 
+            match this.TryGetBid bidId with
+            | Some value -> Ok(value)
+            | None -> Error(UnknownBid(bidId))
+
 
 module Dic=
     let tryGet (c:IDictionary<_,_>) k = 
@@ -27,17 +53,9 @@ type ConcurrentRepository() =
     let bids = new ConcurrentDictionary<BidId, Bid>()
     let auctionBids = new ConcurrentDictionary<AuctionId, ConcurrentBag<BidId>>()
     interface IRepository with
-        
-        member this.GetAuction auctionId = 
-            match Dic.tryGet auctions auctionId with
-            | Some value -> Ok(value)
-            | None -> Error(UnknownAuction(auctionId))
-        
-        member this.GetBid bidId = 
-            match Dic.tryGet bids bidId with
-            | Some value -> Ok(value)
-            | None -> Error(UnknownBid(bidId))
-        
+
+        member this.Auctions ()=auctions.Values |> Seq.toList
+
         member this.TryGetBid bidId = Dic.tryGet bids bidId
         
         member this.TryGetAuction auctionId = Dic.tryGet auctions auctionId
@@ -46,11 +64,11 @@ type ConcurrentRepository() =
             let bidIds = auctionBids.AddOrUpdate(bid.auction, new ConcurrentBag<BidId>(), (fun key bag -> bag))
             bidIds.Add(bid.id)
             bids.AddOrUpdate(Bid.getId bid, bid, (fun key oldvalue -> bid)) |> ignore
-            Ok()
+            Ok(this :> IRepository)
         
         member this.SaveAuction auction = 
             auctions.AddOrUpdate(Auction.getId auction, auction, (fun key oldvalue -> auction)) |> ignore
-            Ok()
+            Ok(this :> IRepository)
         
         member this.GetBidsForAuction(auctionId : AuctionId) = 
             match auctionBids.TryGetValue(auctionId) with

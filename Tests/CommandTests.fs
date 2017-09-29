@@ -6,7 +6,7 @@ open System
 open Xunit
 
 module ``Bid tests`` = 
-  let auctionId = Guid.NewGuid()
+  let auctionId : AuctionId= 1L
   let title = "auction"
   let startsAt = DateTime(2016,1,1)
   let endsAt = DateTime(2016,2,1)
@@ -45,7 +45,7 @@ module ``Bid tests`` =
             amount=sek 100.0 
             }
     // act
-    let res = handleCommand r (PlaceBid bid)
+    let res = handleCommand r (PlaceBid bid) |> Result.map snd
     // assert
     Assert.Equal(Ok (BidAccepted bid),res)
     Assert.False(r.GetBidsForAuction(auctionId).IsEmpty)
