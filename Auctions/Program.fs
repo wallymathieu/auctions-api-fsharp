@@ -1,16 +1,20 @@
 ﻿open Suave
 //open Suave.Authentication
 //open Suave.Cookie
+open System
 open Suave.Filters
 open Suave.Model.Binding
 open Suave.Operators
 open Suave.RequestErrors
 open Suave.State.CookieStateStore
 open Suave.Successful
-
+open Suave.Writers
+open Newtonsoft.Json
+open Newtonsoft.Json.Serialization
 type CmdArgs = { IP: System.Net.IPAddress; Port: Sockets.Port }
 open Auctions.Domain
 open Auctions.Actors
+open Auctions
 
 module Paths=
     type Int64Path = PrintfFormat<(int64 -> string),unit,string,string,int64>
@@ -37,38 +41,48 @@ let session f =
             | Some user -> f (UserLoggedOn (User.parse user))
             | _ -> f NoSession)
 
-let overview =
-    choose [
-        GET >=> Successful.OK ""
-    ]
+let JSON v =
+  let jsonSerializerSettings = new JsonSerializerSettings()
+  jsonSerializerSettings.ContractResolver <- new CamelCasePropertyNamesContractResolver()
 
-let register=
-    choose [
-        GET >=> Successful.OK ""
-    ]
+  JsonConvert.SerializeObject(v, jsonSerializerSettings)
+  |> OK
+  >=> Writers.setMimeType "application/json; charset=utf-8"
+let getBodyAsJSON<'a> (req : HttpRequest) =
+  let getString rawForm =
+    System.Text.Encoding.UTF8.GetString(rawForm)
+  req.rawForm |> getString |> JsonConvert.DeserializeObject<'a>
 
-let details (id:AuctionId)=
-    choose [
-        GET >=> Successful.OK ""
-    ]
 
-let bids (id:AuctionId)=
-    choose [
-        GET >=> Successful.OK ""
-    ]
-let placeBid (id:AuctionId)=
-    choose [
-        GET >=> Successful.OK ""
-    ]
+let overview r=
+    GET >=> JSON (r |> Repo.auctions) 
 
-let webPart = 
+let register r=
+    POST >=> request (getBodyAsJSON<Auction> 
+                      (* AddAuction *) 
+                      (* handle command *)
+                      >> JSON)
+
+let details r (id:AuctionId) =
+    GET >=> JSON (Repo.getAuction r id)
+
+let bids r (id:AuctionId)=
+    GET >=> JSON (Repo.getAuctionBids r id)
+
+let placeBid r (id:AuctionId)=
+    POST >=> request (getBodyAsJSON<Bid> 
+                      (* PlaceBid *) 
+                      (* handle command *)
+                      >> JSON)
+
+let webPart r= 
     choose [
-        path "/" >=> (Successful.OK "Hello World!")
-        path Paths.Auction.overview >=> overview
-        path Paths.Auction.register >=> register
-        pathScan Paths.Auction.details details
-        pathScan Paths.Auction.bids bids
-        pathScan Paths.Auction.placeBid placeBid
+        path "/" >=> (Successful.OK "")
+        path Paths.Auction.overview >=> overview r
+        path Paths.Auction.register >=> register r
+        pathScan Paths.Auction.details (details r)
+        pathScan Paths.Auction.bids (bids r)
+        pathScan Paths.Auction.placeBid (placeBid r)
     ]
 [<EntryPoint>]
 
@@ -97,10 +111,10 @@ let main argv =
                 exit 1
 
         argv |> List.ofArray |> parseArgs defaultArgs
-
+    let r = ConcurrentRepository()
     // start suave
     startWebServer
         { defaultConfig with
             bindings = [ HttpBinding.create HTTP args.IP args.Port ] }
-        webPart
+        (webPart r)
     0

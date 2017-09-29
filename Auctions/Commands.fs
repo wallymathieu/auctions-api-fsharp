@@ -31,7 +31,7 @@ let validateBid (auction : Auction) (bid : Bid) =
   if bid.at > auction.endsAt then Error(AuctionHasEnded auction.id)
   else if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
   else Ok()
-
+open Repo
 /// the intention of this function is to return the modified repository and a success, or return an error
 /// I.e. this function does not know if it's an immutable repository 
 let handleCommand (r : IRepository) command : Result<IRepository * CommandSuccess, Errors> = 
