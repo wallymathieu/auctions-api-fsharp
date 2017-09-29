@@ -40,9 +40,11 @@ module Repo =
       | Some value -> Ok(value)
       | None -> Error(UnknownBid(bidId))
   
-  let auctions (r : R) = r.Auctions
+  let auctions (r : R) = r.Auctions()
   let getAuction (r : R) = r.GetAuction
   let getAuctionBids (r : R) = r.GetBidsForAuction
+  let saveAuction a (r : R) = r.SaveAuction a
+  let saveBid b (r : R) = r.SaveBid b
 
 module Dic = 
   let tryGet (c : IDictionary<_, _>) k = 

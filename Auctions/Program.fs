@@ -48,14 +48,14 @@ let JSON v =
   JsonConvert.SerializeObject(v, jsonSerializerSettings)
   |> OK
   >=> Writers.setMimeType "application/json; charset=utf-8"
+
 let getBodyAsJSON<'a> (req : HttpRequest) =
   let getString rawForm =
     System.Text.Encoding.UTF8.GetString(rawForm)
   req.rawForm |> getString |> JsonConvert.DeserializeObject<'a>
 
-
 let overview r=
-    GET >=> JSON (r |> Repo.auctions) 
+    GET >=> JSON (r |> Repo.auctions |> List.toArray)
 
 let register r=
     POST >=> request (getBodyAsJSON<Auction> 
@@ -112,6 +112,19 @@ let main argv =
 
         argv |> List.ofArray |> parseArgs defaultArgs
     let r = ConcurrentRepository()
+    r |> Repo.saveAuction { 
+                id=1L
+                startsAt=DateTime(2011,1,1)
+                title="Title"
+                endsAt=DateTime(2012,1,1)
+                user=User.BuyerOrSeller(Guid.NewGuid(), "Name") } |> ignore
+    r |> Repo.saveAuction { 
+                id=2L
+                startsAt=DateTime(2011,1,1)
+                title="Title2"
+                endsAt=DateTime(2012,1,1)
+                user=User.BuyerOrSeller(Guid.NewGuid(), "Name") } |> ignore
+
     // start suave
     startWebServer
         { defaultConfig with
