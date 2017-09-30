@@ -8,6 +8,7 @@ open Saithe
 type Currency = string
 
 type UserId = Guid
+
 [<TypeConverter(typeof<ParseTypeConverter<User>>)>]
 [<JsonConverter(typeof<ParseTypeJsonConverter<User>>)>]
 type User = 
@@ -43,11 +44,11 @@ type Amount =
     currency : Currency }
 
 module Timed = 
-  let atNow a= (DateTime.UtcNow, a)
+  let atNow a = (DateTime.UtcNow, a)
 
 type Auction = 
   { id : AuctionId
-    startsAt: DateTime
+    startsAt : DateTime
     title : string
     endsAt : DateTime
     user : User }
@@ -55,9 +56,10 @@ type Auction =
 
 type Bid = 
   { id : BidId
-    auction : AuctionId 
+    auction : AuctionId
     user : User
-    amount : Amount}
+    amount : Amount
+    at : DateTime }
   static member getId (bid : Bid) = bid.id
 
 type Errors = 

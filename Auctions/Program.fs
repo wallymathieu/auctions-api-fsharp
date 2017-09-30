@@ -80,8 +80,11 @@ let placeBid r (id : AuctionId) =
     | NoSession -> never
     | UserLoggedOn user -> 
       POST >=> request (getBodyAsJSON<Bid>
-                        >> (fun a -> { a with user = user })
-                        >> Timed.atNow
+                        >> (fun a -> 
+                        let d = DateTime.UtcNow
+                        d, 
+                        { a with user = user
+                                 at = d })
                         >> Commands.PlaceBid
                         >> (Commands.handleCommand r)
                         >> JSON))

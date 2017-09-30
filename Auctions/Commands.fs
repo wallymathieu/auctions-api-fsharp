@@ -23,8 +23,8 @@ type CommandSuccess =
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
 
-let validateBid (auction : Auction) (at:DateTime,bid : Bid) = 
-  if at > auction.endsAt then Error(AuctionHasEnded auction.id)
+let validateBid (auction : Auction) (bid : Bid) = 
+  if bid.at > auction.endsAt then Error(AuctionHasEnded auction.id)
   else if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
   else Ok()
 open Repo
@@ -47,7 +47,7 @@ let handleCommand (r : IRepository) command : Result<IRepository * CommandSucces
       return! (match r.TryGetBid bid.id with
                | None -> 
                  either { 
-                   do! validateBid auction (at, bid)
+                   do! validateBid auction bid
                    yield! r.SaveBid bid
                    yield BidAccepted (at, bid)
                  }
