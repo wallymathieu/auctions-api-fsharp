@@ -21,13 +21,12 @@ module ``Bid tests`` =
     let r = ConcurrentRepository() :>IRepository
     handleCommand r (AddAuction (startsAt, auction)) |> ignore
     // act
-    let res = handleCommand r (PlaceBid { 
+    let res = handleCommand r (PlaceBid (DateTime(2016,1,2),{ 
             id=Guid.NewGuid() 
             auction=auctionId
-            at=DateTime(2016,1,2)
             user=seller
             amount=sek 100.0 
-    })
+    }))
     // assert
     Assert.Equal(Error (SellerCannotPlaceBids(User.getId seller,auctionId)),res)
     Assert.True(r.GetBidsForAuction(auctionId).IsEmpty)
@@ -37,10 +36,9 @@ module ``Bid tests`` =
     // setup
     let r = ConcurrentRepository() :>IRepository
     handleCommand r (AddAuction (startsAt, auction)) |> ignore
-    let bid ={ 
+    let bid =DateTime(2016,1,2),{ 
             id=Guid.NewGuid() 
             auction=auctionId
-            at=DateTime(2016,1,2)
             user=buyer
             amount=sek 100.0 
             }

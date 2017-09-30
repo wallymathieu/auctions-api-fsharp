@@ -1,11 +1,15 @@
 ﻿module Auctions.Domain
 
 open System
+open System.ComponentModel
+open Newtonsoft.Json
+open Saithe
 
 type Currency = string
 
 type UserId = Guid
-
+[<TypeConverter(typeof<ParseTypeConverter<User>>)>]
+[<JsonConverter(typeof<ParseTypeJsonConverter<User>>)>]
 type User = 
   | BuyerOrSeller of id : UserId * name : string
   | Support of id : UserId
@@ -28,7 +32,7 @@ type User =
       | "BuyerOrSeller", id, name -> BuyerOrSeller(id |> Guid.Parse, name)
       | "Support", id, _ -> Support(id |> Guid.Parse)
       | type', _, _ -> failwithf "Unknown type of user %s" type'
-    else failwithf "Could not parse %s" user
+    else failwithf "Could not parse '%s' since it does not match expected format" user
 
 type BidId = Guid
 
@@ -37,6 +41,9 @@ type AuctionId = int64
 type Amount = 
   { value : float
     currency : Currency }
+
+module Timed = 
+  let atNow a= (DateTime.UtcNow, a)
 
 type Auction = 
   { id : AuctionId
@@ -49,7 +56,6 @@ type Auction =
 type Bid = 
   { id : BidId
     auction : AuctionId 
-    at : DateTime
     user : User
     amount : Amount}
   static member getId (bid : Bid) = bid.id

@@ -16,22 +16,19 @@ let hashEntryFloat key value = new HashEntry(redisValueStr key, redisValueFloat 
 let mapToHashEntries command = 
   let withType t xs = hashEntryStr "Type" t :: xs
   match command with
-  | Empty(at = at) -> 
-    [ hashEntryInt64 "At" at.Ticks ]
-    |> withType "Empty"
-  | AddAuction (at = at;auction=auction) -> 
+  | AddAuction (at,auction) -> 
     [ hashEntryInt64 "Id" (auction.id)
       hashEntryStr "Title" (auction.title)
       hashEntryInt64 "EndsAt" auction.endsAt.Ticks
       hashEntryInt64 "StartsAt" auction.startsAt.Ticks
       hashEntryInt64 "At" at.Ticks ]
     |> withType "AddAuction"
-  | PlaceBid (bid) ->
+  | PlaceBid (at,bid) ->
     [ hashEntryStr "Id" (bid.id.ToString())
       hashEntryInt64 "Auction" (bid.auction)
       hashEntryFloat "AmountValue" bid.amount.value
       hashEntryStr "AmountCurrency" (bid.amount.currency.ToString())
-      hashEntryInt64 "At" bid.at.Ticks
+      hashEntryInt64 "At" at.Ticks
       hashEntryStr "User" (bid.user.ToString()) ]
     |> withType "PlaceBid"
 
@@ -59,12 +56,6 @@ let findEntryFloat key entries =
 let mapFromHashEntries entries : Command = 
   let t = entries |> findEntryStr "Type"
   match t with
-  | "Empty" -> 
-    let at = 
-      entries
-      |> findEntryInt64 "At"
-      |> DateTime
-    Empty(at = at)
   | "AddAuction" -> 
     let id = 
       entries
@@ -92,7 +83,7 @@ let mapFromHashEntries entries : Command =
       |> findEntryStr "User"
       |> Domain.User.parse
     let auction:Auction={id = id; title = title; startsAt = startsAt; endsAt = endsAt; user = user}
-    AddAuction(at = at, auction=auction)
+    AddAuction(at, auction)
   | "PlaceBid" -> 
     let id = 
       entries
@@ -117,7 +108,7 @@ let mapFromHashEntries entries : Command =
       |> DateTime
     let bid :Bid= { id = id; auction = auction
                     amount = { value = amount; currency = currency }
-                    user = user; at = at
+                    user = user
                   }
-    PlaceBid(bid=bid)
+    PlaceBid(at,bid)
   | v -> failwithf "Unknown type %s" v

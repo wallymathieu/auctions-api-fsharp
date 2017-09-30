@@ -8,11 +8,13 @@
     <DocumentationFile>bin\Debug\netcoreapp2.0\Auctions.XML</DocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="FSharp.Core" Version="4.1.*" />
+    <PackageReference Include="FSharp.Core" Version="4.2.*" />
     <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
     <PackageReference Include="Suave" Version="2.2.*" />
     <PackageReference Include="Hopac" Version="0.3.23" />
+    <PackageReference Include="Saithe" Version="2.1.0" />
+    <DotNetCliToolReference Include="Microsoft.DotNet.Watcher.Tools" Version="2.0.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />

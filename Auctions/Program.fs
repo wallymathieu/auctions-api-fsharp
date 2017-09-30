@@ -59,8 +59,9 @@ let overview r=
 
 let register r=
     POST >=> request (getBodyAsJSON<Auction> 
-                      (* AddAuction *) 
-                      (* handle command *)
+                      >> Timed.atNow 
+                      >> Commands.AddAuction
+                      >> (Commands.handleCommand r)
                       >> JSON)
 
 let details r (id:AuctionId) =
@@ -71,8 +72,9 @@ let bids r (id:AuctionId)=
 
 let placeBid r (id:AuctionId)=
     POST >=> request (getBodyAsJSON<Bid> 
-                      (* PlaceBid *) 
-                      (* handle command *)
+                      >> Timed.atNow 
+                      >> Commands.PlaceBid
+                      >> (Commands.handleCommand r)
                       >> JSON)
 
 let webPart r= 
@@ -84,8 +86,8 @@ let webPart r=
         pathScan Paths.Auction.bids (bids r)
         pathScan Paths.Auction.placeBid (placeBid r)
     ]
-[<EntryPoint>]
 
+[<EntryPoint>]
 let main argv = 
 
     // parse arguments
