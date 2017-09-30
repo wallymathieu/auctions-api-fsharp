@@ -63,7 +63,7 @@ let overview r =
 
 let register r = 
   session (function 
-    | NoSession -> never
+    | NoSession -> UNAUTHORIZED "Not logged in"
     | UserLoggedOn user -> 
       POST >=> request (getBodyAsJSON<Auction>
                         >> (fun a -> { a with user = user })
@@ -77,7 +77,7 @@ let bids r (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
 
 let placeBid r (id : AuctionId) = 
   session (function 
-    | NoSession -> never
+    | NoSession -> UNAUTHORIZED "Not logged in"
     | UserLoggedOn user -> 
       POST >=> request (getBodyAsJSON<Bid>
                         >> (fun a -> 
