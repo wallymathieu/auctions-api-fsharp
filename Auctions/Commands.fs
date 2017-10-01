@@ -16,8 +16,8 @@ type Command =
   
   static member getAuction command = 
     match command with
-    | AddAuction(_,auction) -> Some auction.id
-    | PlaceBid(_,bid) -> Some bid.auction
+    | AddAuction(_,auction) -> auction.id
+    | PlaceBid(_,bid) -> bid.auction
 
 type CommandSuccess = 
   | AuctionAdded of DateTime * Auction

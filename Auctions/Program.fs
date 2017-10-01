@@ -1,7 +1,5 @@
-﻿open Suave
-//open Suave.Authentication
-//open Suave.Cookie
-open System
+﻿open System
+open Suave
 open Suave.Filters
 open Suave.Model.Binding
 open Suave.Operators
@@ -34,26 +32,34 @@ type Session =
   | NoSession
   | UserLoggedOn of User
 
-let session f = 
-  statefulForSession >=> context (fun x -> 
-                           match x |> HttpContext.state with
-                           | None -> f NoSession
-                           | Some state -> 
-                             match state.get "user" with
-                             | Some user -> f (UserLoggedOn(User.parse user))
-                             | _ -> f NoSession)
+let authenticated f = 
+  context (fun x -> 
+    match x.request.header "x-fake-auth" with
+    | Choice1Of2 user -> f (UserLoggedOn(User.parse user))
+    | Choice2Of2 _ -> f NoSession)
 
 let JSON v = 
-  let jsonSerializerSettings = new JsonSerializerSettings()
-  jsonSerializerSettings.ContractResolver <- new CamelCasePropertyNamesContractResolver()
+  let jsonSerializerSettings = JsonSerializerSettings()
+  jsonSerializerSettings.ContractResolver <- CamelCasePropertyNamesContractResolver()
   JsonConvert.SerializeObject(v, jsonSerializerSettings)
   |> OK
   >=> Writers.setMimeType "application/json; charset=utf-8"
 
-let getBodyAsJSON<'a> (req : HttpRequest) = 
-  let getString rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
+let getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
+
+let mapJsonPayload<'a> (req : HttpRequest) = 
+  let fromJson json = 
+    try 
+      let obj = JsonConvert.DeserializeObject<'a>(json)
+      Ok obj
+    with e -> Error e
   req.rawForm
-  |> getString
+  |> getStringFromBytes
+  |> fromJson
+
+let getBodyAsJSON<'a> (req : HttpRequest) = 
+  req.rawForm
+  |> getStringFromBytes
   |> JsonConvert.DeserializeObject<'a>
 
 let overview r = 
@@ -62,7 +68,7 @@ let overview r =
                |> List.toArray)
 
 let register r = 
-  session (function 
+  authenticated (function 
     | NoSession -> UNAUTHORIZED "Not logged in"
     | UserLoggedOn user -> 
       POST >=> request (getBodyAsJSON<Auction>
@@ -76,7 +82,7 @@ let details r (id : AuctionId) = GET >=> JSON(Repo.getAuction r id)
 let bids r (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
 
 let placeBid r (id : AuctionId) = 
-  session (function 
+  authenticated (function 
     | NoSession -> UNAUTHORIZED "Not logged in"
     | UserLoggedOn user -> 
       POST >=> request (getBodyAsJSON<Bid>

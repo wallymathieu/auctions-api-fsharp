@@ -114,7 +114,7 @@ let mapFromHashEntries entries : Command =
         auction = auction
         amount = 
           { value = amount
-            currency = currency }
+            currency = Currency.Parse currency }
         user = user
         at = at }
     

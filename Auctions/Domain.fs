@@ -5,7 +5,11 @@ open System.ComponentModel
 open Newtonsoft.Json
 open Saithe
 
-type Currency = string
+type Currency = 
+  /// virtual acution currency
+  |VAC=998
+  //|SEK=752
+  //|DKK=208
 
 type UserId = Guid
 
@@ -61,6 +65,7 @@ type Bid =
     amount : Amount
     at : DateTime }
   static member getId (bid : Bid) = bid.id
+  static member getAmount (bid : Bid) = bid.amount
 
 type Errors = 
   | UnknownAuction of AuctionId

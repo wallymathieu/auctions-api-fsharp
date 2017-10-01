@@ -13,18 +13,6 @@ type IRepository =
   abstract SaveBid : Bid -> Result<IRepository, Errors>
   abstract GetBidsForAuction : AuctionId -> Bid list
 
-/// Immutable version of the repository
-type ImmutableRepository = 
-  { auctions : Auction list
-    bids : Bid list }
-  interface IRepository with
-    member this.Auctions() = this.auctions
-    member this.TryGetBid bidId = this.bids |> List.tryFind (fun b -> b.id = bidId)
-    member this.TryGetAuction auctionId = this.auctions |> List.tryFind (fun a -> a.id = auctionId)
-    member this.SaveAuction auction = Ok({ this with auctions = auction :: this.auctions } :> IRepository)
-    member this.SaveBid bid = Ok({ this with bids = bid :: this.bids } :> IRepository)
-    member this.GetBidsForAuction auctionId = this.bids |> List.filter (fun b -> b.auction = auctionId)
-
 module Repo = 
   type R = IRepository
   
@@ -46,22 +34,33 @@ module Repo =
   let saveAuction a (r : R) = r.SaveAuction a
   let saveBid b (r : R) = r.SaveBid b
 
-module Dic = 
+/// Immutable version of the repository
+type ImmutableRepository = 
+  { auctions : Auction list
+    bids : Bid list }
+  interface IRepository with
+    member this.Auctions() = this.auctions
+    member this.TryGetBid bidId = this.bids |> List.tryFind (fun b -> b.id = bidId)
+    member this.TryGetAuction auctionId = this.auctions |> List.tryFind (fun a -> a.id = auctionId)
+    member this.SaveAuction auction = Ok({ this with auctions = auction :: this.auctions } :> IRepository)
+    member this.SaveBid bid = Ok({ this with bids = bid :: this.bids } :> IRepository)
+    member this.GetBidsForAuction auctionId = this.bids |> List.filter (fun b -> b.auction = auctionId)
+
+/// Concurrent version of repository.
+type ConcurrentRepository() = 
   let tryGet (c : IDictionary<_, _>) k = 
     match c.TryGetValue(k) with
     | true, value -> Some(value)
     | false, _ -> None
 
-/// Concurrent version of repository.
-type ConcurrentRepository() = 
   // in memory repository
   let auctions = new ConcurrentDictionary<AuctionId, Auction>()
   let bids = new ConcurrentDictionary<BidId, Bid>()
   let auctionBids = new ConcurrentDictionary<AuctionId, ConcurrentBag<BidId>>()
   interface IRepository with
     member this.Auctions() = auctions.Values |> Seq.toList
-    member this.TryGetBid bidId = Dic.tryGet bids bidId
-    member this.TryGetAuction auctionId = Dic.tryGet auctions auctionId
+    member this.TryGetBid bidId = tryGet bids bidId
+    member this.TryGetAuction auctionId = tryGet auctions auctionId
     
     member this.SaveBid bid = 
       let bidIds = auctionBids.AddOrUpdate(bid.auction, new ConcurrentBag<BidId>(), (fun key bag -> bag))

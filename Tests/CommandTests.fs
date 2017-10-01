@@ -6,7 +6,7 @@ open Auctions
 open System
 open Xunit
 
-module ``Bid tests`` = 
+module ``Bid commands tests`` = 
   let auctionId : AuctionId = 1L
   let title = "auction"
   let startsAt = DateTime(2016, 1, 1)

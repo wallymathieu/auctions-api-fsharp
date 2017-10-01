@@ -1,12 +1,14 @@
 ﻿module Auctions.Actors
 
+open System
 open System.Threading
 open System.Threading.Tasks
 open Commands
 open Domain
+open Either
+open System.Collections.Generic
 
 (*
-Calculate running auctions : init agents
 
 signal -> delegator (calculate x) -> agents.[x] 
 
@@ -31,21 +33,86 @@ Assumptions:
 
 query      -> query agent.[y] --> Result<QueryResult,QueryError>
 
+
+signal -> delegator 
+
+ message time 
+
 *)
 
-//let createDispatcher 
 type Agent<'T> = MailboxProcessor<'T>
 
-type AuctionAgent = Agent<Command* AsyncReplyChannel<Result<CommandSuccess,Errors>>>
-let createAgent 
-        = 
+type AgentSignals = 
+  | Bid of Bid
+  | AuctionEnded
+  | CollectAgent
+
+type AuctionAgent = Agent<AgentSignals * AsyncReplyChannel<Result<Bid, Errors>>>
+
+let createAgent auction auctionEnded = 
   AuctionAgent.Start(fun inbox -> 
-    (let r = ConcurrentRepository()
+    (let validateBid = validateBid auction
+     let mutable bids = []
+     
+     let maxBid() = 
+       if List.isEmpty bids then None
+       else Some(bids |> List.maxBy (fun b -> b.amount)) // we assume that we use a fixed currency
      
      let rec messageLoop() = 
        async { 
-         let! (msg,reply) = inbox.Receive()
-         reply.Reply (handleCommand r msg |> Result.map snd)
+         let! (msg, reply) = inbox.Receive()
+         match msg with
+         | Bid bid -> 
+           reply.Reply(either { 
+                         (* 
+                        in a future scenario we might want to add different 
+                        auction type rules
+
+                        - perhaps you cannot bid lower than the "current bid"
+                        - perhaps you are forbidden from raising with to small of a sum
+                          compared to the "current bid"
+                        *)
+                         do! validateBid bid
+                         bids <- bid :: bids
+                         return bid
+                       })
+           return! messageLoop()
+         | AuctionEnded -> 
+           (*
+            When the agent receives this signal 
+            - it can start replying with only bid rejected response
+            - make sure to send out signal about auction status (if there is a winner)
+            *)
+           let max = maxBid()
+           auctionEnded max
+           return! messageLoop()
+         | CollectAgent -> 
+           (*
+            When the agent receives this signal
+            - it should collect any dangling business rules
+                - for instance send out auction end signals 
+            - quit
+            *)
+           let max = maxBid()
+           auctionEnded max
+           return ()
+       }
+     
+     messageLoop()))
+
+type AuctionDelegator = Agent<Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>>
+
+let createDelegator r = 
+  AuctionDelegator.Start(fun inbox -> 
+    (let mutable auctions = []
+     
+     let rec messageLoop() = 
+       async { 
+         let! (msg, reply) = inbox.Receive()
+         let now = DateTime.UtcNow
+         (* 
+          
+         *)
          return! messageLoop()
        }
      messageLoop()))
