@@ -17,6 +17,7 @@
     <Content Include="TestData.xml" />
     <Compile Include="CommandTests.fs" />
     <Compile Include="EitherTests.fs" />
+    <Compile Include="AmountTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

@@ -7,9 +7,11 @@ open Saithe
 
 type Currency = 
   /// virtual acution currency
-  |VAC=998
-  //|SEK=752
-  //|DKK=208
+  |VAC=1001  
+  /// Swedish 'Krona'
+  |SEK=752
+  /// Danish 'Krone'
+  |DKK=208
 
 type UserId = Guid
 
@@ -74,3 +76,4 @@ type Errors =
   | AuctionAlreadyExists of AuctionId
   | AuctionHasEnded of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
+  | BidCurrencyConversion of BidId * Currency

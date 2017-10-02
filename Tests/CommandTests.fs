@@ -23,7 +23,7 @@ module ``Bid commands tests`` =
   
   let sek a = 
     { value = a
-      currency = "SEK" }
+      currency = Currency.SEK }
   
   [<Fact>]
   let ``Seller cant bid``() = 

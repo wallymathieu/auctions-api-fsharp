@@ -65,6 +65,8 @@ let createAgent auction auctionEnded =
          | Bid bid -> 
            reply.Reply(either { 
                          (* 
+                        We assume that you convert to VAC before sending bid to agent
+
                         in a future scenario we might want to add different 
                         auction type rules
 
@@ -73,6 +75,9 @@ let createAgent auction auctionEnded =
                           compared to the "current bid"
                         *)
                          do! validateBid bid
+                         do! if bid.amount.currency <> Currency.VAC then 
+                               Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency)) 
+                             else Ok()
                          bids <- bid :: bids
                          return bid
                        })
@@ -84,7 +89,7 @@ let createAgent auction auctionEnded =
             - make sure to send out signal about auction status (if there is a winner)
             *)
            let max = maxBid()
-           auctionEnded max
+           auctionEnded (auction,max)
            return! messageLoop()
          | CollectAgent -> 
            (*
@@ -94,7 +99,7 @@ let createAgent auction auctionEnded =
             - quit
             *)
            let max = maxBid()
-           auctionEnded max
+           auctionEnded (auction,max)
            return ()
        }
      
