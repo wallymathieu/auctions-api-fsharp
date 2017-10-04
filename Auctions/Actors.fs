@@ -42,14 +42,16 @@ signal -> delegator
 
 type Agent<'T> = MailboxProcessor<'T>
 
+type AuctionEnded = Auction * Bid option
+
 type AgentSignals = 
-  | Bid of Bid
-  | AuctionEnded
-  | CollectAgent
+  | AgentBid of Bid * AsyncReplyChannel<Result<Bid, Errors>>
+  | AuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded option>
+  | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded option>
 
-type AuctionAgent = Agent<AgentSignals * AsyncReplyChannel<Result<Bid, Errors>>>
+type AuctionAgent = Agent<AgentSignals>
 
-let createAgent auction auctionEnded = 
+let createAgent auction = 
   AuctionAgent.Start(fun inbox -> 
     (let validateBid = validateBid auction
      let mutable bids = []
@@ -58,11 +60,16 @@ let createAgent auction auctionEnded =
        if List.isEmpty bids then None
        else Some(bids |> List.maxBy (fun b -> b.amount)) // we assume that we use a fixed currency
      
+     /// try to signal auction ended
+     let tryGetAuctionEnded time : AuctionEnded option = 
+       if auction.endsAt < time then Some(auction, maxBid())
+       else None
+     
      let rec messageLoop() = 
        async { 
-         let! (msg, reply) = inbox.Receive()
+         let! msg = inbox.Receive()
          match msg with
-         | Bid bid -> 
+         | AgentBid(bid, reply) -> 
            reply.Reply(either { 
                          (* 
                         We assume that you convert to VAC before sending bid to agent
@@ -76,48 +83,77 @@ let createAgent auction auctionEnded =
                         *)
                          do! validateBid bid
                          do! if bid.amount.currency <> Currency.VAC then 
-                               Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency)) 
+                               Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
                              else Ok()
                          bids <- bid :: bids
                          return bid
                        })
            return! messageLoop()
-         | AuctionEnded -> 
+         | AuctionEnded(now, reply) -> 
            (*
             When the agent receives this signal 
             - it can start replying with only bid rejected response
             - make sure to send out signal about auction status (if there is a winner)
             *)
-           let max = maxBid()
-           auctionEnded (auction,max)
+           reply.Reply(tryGetAuctionEnded now)
            return! messageLoop()
-         | CollectAgent -> 
+         | CollectAgent(now, reply) -> 
            (*
             When the agent receives this signal
             - it should collect any dangling business rules
                 - for instance send out auction end signals 
             - quit
             *)
-           let max = maxBid()
-           auctionEnded (auction,max)
+           reply.Reply(tryGetAuctionEnded now)
            return ()
        }
      
      messageLoop()))
 
-type AuctionDelegator = Agent<Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>>
+type DelegatorSignals = 
+  /// From a user command (i.e. create auction or place bid) you expect either a success or an error
+  | UserCommand of Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>
+  /// ping delegator to make sure that time based logic can run (i.e. CRON dependent auction logic)
+  /// this is needed due to the fact that you have auction end time 
+  /// (you expect something to happen roughly then, and not a few hours later)
+  | WakeUp
+  /// Do we need to do anything if we have a handled shutdown of the delegator?
+  | CollectDelegator
 
-let createDelegator r = 
+type AuctionDelegator = Agent<DelegatorSignals>
+
+let createDelegator r auctionEnded = 
   AuctionDelegator.Start(fun inbox -> 
-    (let mutable auctions = []
+    (let mutable auctionsToEnd = []
+     let agents = Dictionary<AuctionId, AuctionAgent>()
      
      let rec messageLoop() = 
        async { 
-         let! (msg, reply) = inbox.Receive()
+         let! msg = inbox.Receive()
          let now = DateTime.UtcNow
-         (* 
+         match msg with
+         | UserCommand(cmd, reply) -> 
+           (* 
           
          *)
-         return! messageLoop()
+           match cmd with
+           | AddAuction (at, auction) -> 
+             if ((not << Auction.hasEnded now) auction) then agents.Add(auction.id, createAgent auction)
+             else ()
+           | PlaceBid (at, bid) -> 
+             let auctionId = Command.getAuction cmd
+             match  agents |> Dic.tryGet auctionId  with
+             | Some auctionAgent-> 
+                let reply = () // todo
+                auctionAgent.Post(AgentBid (bid, reply) )
+             | None->()
+           return! messageLoop()
+         | WakeUp -> 
+           (* 
+          
+         *)
+           let auctionsThatHaveEnded = auctionsToEnd |> List.filter (Auction.hasEnded now)
+           return! messageLoop()
+         | CollectDelegator -> ()
        }
      messageLoop()))

@@ -3,6 +3,7 @@
 open System.Collections.Concurrent
 open System.Collections.Generic
 open Auctions.Domain
+open Auctions.Dic
 
 [<Interface>]
 type IRepository = 
@@ -48,19 +49,14 @@ type ImmutableRepository =
 
 /// Concurrent version of repository.
 type ConcurrentRepository() = 
-  let tryGet (c : IDictionary<_, _>) k = 
-    match c.TryGetValue(k) with
-    | true, value -> Some(value)
-    | false, _ -> None
-
   // in memory repository
   let auctions = new ConcurrentDictionary<AuctionId, Auction>()
   let bids = new ConcurrentDictionary<BidId, Bid>()
   let auctionBids = new ConcurrentDictionary<AuctionId, ConcurrentBag<BidId>>()
   interface IRepository with
     member this.Auctions() = auctions.Values |> Seq.toList
-    member this.TryGetBid bidId = tryGet bids bidId
-    member this.TryGetAuction auctionId = tryGet auctions auctionId
+    member this.TryGetBid bidId = tryGet bidId bids
+    member this.TryGetAuction auctionId = tryGet auctionId auctions
     
     member this.SaveBid bid = 
       let bidIds = auctionBids.AddOrUpdate(bid.auction, new ConcurrentBag<BidId>(), (fun key bag -> bag))
