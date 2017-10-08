@@ -78,3 +78,4 @@ type Errors =
   | AuctionHasEnded of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
   | BidCurrencyConversion of BidId * Currency
+  | InvalidUserData

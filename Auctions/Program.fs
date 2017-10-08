@@ -17,6 +17,7 @@ type CmdArgs =
 open Auctions.Domain
 open Auctions.Actors
 open Auctions
+open Auctions.Either
 
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -58,50 +59,56 @@ let mapJsonPayload<'a> (req : HttpRequest) =
   |> fromJson
 
 let getBodyAsJSON<'a> (req : HttpRequest) = 
-  req.rawForm
-  |> getStringFromBytes
-  |> JsonConvert.DeserializeObject<'a>
+  let str = req.rawForm |> getStringFromBytes
+  try 
+    Ok(JsonConvert.DeserializeObject<'a> str)
+  with exn -> Error InvalidUserData
 
-let overview r = 
-  GET >=> JSON(r
-               |> Repo.auctions
-               |> List.toArray)
-
-let register r = 
-  authenticated (function 
-    | NoSession -> UNAUTHORIZED "Not logged in"
-    | UserLoggedOn user -> 
-      POST >=> request (getBodyAsJSON<Auction>
-                        >> (fun a -> { a with user = user })
-                        >> Timed.atNow
-                        >> Commands.AddAuction
-                        >> (Commands.handleCommand r)
-                        >> JSON))
-
-let details r (id : AuctionId) = GET >=> JSON(Repo.getAuction r id)
-let bids r (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
-
-let placeBid r (id : AuctionId) = 
-  authenticated (function 
-    | NoSession -> UNAUTHORIZED "Not logged in"
-    | UserLoggedOn user -> 
-      POST >=> request (getBodyAsJSON<Bid>
-                        >> (fun a -> 
-                        let d = DateTime.UtcNow
-                        d, 
-                        { a with user = user
-                                 at = d })
-                        >> Commands.PlaceBid
-                        >> (Commands.handleCommand r)
-                        >> JSON))
-
-let webPart r = 
+let webPart r (agent : Agent<DelegatorSignals>) = 
+  let overview = 
+    GET >=> JSON(r
+                 |> Repo.auctions
+                 |> List.toArray)
+  
+  let details (id : AuctionId) = GET >=> JSON(Repo.getAuction r id)
+  let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
+  let handleCommand maybeC = either { let! c = maybeC
+                                      return! agent.PostAndReply(fun r -> UserCommand(c, r)) }
+  
+  let register = 
+    let toPostedAuction user = 
+      getBodyAsJSON<Auction> >> Result.map (fun a -> 
+                                  { a with user = user }
+                                  |> Timed.atNow
+                                  |> Commands.AddAuction)
+    authenticated (function 
+      | NoSession -> UNAUTHORIZED "Not logged in"
+      | UserLoggedOn user -> 
+        POST >=> request (toPostedAuction user
+                          >> handleCommand
+                          >> JSON))
+  
+  let placeBid (id : AuctionId) = 
+    let toPostedPlaceBid user = 
+      getBodyAsJSON<Bid> >> Result.map (fun a -> 
+                              let d = DateTime.UtcNow
+                              (d, 
+                               { a with user = user
+                                        at = d })
+                              |> Commands.PlaceBid)
+    authenticated (function 
+      | NoSession -> UNAUTHORIZED "Not logged in"
+      | UserLoggedOn user -> 
+        POST >=> request (toPostedPlaceBid user
+                          >> handleCommand
+                          >> JSON))
+  
   choose [ path "/" >=> (Successful.OK "")
-           path Paths.Auction.overview >=> overview r
-           path Paths.Auction.register >=> register r
-           pathScan Paths.Auction.details (details r)
-           pathScan Paths.Auction.bids (bids r)
-           pathScan Paths.Auction.placeBid (placeBid r) ]
+           path Paths.Auction.overview >=> overview
+           path Paths.Auction.register >=> register
+           pathScan Paths.Auction.details details
+           pathScan Paths.Auction.bids bids
+           pathScan Paths.Auction.placeBid placeBid ]
 
 [<EntryPoint>]
 let main argv = 
@@ -151,6 +158,7 @@ let main argv =
                         endsAt = DateTime(2012, 1, 1)
                         user = User.BuyerOrSeller(Guid.NewGuid(), "Name") }
   |> ignore
+  let agent = createAgentDelegator()
   // start suave
-  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart r)
+  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart r agent)
   0

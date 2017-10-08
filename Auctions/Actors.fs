@@ -45,7 +45,7 @@ type Agent<'T> = MailboxProcessor<'T>
 type AuctionEnded = Auction * Bid option
 
 type AgentSignals = 
-  | AgentBid of Bid * AsyncReplyChannel<Result<Bid, Errors>>
+  | AgentBid of Bid * AsyncReplyChannel<Result<unit, Errors>>
   | AuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded option>
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded option>
 
@@ -86,7 +86,6 @@ let createAgent auction =
                                Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
                              else Ok()
                          bids <- bid :: bids
-                         return bid
                        })
            return! messageLoop()
          | AuctionEnded(now, reply) -> 
@@ -122,7 +121,7 @@ type DelegatorSignals =
 
 type AuctionDelegator = Agent<DelegatorSignals>
 
-let createDelegator r auctionEnded = 
+let createAgentDelegator () = 
   AuctionDelegator.Start(fun inbox -> 
     (let mutable auctionsToEnd = []
      let agents = Dictionary<AuctionId, AuctionAgent>()
@@ -131,28 +130,26 @@ let createDelegator r auctionEnded =
        async { 
          let! msg = inbox.Receive()
          let now = DateTime.UtcNow
+         let auctionHasEnded = Auction.hasEnded now
          match msg with
          | UserCommand(cmd, reply) -> 
-           (* 
-          
-         *)
            match cmd with
-           | AddAuction (at, auction) -> 
-             if ((not << Auction.hasEnded now) auction) then agents.Add(auction.id, createAgent auction)
+           | AddAuction(at, auction) -> 
+             let auctionHasNotEnded = not << auctionHasEnded
+             if auctionHasNotEnded auction then agents.Add(auction.id, createAgent auction)
              else ()
-           | PlaceBid (at, bid) -> 
+           | PlaceBid(at, bid) -> 
              let auctionId = Command.getAuction cmd
-             match  agents |> Dic.tryGet auctionId  with
-             | Some auctionAgent-> 
-                let reply = () // todo
-                auctionAgent.Post(AgentBid (bid, reply) )
-             | None->()
+             match agents |> Dic.tryGet auctionId with
+             | Some auctionAgent -> let! m = auctionAgent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
+                                    reply.Reply(m |> Result.map (fun () -> BidAccepted(at, bid)))
+             | None -> ()
            return! messageLoop()
          | WakeUp -> 
            (* 
           
          *)
-           let auctionsThatHaveEnded = auctionsToEnd |> List.filter (Auction.hasEnded now)
+           let auctionsThatHaveEnded = auctionsToEnd |> List.filter auctionHasEnded
            return! messageLoop()
          | CollectDelegator -> ()
        }
