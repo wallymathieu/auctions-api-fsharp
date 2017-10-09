@@ -18,6 +18,7 @@ open Auctions.Domain
 open Auctions.Actors
 open Auctions
 open Auctions.Either
+open Auctions.Commands
 
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -64,7 +65,7 @@ let getBodyAsJSON<'a> (req : HttpRequest) =
     Ok(JsonConvert.DeserializeObject<'a> str)
   with exn -> Error InvalidUserData
 
-let webPart r (agent : Agent<DelegatorSignals>) = 
+let webPart (r:ConcurrentRepository) (agent : Agent<DelegatorSignals>) = 
   let overview = 
     GET >=> JSON(r
                  |> Repo.auctions
@@ -72,8 +73,20 @@ let webPart r (agent : Agent<DelegatorSignals>) =
   
   let details (id : AuctionId) = GET >=> JSON(Repo.getAuction r id)
   let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
-  let handleCommand maybeC = either { let! c = maybeC
-                                      return! agent.PostAndReply(fun r -> UserCommand(c, r)) }
+  
+  let addCommandResultToRepo result = 
+    match result with
+    | AuctionAdded(t, a) -> r |> Repo.saveAuction a
+    | BidAccepted(t, b) -> r |> Repo.saveBid b
+    |> ignore
+  
+  let handleCommand maybeC = 
+    either { 
+      let! c = maybeC
+      let! result = agent.PostAndReply(fun r -> UserCommand(c, r))
+      do addCommandResultToRepo result
+      return result
+    }
   
   let register = 
     let toPostedAuction user = 
