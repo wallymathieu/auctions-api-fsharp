@@ -121,11 +121,10 @@ type DelegatorSignals =
 
 type AuctionDelegator = Agent<DelegatorSignals>
 
-let createAgentDelegator () = 
+let createAgentDelegator() = 
   AuctionDelegator.Start(fun inbox -> 
-    (let mutable auctionsToEnd = []
+    (let mutable activeAuctions = []
      let agents = Dictionary<AuctionId, AuctionAgent>()
-     
      let rec messageLoop() = 
        async { 
          let! msg = inbox.Receive()
@@ -135,8 +134,9 @@ let createAgentDelegator () =
          | UserCommand(cmd, reply) -> 
            match cmd with
            | AddAuction(at, auction) -> 
-             let auctionHasNotEnded = not << auctionHasEnded
-             if auctionHasNotEnded auction then agents.Add(auction.id, createAgent auction)
+             if not (auctionHasEnded auction) then
+               agents.Add(auction.id, createAgent auction)
+               activeAuctions <- auction :: activeAuctions
              else ()
            | PlaceBid(at, bid) -> 
              let auctionId = Command.getAuction cmd
@@ -149,8 +149,24 @@ let createAgentDelegator () =
            (* 
           
          *)
-           let auctionsThatHaveEnded = auctionsToEnd |> List.filter auctionHasEnded
+           let (hasEnded, isStillActive) = activeAuctions |> List.partition auctionHasEnded
+           for auction in hasEnded do 
+             agents
+                |> Dic.tryGet auction.id 
+                |> function 
+                  | Some agent -> 
+                    agent.PostAndReply(fun reply->AuctionEnded(now,reply)) 
+                      |> function 
+                        | Some auctionHasEnded-> () // do stuff!
+                        | None->()
+                  | None -> ()
+           activeAuctions <- isStillActive
            return! messageLoop()
-         | CollectDelegator -> ()
+         | CollectDelegator -> 
+              for agent in agents.Values do 
+                  agent.PostAndReply(fun reply->CollectAgent(now,reply)) 
+                    |> function 
+                      | Some auctionHasEnded-> () // what should you do here? 
+                      | None->()
        }
      messageLoop()))
