@@ -1,69 +1,55 @@
 ﻿module Auctions.Commands
+
 open Domain
 open System
 open Either
 
 type Command = 
-  | Empty of at : DateTime
-  | AddAuction of id : AuctionId * at : DateTime * title : string * endsAt : DateTime * user : User
-  | PlaceBid of auction : AuctionId * id : BidId * at : DateTime * amount : Amount * user : User
-  | RemoveBid of id : BidId * user : User * at : DateTime
+  | AddAuction of DateTime * Auction
+  | PlaceBid of DateTime * Bid
+  
   /// the time when the command was issued
   static member getAt command = 
     match command with
-    | AddAuction(at = at) -> at
-    | PlaceBid(at = at) -> at
-    | RemoveBid(at = at) -> at
-    | Empty(at = at) -> at
-  static member getAuction command =
+    | AddAuction(at, _) -> at
+    | PlaceBid(at, _) -> at
+  
+  static member getAuction command = 
     match command with
-    | AddAuction(id = id) -> Some id
-    | PlaceBid(id = id) -> Some id
-    | RemoveBid(id = id) -> Some id
-    | Empty _ -> None
+    | AddAuction(_,auction) -> auction.id
+    | PlaceBid(_,bid) -> bid.auction
 
-let handleCommand (r : IRepository) command = 
+type CommandSuccess = 
+  | AuctionAdded of DateTime * Auction
+  | BidAccepted of DateTime * Bid
+
+let validateBid (auction : Auction) (bid : Bid) = 
+  if bid.at > auction.endsAt then Error(AuctionHasEnded auction.id)
+  else if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
+  else Ok()
+open Repo
+/// the intention of this function is to return the modified repository and a success, or return an error
+/// I.e. this function does not know if it's an immutable repository 
+let handleCommand (r : IRepository) command : Result<IRepository * CommandSuccess, Errors> = 
   match command with
-  | Empty(at = at) -> Ok()
-  | AddAuction (id = id; title = title; endsAt = endsAt; user = user) -> 
+  | AddAuction(at, auction) -> 
+    let id = auction.id
     either { 
       match r.TryGetAuction id with
       | Some _ -> return! Error(AuctionAlreadyExists id)
       | None -> 
-        return! r.SaveAuction { id = id
-                                title = title
-                                endsAt = endsAt
-                                user = User.getId user }
+        yield! r.SaveAuction auction
+        yield AuctionAdded (at, auction)
     }
-  | PlaceBid (id = id; auction = auction; amount = amount; user = user; at = at) -> 
+  | PlaceBid(at, bid) -> 
     either { 
-      let! auction = r.GetAuction auction
-      let placeBid() = 
-        match r.TryGetBid id with
-        | None -> 
-          if at > auction.endsAt then Error(AuctionHasEnded auction.id)
-          else if User.getId user = auction.user then Error(SellerCannotPlaceBids(User.getId user, auction.id))
-          else 
-            r.SaveBid { id = id
-                        auction = auction
-                        amount = amount
-                        user = User.getId user
-                        at = at
-                        retracted = None }
-        | Some _ -> Error(BidAlreadyExists id)
-      match user with
-      | BuyerOrSeller _ -> return! placeBid()
-      | Support _ -> return! Error(SupportCantPlaceBids)
-    }
-  | RemoveBid (id = id; user = user; at = at) -> 
-    either { 
-      let! bid = r.GetBid id
-      let retract() = 
-        if at > bid.auction.endsAt then Error(AuctionHasEnded bid.auction.id)
-        else r.SaveBid { bid with retracted = Some(at) }
-      match user with
-      | BuyerOrSeller (id = id; name = _) -> 
-        if id <> bid.user then return! Error(CannotRemoveOtherPeoplesBids(id, bid.id))
-        else return! retract()
-      | Support(id = _) -> return! retract()
+      let! auction = r.GetAuction bid.auction
+      return! (match r.TryGetBid bid.id with
+               | None -> 
+                 either { 
+                   do! validateBid auction bid
+                   yield! r.SaveBid bid
+                   yield BidAccepted (at, bid)
+                 }
+               | Some _ -> Error(BidAlreadyExists bid.id))
     }

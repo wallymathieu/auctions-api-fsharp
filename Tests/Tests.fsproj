@@ -13,8 +13,11 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.2.0" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Component1.fs" />
-    <Compile Include="Program.fs" />
+    <Compile Include="UserTests.fs" />
     <Content Include="TestData.xml" />
+    <Compile Include="CommandTests.fs" />
+    <Compile Include="EitherTests.fs" />
+    <Compile Include="AmountTests.fs" />
+    <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

@@ -14,7 +14,7 @@ type PersistCommands(appendBatch : IAppendBatch) =
   
   let AppendBatch() = 
     let receivedCommands = new List<Command>()
-    let command = ref (Command.Empty DateTime.Now)
+    let command =ref (Unchecked.defaultof<Command>)
     while (commands.TryDequeue(command)) do
       receivedCommands.Add(!command)
     appendBatch.Batch(receivedCommands |> Seq.toList)

@@ -1,6 +1,8 @@
 ﻿module Auctions.MapToRedis
+
 open StackExchange.Redis
 open System
+open Domain
 open Commands
 
 let redisKey (str : string) = RedisKey.op_Implicit (str)
@@ -15,29 +17,21 @@ let hashEntryFloat key value = new HashEntry(redisValueStr key, redisValueFloat 
 let mapToHashEntries command = 
   let withType t xs = hashEntryStr "Type" t :: xs
   match command with
-  | Empty(at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryInt64 "At" at.Ticks ]
-    |> withType "Empty"
-  | AddAuction (id = id; title = title; endsAt = endsAt; at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryStr "Title" (title)
-      hashEntryInt64 "EndsAt" endsAt.Ticks
+  | AddAuction(at, auction) -> 
+    [ hashEntryInt64 "Id" (auction.id)
+      hashEntryStr "Title" (auction.title)
+      hashEntryInt64 "EndsAt" auction.endsAt.Ticks
+      hashEntryInt64 "StartsAt" auction.startsAt.Ticks
       hashEntryInt64 "At" at.Ticks ]
     |> withType "AddAuction"
-  | PlaceBid (id = id; auction = auction; amount = amount; user = user; at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryStr "Auction" (auction.ToString())
-      hashEntryFloat "AmountValue" amount.value
-      hashEntryStr "AmountCurrency" (amount.currency.ToString())
+  | PlaceBid(at, bid) -> 
+    [ hashEntryStr "Id" (bid.id.ToString())
+      hashEntryInt64 "Auction" (bid.auction)
+      hashEntryFloat "AmountValue" bid.amount.value
+      hashEntryStr "AmountCurrency" (bid.amount.currency.ToString())
       hashEntryInt64 "At" at.Ticks
-      hashEntryStr "User" (user.ToString()) ]
+      hashEntryStr "User" (bid.user.ToString()) ]
     |> withType "PlaceBid"
-  | RemoveBid (id = id; user = user; at = at) -> 
-    [ hashEntryStr "Id" (id.ToString())
-      hashEntryInt64 "At" at.Ticks
-      hashEntryStr "User" (user.ToString()) ]
-    |> withType "RemoveBid"
 
 let findEntry key (entries : HashEntry array) = 
   let k = redisValueStr key
@@ -63,18 +57,8 @@ let findEntryFloat key entries =
 let mapFromHashEntries entries : Command = 
   let t = entries |> findEntryStr "Type"
   match t with
-  | "Empty" -> 
-    let at = 
-      entries
-      |> findEntryInt64 "At"
-      |> DateTime
-    Empty(at = at)
   | "AddAuction" -> 
-    let id = 
-      entries
-      |> findEntryStr "Id"
-      |> Domain.AuctionId.Parse
-    
+    let id = entries |> findEntryInt64 "Id"
     let title = entries |> findEntryStr "Title"
     
     let endsAt = 
@@ -82,6 +66,11 @@ let mapFromHashEntries entries : Command =
       |> findEntryInt64 "EndsAt"
       |> DateTime
     
+    let startsAt = 
+      entries
+      |> findEntryInt64 "StartsAt"
+      |> DateTime
+    
     let at = 
       entries
       |> findEntryInt64 "At"
@@ -90,51 +79,44 @@ let mapFromHashEntries entries : Command =
     let user = 
       entries
       |> findEntryStr "User"
-      |> Domain.User.parse
+      |> Domain.User.tryParse
     
-    AddAuction(id = id, title = title, endsAt = endsAt, at = at, user = user)
+    let auction : Auction = 
+      { id = id
+        title = title
+        startsAt = startsAt
+        endsAt = endsAt
+        user = user.Value }// null ref expn
+    
+    AddAuction(at, auction)
   | "PlaceBid" -> 
     let id = 
       entries
       |> findEntryStr "Id"
-      |> Guid.Parse
+      |> Domain.BidId.Parse
     
-    let auction = 
-      entries
-      |> findEntryStr "Auction"
-      |> Guid.Parse
-    
+    let auction = entries |> findEntryInt64 "Auction"
     let amount = entries |> findEntryFloat "AmountValue"
     let currency = entries |> findEntryStr "AmountCurrency"
     
     let user = 
       entries
       |> findEntryStr "User"
-      |> Domain.User.parse
+      |> Domain.User.tryParse
     
     let at = 
       entries
       |> findEntryInt64 "At"
       |> DateTime
     
-    PlaceBid(id = id, auction = auction, 
-             amount = { value = amount
-                        currency = currency }, user = user, at = at)
-  | "RemoveBid" -> 
-    let id = 
-      entries
-      |> findEntryStr "Id"
-      |> Guid.Parse
+    let bid : Bid = 
+      { id = id
+        auction = auction
+        amount = 
+          { value = amount
+            currency = Currency.Parse currency }
+        user = user.Value// null ref expn
+        at = at }
     
-    let user = 
-      entries
-      |> findEntryStr "User"
-      |> Domain.User.parse
-    
-    let at = 
-      entries
-      |> findEntryInt64 "At"
-      |> DateTime
-    
-    RemoveBid(id = id, user = user, at = at)
+    PlaceBid(at, bid)
   | v -> failwithf "Unknown type %s" v
