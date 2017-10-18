@@ -24,10 +24,15 @@ module Paths =
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
   
   module Auction = 
+    /// /auctions
     let overview = "/auctions"
+    /// /auction
     let register = "/auction"
+    /// /auction/INT
     let details : Int64Path = "/auction/%d"
+    /// /auction/INT/bids
     let bids : Int64Path = "/auction/%d/bids"
+    /// /auction/INT/bid
     let placeBid : Int64Path = "/auction/%d/bid"
 
 type Session = 
@@ -37,7 +42,10 @@ type Session =
 let authenticated f = 
   context (fun x -> 
     match x.request.header "x-fake-auth" with
-    | Choice1Of2 user -> f (UserLoggedOn(User.parse user))
+    | Choice1Of2 u -> 
+        User.tryParse u |> function | Some user->
+                                        f (UserLoggedOn(user))
+                                    | None ->f NoSession
     | Choice2Of2 _ -> f NoSession)
 
 let JSON v = 
@@ -63,7 +71,8 @@ let getBodyAsJSON<'a> (req : HttpRequest) =
   let str = req.rawForm |> getStringFromBytes
   try 
     Ok(JsonConvert.DeserializeObject<'a> str)
-  with exn -> Error InvalidUserData
+  with exn -> Error (InvalidUserData exn.Message)
+type BidReq = {amount : Amount}
 
 let webPart (r:ConcurrentRepository) (agent : Agent<DelegatorSignals>) = 
   let overview = 
@@ -100,14 +109,14 @@ let webPart (r:ConcurrentRepository) (agent : Agent<DelegatorSignals>) =
         POST >=> request (toPostedAuction user
                           >> handleCommand
                           >> JSON))
-  
   let placeBid (id : AuctionId) = 
     let toPostedPlaceBid user = 
-      getBodyAsJSON<Bid> >> Result.map (fun a -> 
+      getBodyAsJSON<BidReq> >> Result.map (fun a -> 
                               let d = DateTime.UtcNow
                               (d, 
-                               { a with user = user
-                                        at = d })
+                               { user = user; id= BidId.NewGuid();
+                                 amount=a.amount;auction=id
+                                 at = d })
                               |> Commands.PlaceBid)
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
@@ -161,17 +170,18 @@ let main argv =
   |> Repo.saveAuction { id = 1L
                         startsAt = DateTime(2011, 1, 1)
                         title = "Title"
-                        endsAt = DateTime(2012, 1, 1)
-                        user = User.BuyerOrSeller(Guid.NewGuid(), "Name") }
+                        endsAt = DateTime(2022, 1, 1)
+                        user = User.BuyerOrSeller(Guid.NewGuid().ToString("N"), "Name") }
   |> ignore
   r
   |> Repo.saveAuction { id = 2L
                         startsAt = DateTime(2011, 1, 1)
                         title = "Title2"
-                        endsAt = DateTime(2012, 1, 1)
-                        user = User.BuyerOrSeller(Guid.NewGuid(), "Name") }
+                        endsAt = DateTime(2022, 1, 1)
+                        user = User.BuyerOrSeller(Guid.NewGuid().ToString("N"), "Name") }
   |> ignore
-  let agent = createAgentDelegator()
+  let agent = createAgentDelegator r
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart r agent)
   0
+//curl  -X POST -d '{ "auction":"1","amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid 

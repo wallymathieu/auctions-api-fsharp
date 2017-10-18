@@ -11,8 +11,8 @@ module ``Bid commands tests`` =
   let title = "auction"
   let startsAt = DateTime(2016, 1, 1)
   let endsAt = DateTime(2016, 2, 1)
-  let seller = BuyerOrSeller(Guid.NewGuid(), "seller")
-  let buyer = BuyerOrSeller(Guid.NewGuid(), "buyer")
+  let seller = BuyerOrSeller(Guid.NewGuid().ToString("N"), "seller")
+  let buyer = BuyerOrSeller(Guid.NewGuid().ToString("N"), "buyer")
   
   let auction : Auction = 
     { id = auctionId

@@ -79,14 +79,14 @@ let mapFromHashEntries entries : Command =
     let user = 
       entries
       |> findEntryStr "User"
-      |> Domain.User.parse
+      |> Domain.User.tryParse
     
     let auction : Auction = 
       { id = id
         title = title
         startsAt = startsAt
         endsAt = endsAt
-        user = user }
+        user = user.Value }// null ref expn
     
     AddAuction(at, auction)
   | "PlaceBid" -> 
@@ -102,7 +102,7 @@ let mapFromHashEntries entries : Command =
     let user = 
       entries
       |> findEntryStr "User"
-      |> Domain.User.parse
+      |> Domain.User.tryParse
     
     let at = 
       entries
@@ -115,7 +115,7 @@ let mapFromHashEntries entries : Command =
         amount = 
           { value = amount
             currency = Currency.Parse currency }
-        user = user
+        user = user.Value// null ref expn
         at = at }
     
     PlaceBid(at, bid)

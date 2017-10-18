@@ -121,10 +121,13 @@ type DelegatorSignals =
 
 type AuctionDelegator = Agent<DelegatorSignals>
 
-let createAgentDelegator() = 
+let createAgentDelegator r = 
   AuctionDelegator.Start(fun inbox -> 
-    (let mutable activeAuctions = []
+    (
+     let mutable activeAuctions = r |> Repo.auctions |> List.filter (Auction.hasEnded DateTime.UtcNow)
      let agents = Dictionary<AuctionId, AuctionAgent>()
+     for auction in activeAuctions do
+        agents.Add( auction.id, createAgent auction)
      let rec messageLoop() = 
        async { 
          let! msg = inbox.Receive()
@@ -137,13 +140,14 @@ let createAgentDelegator() =
              if not (auctionHasEnded auction) then
                agents.Add(auction.id, createAgent auction)
                activeAuctions <- auction :: activeAuctions
-             else ()
+               reply.Reply(Ok (AuctionAdded(at, auction)))
+             else reply.Reply(Error (AuctionHasEnded auction.id))
            | PlaceBid(at, bid) -> 
              let auctionId = Command.getAuction cmd
              match agents |> Dic.tryGet auctionId with
              | Some auctionAgent -> let! m = auctionAgent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
                                     reply.Reply(m |> Result.map (fun () -> BidAccepted(at, bid)))
-             | None -> ()
+             | None -> reply.Reply(Error (AuctionNotFound bid.auction))
            return! messageLoop()
          | WakeUp -> 
            (* 
