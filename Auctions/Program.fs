@@ -73,7 +73,12 @@ let getBodyAsJSON<'a> (req : HttpRequest) =
     Ok(JsonConvert.DeserializeObject<'a> str)
   with exn -> Error (InvalidUserData exn.Message)
 type BidReq = {amount : Amount}
-
+type AddAuctionReq = {
+    id : AuctionId
+    startsAt : DateTime
+    title : string
+    endsAt : DateTime
+}
 let webPart (r:ConcurrentRepository) (agent : Agent<DelegatorSignals>) = 
   let overview = 
     GET >=> JSON(r
@@ -99,8 +104,8 @@ let webPart (r:ConcurrentRepository) (agent : Agent<DelegatorSignals>) =
   
   let register = 
     let toPostedAuction user = 
-      getBodyAsJSON<Auction> >> Result.map (fun a -> 
-                                  { a with user = user }
+      getBodyAsJSON<AddAuctionReq> >> Result.map (fun a -> 
+                                  { user = user; id=a.id; startsAt=a.startsAt; endsAt=a.endsAt; title=a.title }
                                   |> Timed.atNow
                                   |> Commands.AddAuction)
     authenticated (function 

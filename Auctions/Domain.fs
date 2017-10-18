@@ -56,6 +56,9 @@ type AuctionId = int64
 type Amount = 
   { value : float
     currency : Currency }
+  override this.ToString() = 
+    sprintf "%s%f" (this.currency.ToString()) this.value
+
   static member tryParse amount = 
     let userRegex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
     let m = userRegex.Match(amount)
