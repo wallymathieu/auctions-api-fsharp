@@ -49,10 +49,9 @@ type AgentSignals =
   | AuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded option>
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded option>
 
-type AuctionAgent = Agent<AgentSignals>
-
-let createAgent auction = 
-  AuctionAgent.Start(fun inbox -> 
+//type AuctionAgent = Agent<AgentSignals>
+type AuctionAgent(auction) =
+  let agent = Agent<AgentSignals>.Start(fun inbox -> 
     (let validateBid = validateBid auction
      let mutable bids = []
      
@@ -109,6 +108,13 @@ let createAgent auction =
      
      messageLoop()))
 
+  member this.AgentBid bid = agent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
+  member this.AuctionEnded time = agent.PostAndAsyncReply(fun reply -> AuctionEnded(time, reply))
+  member this.Collect time = agent.PostAndAsyncReply(fun reply -> CollectAgent(time, reply))
+
+
+let createAgent auction = AuctionAgent auction
+ 
 type DelegatorSignals = 
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
   | UserCommand of Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>
@@ -119,58 +125,79 @@ type DelegatorSignals =
   /// Do we need to do anything if we have a handled shutdown of the delegator?
   | CollectDelegator
 
-type AuctionDelegator = Agent<DelegatorSignals>
-
-let createAgentDelegator r = 
-  AuctionDelegator.Start(fun inbox -> 
+type AuctionDelegator (r) = 
+  let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
     (
      let mutable activeAuctions = r |> Repo.auctions |> List.filter (Auction.hasEnded DateTime.UtcNow)
      let agents = Dictionary<AuctionId, AuctionAgent>()
      for auction in activeAuctions do
         agents.Add( auction.id, createAgent auction)
+
+     let userCommand cmd now (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
+       async{
+         let auctionHasEnded = Auction.hasEnded now
+         match cmd with
+         | AddAuction(at, auction) -> 
+           if not (auctionHasEnded auction) then
+             agents.Add(auction.id, createAgent auction)
+             activeAuctions <- auction :: activeAuctions
+             reply.Reply(Ok (AuctionAdded(at, auction)))
+           else reply.Reply(Error (AuctionHasEnded auction.id))
+         | PlaceBid(at, bid) -> 
+           let auctionId = Command.getAuction cmd
+           match agents |> Dic.tryGet auctionId with
+           | Some auctionAgent -> let! m = auctionAgent.AgentBid bid
+                                  reply.Reply(m |> Result.map (fun () -> BidAccepted(at, bid)))
+           | None -> reply.Reply(Error (AuctionNotFound bid.auction))
+       }
+
+     let wakeUp now= 
+       let auctionHasEnded = Auction.hasEnded now
+
+       let (hasEnded, isStillActive) = activeAuctions |> List.partition auctionHasEnded
+       async {
+         for auction in hasEnded do 
+             do! agents
+                |> Dic.tryGet auction.id 
+                |> function 
+                  | Some agent -> 
+                      async{
+                        let! res =agent.AuctionEnded now
+                        match res with 
+                            | Some auctionHasEnded-> () // do stuff!
+                            | None->()
+                      }
+
+                  | None -> async { return () }
+         activeAuctions <- isStillActive
+       }
+
+     let collect now =
+       async{
+         for agent in agents.Values do 
+             let! res = agent.Collect now
+             match res with
+                 | Some auctionHasEnded-> () // what should you do here? 
+                 | None->()
+       }
+
      let rec messageLoop() = 
        async { 
          let! msg = inbox.Receive()
          let now = DateTime.UtcNow
-         let auctionHasEnded = Auction.hasEnded now
          match msg with
          | UserCommand(cmd, reply) -> 
-           match cmd with
-           | AddAuction(at, auction) -> 
-             if not (auctionHasEnded auction) then
-               agents.Add(auction.id, createAgent auction)
-               activeAuctions <- auction :: activeAuctions
-               reply.Reply(Ok (AuctionAdded(at, auction)))
-             else reply.Reply(Error (AuctionHasEnded auction.id))
-           | PlaceBid(at, bid) -> 
-             let auctionId = Command.getAuction cmd
-             match agents |> Dic.tryGet auctionId with
-             | Some auctionAgent -> let! m = auctionAgent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
-                                    reply.Reply(m |> Result.map (fun () -> BidAccepted(at, bid)))
-             | None -> reply.Reply(Error (AuctionNotFound bid.auction))
+           do! userCommand cmd now reply
            return! messageLoop()
          | WakeUp -> 
-           (* 
-          
-         *)
-           let (hasEnded, isStillActive) = activeAuctions |> List.partition auctionHasEnded
-           for auction in hasEnded do 
-             agents
-                |> Dic.tryGet auction.id 
-                |> function 
-                  | Some agent -> 
-                    agent.PostAndReply(fun reply->AuctionEnded(now,reply)) 
-                      |> function 
-                        | Some auctionHasEnded-> () // do stuff!
-                        | None->()
-                  | None -> ()
-           activeAuctions <- isStillActive
+           do! wakeUp now
            return! messageLoop()
          | CollectDelegator -> 
-              for agent in agents.Values do 
-                  agent.PostAndReply(fun reply->CollectAgent(now,reply)) 
-                    |> function 
-                      | Some auctionHasEnded-> () // what should you do here? 
-                      | None->()
+           do! collect now
        }
      messageLoop()))
+  member this.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
+  member this.WakeUp time = agent.Post WakeUp 
+  member this.Collect time = agent.Post CollectDelegator
+
+let createAgentDelegator r = AuctionDelegator r

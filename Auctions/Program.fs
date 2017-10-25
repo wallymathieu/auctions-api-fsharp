@@ -79,7 +79,7 @@ type AddAuctionReq = {
     title : string
     endsAt : DateTime
 }
-let webPart (r:ConcurrentRepository) (agent : Agent<DelegatorSignals>) = 
+let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) = 
   let overview = 
     GET >=> JSON(r
                  |> Repo.auctions
@@ -93,15 +93,14 @@ let webPart (r:ConcurrentRepository) (agent : Agent<DelegatorSignals>) =
     | AuctionAdded(t, a) -> r |> Repo.saveAuction a
     | BidAccepted(t, b) -> r |> Repo.saveBid b
     |> ignore
-  
-  let handleCommand maybeC = 
-    either { 
-      let! c = maybeC
-      let! result = agent.PostAndReply(fun r -> UserCommand(c, r))
-      do addCommandResultToRepo result
-      return result
+
+  let handleCommand (maybeC:Result<_,_>) = 
+    asyncResult{
+      let! c=maybeC
+      let! r = agent.UserCommand c
+      do addCommandResultToRepo r
     }
-  
+
   let register = 
     let toPostedAuction user = 
       getBodyAsJSON<AddAuctionReq> >> Result.map (fun a -> 
