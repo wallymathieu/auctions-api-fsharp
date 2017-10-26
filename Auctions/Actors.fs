@@ -127,7 +127,6 @@ type DelegatorSignals =
 
 type AuctionDelegator (r) = 
   let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
-    (
      let mutable activeAuctions = r |> Repo.auctions |> List.filter (Auction.hasEnded DateTime.UtcNow)
      let agents = Dictionary<AuctionId, AuctionAgent>()
      for auction in activeAuctions do
@@ -195,7 +194,7 @@ type AuctionDelegator (r) =
          | CollectDelegator -> 
            do! collect now
        }
-     messageLoop()))
+     messageLoop())
   member this.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
   member this.WakeUp time = agent.Post WakeUp 
   member this.Collect time = agent.Post CollectDelegator
