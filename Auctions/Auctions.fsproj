@@ -26,8 +26,7 @@
     <Compile Include="Commands.fs" />
     <Compile Include="AppendBatch.fs" />
     <Compile Include="MapToRedis.fs" />
-    <Compile Include="RedisAppendBatch.fs" />
-    <Compile Include="JsonConvertCommands.fs" />
+    <Compile Include="AppendAndReadBatchRedis.fs" />
     <Compile Include="JsonFileAppendBatch.fs" />
     <Compile Include="PersistCommands.fs" />
     <Compile Include="Actors.fs" />
