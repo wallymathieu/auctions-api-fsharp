@@ -18,6 +18,8 @@
     <Compile Include="CommandTests.fs" />
     <Compile Include="EitherTests.fs" />
     <Compile Include="AmountTests.fs" />
+    <Compile Include="AuctionEntityTests.fs" />
+    <Compile Include="AuctionBidValidationTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

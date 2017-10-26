@@ -8,7 +8,10 @@ open Suave.Writers
 
 type CmdArgs = 
   { IP : System.Net.IPAddress
-    Port : Sockets.Port }
+    Port : Sockets.Port
+    Redis : string option
+    Json : string option
+  }
 
 open Auctions.Domain
 open Auctions.Actors
@@ -72,9 +75,13 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       let! c=maybeC
       let! r = agent.UserCommand c
       do addCommandResultToRepo r
+      return r
     }
 
+  let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
+
   let register = 
+
     let toPostedAuction user = 
       getBodyAsJSON<AddAuctionReq> >> Result.map (fun a -> 
                                   { user = user; id=a.id; startsAt=a.startsAt; endsAt=a.endsAt; title=a.title }
@@ -84,9 +91,12 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
         POST >=> request (toPostedAuction user
-                          >> Result.mapError (fun err->InvalidUserData err.Message)
+                          >> Result.mapError exnToInvalidUserData
                           >> handleCommandAsync
-                          >> JSON))
+                          >> Async.RunSynchronously // TODO: Fix
+                          >> JSONorBAD
+                         ))
+
   let placeBid (id : AuctionId) = 
     let toPostedPlaceBid user = 
       getBodyAsJSON<BidReq> >> Result.map (fun a -> 
@@ -100,9 +110,11 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
         POST >=> request (toPostedPlaceBid user
-                          >> Result.mapError (fun err->InvalidUserData err.Message)
+                          >> Result.mapError exnToInvalidUserData
                           >> handleCommandAsync
-                          >> JSON))
+                          >> Async.RunSynchronously // TODO: Fix
+                          >> JSONorBAD
+                          ))
   
   choose [ path "/" >=> (Successful.OK "")
            path Paths.Auction.overview >=> overview
@@ -126,13 +138,18 @@ let main argv =
     //default bind to 127.0.0.1:8083
     let defaultArgs = 
       { IP = System.Net.IPAddress.Loopback
-        Port = 8083us }
+        Port = 8083us
+        Redis = None
+        Json = None
+      }
     
     let rec parseArgs b args = 
       match args with
       | [] -> b
       | "--ip" :: IPAddress ip :: xs -> parseArgs { b with IP = ip } xs
       | "--port" :: Port p :: xs -> parseArgs { b with Port = p } xs
+      | "--redis" :: conn :: xs -> parseArgs { b with Redis = Some conn } xs
+      | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
       | invalidArgs -> 
         printfn "error: invalid arguments %A" invalidArgs
         printfn "Usage:"
@@ -145,22 +162,20 @@ let main argv =
     |> parseArgs defaultArgs
   
   let r = ConcurrentRepository()
-  r
-  |> Repo.saveAuction { id = 1L
-                        startsAt = DateTime(2011, 1, 1)
-                        title = "Title"
-                        endsAt = DateTime(2022, 1, 1)
-                        user = User.BuyerOrSeller(Guid.NewGuid().ToString("N"), "Name") }
-  |> ignore
-  r
-  |> Repo.saveAuction { id = 2L
-                        startsAt = DateTime(2011, 1, 1)
-                        title = "Title2"
-                        endsAt = DateTime(2022, 1, 1)
-                        user = User.BuyerOrSeller(Guid.NewGuid().ToString("N"), "Name") }
-  |> ignore
-  let agent = createAgentDelegator r
+  let appenders = seq {
+        if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
+        if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
+      }
+  let persist = PersistCommands (appenders |> List.ofSeq)
+  let handleCommand c = handleCommand r c |> ignore
+  for appender in appenders do
+    appender.ReadAll() |> List.iter handleCommand
+
+  persist.Start()
+  let agent = createAgentDelegator(r, persist.Handle)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart r agent)
   0
+//curl  -X POST -d '{ "id":"1","startsAt":"2017-01-01","endsAt":"2018-01-01","title":"First auction" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
+
 //curl  -X POST -d '{ "auction":"1","amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid 

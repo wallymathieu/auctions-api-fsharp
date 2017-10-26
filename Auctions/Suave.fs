@@ -3,16 +3,31 @@ open System
 open Suave
 open Suave.Operators
 open Suave.Successful
+open Suave.RequestErrors
 open Suave.Writers
 open Newtonsoft.Json
 open Newtonsoft.Json.Serialization
 
-let JSON v = 
+module Json=
   let jsonSerializerSettings = JsonSerializerSettings()
   jsonSerializerSettings.ContractResolver <- CamelCasePropertyNamesContractResolver()
-  JsonConvert.SerializeObject(v, jsonSerializerSettings)
+
+  let stringify v=
+    JsonConvert.SerializeObject(v, jsonSerializerSettings)
+
+let JSON v = 
+  Json.stringify v
   |> OK
   >=> Writers.setMimeType "application/json; charset=utf-8"
+
+let JSONorBAD (result:Result<_,_>)=
+  match result with
+  | Ok v -> JSON v
+  | Error err -> 
+    Json.stringify err
+    |> BAD_REQUEST
+    >=> Writers.setMimeType "application/json; charset=utf-8"
+
 
 let getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
 

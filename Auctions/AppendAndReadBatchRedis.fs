@@ -6,8 +6,9 @@ open System
 open Commands
 open MapToRedis
 
-type AppendAndReadBatchRedis(db : IDatabase) = 
-  
+type AppendAndReadBatchRedis(connStr:string) = 
+  let conn = ConnectionMultiplexer.Connect(connStr)
+  let db = conn.GetDatabase()
   let hashCreate (batch : IBatch) command = 
     let id = Guid.NewGuid().ToString("N")
     let entries = mapToHashEntries command

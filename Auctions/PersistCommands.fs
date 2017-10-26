@@ -6,18 +6,20 @@ open System.Collections.Generic
 open System.Threading
 open Commands
 
-type PersistCommands(appendBatch : IAppendBatch) = 
+type PersistCommands(appendBatches : IAppendBatch list) = 
   let mutable thread = null
   let stop = ref false
   let commands = new ConcurrentQueue<Command>()
   let signal = new EventWaitHandle(false, EventResetMode.AutoReset)
   
   let AppendBatch() = 
-    let receivedCommands = new List<Command>()
+    let receivedCommands = new List<Command>(10)
     let command =ref (Unchecked.defaultof<Command>)
     while (commands.TryDequeue(command)) do
       receivedCommands.Add(!command)
-    appendBatch.Batch(receivedCommands |> Seq.toList)
+    let toAppend=receivedCommands |> Seq.toList
+    for appendBatch in appendBatches do 
+      appendBatch.Batch toAppend
   
   member this.ThreadStart() = 
     while (not !stop) do

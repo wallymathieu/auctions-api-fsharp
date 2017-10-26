@@ -83,7 +83,7 @@ type Auction =
     endsAt : DateTime
     user : User }
   static member getId (auction : Auction) = auction.id
-  static member hasEnded now (auction : Auction) = auction.endsAt>now
+  static member hasEnded now (auction : Auction) = auction.endsAt < now
 
 type Bid = 
   { id : BidId

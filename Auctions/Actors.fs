@@ -123,7 +123,7 @@ type DelegatorSignals =
   /// Do we need to do anything if we have a handled shutdown of the delegator?
   | CollectDelegator
 
-type AuctionDelegator (r) = 
+type AuctionDelegator(r, persistCommand) = 
   let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
      let mutable activeAuctions = r |> Repo.auctions |> List.filter (Auction.hasEnded DateTime.UtcNow)
      let agents = Dictionary<AuctionId, AuctionAgent>()
@@ -184,6 +184,7 @@ type AuctionDelegator (r) =
          let now = DateTime.UtcNow
          match msg with
          | UserCommand(cmd, reply) -> 
+           do persistCommand cmd
            do! userCommand cmd now reply
            return! messageLoop()
          | WakeUp -> 

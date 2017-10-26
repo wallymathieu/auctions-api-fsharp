@@ -35,6 +35,10 @@ type JsonAppendToFile(fileName) =
   let settings = new JsonSerializerSettings()
   
   do
+    if (not << File.Exists) fileName then File.WriteAllText(fileName, "")
+    else 
+        ()
+
     settings.TypeNameHandling <- TypeNameHandling.Auto
     settings.SerializationBinder <- _binder
 
@@ -43,7 +47,8 @@ type JsonAppendToFile(fileName) =
     member this.Batch cs = 
       use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
       use w = new StreamWriter(fs)
-      w.WriteLine(JsonConvert.SerializeObject (cs |> List.toArray), settings)
+      let json = JsonConvert.SerializeObject( (cs |> List.toArray), settings)
+      w.WriteLine json
       fs.Flush()
     
     member this.ReadAll() = 
