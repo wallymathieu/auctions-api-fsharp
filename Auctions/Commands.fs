@@ -28,6 +28,11 @@ let validateBid (auction : Auction) (bid : Bid) =
   else if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
   else Ok()
 
+let validateCurrency (bid:Bid) =
+  if bid.amount.currency <> Currency.VAC then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
+  else Ok()
+
+
 /// the intention of this function is to return the modified repository and a success, or return an error
 /// I.e. this function does not know if it's an immutable repository 
 let handleCommand (r : IRepository) command : Result<IRepository * CommandSuccess, Errors> = 

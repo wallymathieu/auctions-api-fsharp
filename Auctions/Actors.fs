@@ -81,9 +81,7 @@ type AuctionAgent(auction) =
                           compared to the "current bid"
                         *)
                          do! validateBid bid
-                         do! if bid.amount.currency <> Currency.VAC then 
-                               Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
-                             else Ok()
+                         do! validateCurrency bid
                          bids <- bid :: bids
                        })
            return! messageLoop()
