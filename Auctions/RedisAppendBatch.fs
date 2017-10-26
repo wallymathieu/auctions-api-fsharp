@@ -29,7 +29,6 @@ type AppendAndReadBatchRedis(db : IDatabase) =
     member this.ReadAll() = 
       let commands = db.SetMembers(commandsKey, CommandFlags.None)
       commands
-      |> Array.map (fun key -> db.HashGetAll(valueToKey key))
-      |> Array.map mapFromHashEntries
+      |> Array.map( (db.HashGetAll<<valueToKey) >>mapFromHashEntries )
       |> Array.toList
       |> List.sortBy Command.getAt
