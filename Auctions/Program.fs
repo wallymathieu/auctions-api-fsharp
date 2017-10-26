@@ -1,14 +1,10 @@
 ﻿open System
 open Suave
 open Suave.Filters
-open Suave.Model.Binding
 open Suave.Operators
 open Suave.RequestErrors
-open Suave.State.CookieStateStore
 open Suave.Successful
 open Suave.Writers
-open Newtonsoft.Json
-open Newtonsoft.Json.Serialization
 
 type CmdArgs = 
   { IP : System.Net.IPAddress
@@ -48,30 +44,6 @@ let authenticated f =
                                     | None ->f NoSession
     | Choice2Of2 _ -> f NoSession)
 
-let JSON v = 
-  let jsonSerializerSettings = JsonSerializerSettings()
-  jsonSerializerSettings.ContractResolver <- CamelCasePropertyNamesContractResolver()
-  JsonConvert.SerializeObject(v, jsonSerializerSettings)
-  |> OK
-  >=> Writers.setMimeType "application/json; charset=utf-8"
-
-let getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
-
-let mapJsonPayload<'a> (req : HttpRequest) = 
-  let fromJson json = 
-    try 
-      let obj = JsonConvert.DeserializeObject<'a>(json)
-      Ok obj
-    with e -> Error e
-  req.rawForm
-  |> getStringFromBytes
-  |> fromJson
-
-let getBodyAsJSON<'a> (req : HttpRequest) = 
-  let str = req.rawForm |> getStringFromBytes
-  try 
-    Ok(JsonConvert.DeserializeObject<'a> str)
-  with exn -> Error (InvalidUserData exn.Message)
 type BidReq = {amount : Amount}
 type AddAuctionReq = {
     id : AuctionId
@@ -94,7 +66,8 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
     | BidAccepted(t, b) -> r |> Repo.saveBid b
     |> ignore
 
-  let handleCommand (maybeC:Result<_,_>) = 
+  /// handle command and add result to repository
+  let handleCommandAsync (maybeC:Result<_,_>) = 
     asyncResult{
       let! c=maybeC
       let! r = agent.UserCommand c
@@ -111,7 +84,8 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
         POST >=> request (toPostedAuction user
-                          >> handleCommand
+                          >> Result.mapError (fun err->InvalidUserData err.Message)
+                          >> handleCommandAsync
                           >> JSON))
   let placeBid (id : AuctionId) = 
     let toPostedPlaceBid user = 
@@ -126,7 +100,8 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
         POST >=> request (toPostedPlaceBid user
-                          >> handleCommand
+                          >> Result.mapError (fun err->InvalidUserData err.Message)
+                          >> handleCommandAsync
                           >> JSON))
   
   choose [ path "/" >=> (Successful.OK "")

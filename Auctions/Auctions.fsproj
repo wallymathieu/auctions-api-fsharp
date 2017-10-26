@@ -12,16 +12,16 @@
     <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
     <PackageReference Include="Suave" Version="2.2.*" />
-    <PackageReference Include="Hopac" Version="0.3.23" />
     <PackageReference Include="Saithe" Version="2.1.0" />
     <DotNetCliToolReference Include="Microsoft.DotNet.Watcher.Tools" Version="2.0.0" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Domain.fs" />
     <Compile Include="Either.fs" />
     <Compile Include="AsyncResult.fs" />
     <Compile Include="Dic.fs" />
+    <Compile Include="Suave.fs" />
+    <Compile Include="Domain.fs" />
     <Compile Include="Repository.fs" />
     <Compile Include="Commands.fs" />
     <Compile Include="AppendBatch.fs" />
@@ -30,7 +30,6 @@
     <Compile Include="JsonConvertCommands.fs" />
     <Compile Include="JsonFileAppendBatch.fs" />
     <Compile Include="PersistCommands.fs" />
-    <Compile Include="Jobs.fs" />
     <Compile Include="Actors.fs" />
     <None Include="Script.fsx" />
     <Compile Include="Program.fs" />
