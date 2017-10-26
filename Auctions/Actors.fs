@@ -125,7 +125,7 @@ type DelegatorSignals =
 
 type AuctionDelegator(r, persistCommand) = 
   let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
-     let mutable activeAuctions = r |> Repo.auctions |> List.filter (Auction.hasEnded DateTime.UtcNow)
+     let mutable activeAuctions = r |> Repo.auctions |> List.filter (not<< Auction.hasEnded DateTime.UtcNow)
      let agents = Dictionary<AuctionId, AuctionAgent>()
      for auction in activeAuctions do
         agents.Add( auction.id, createAgent auction)
