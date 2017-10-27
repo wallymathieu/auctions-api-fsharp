@@ -79,6 +79,13 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
     }
 
   let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
+  let handleCommandAsync toCommand: WebPart = 
+    fun (ctx : HttpContext) ->
+      async {
+        let r = toCommand ctx
+        let! commandResult= handleCommandAsync r
+        return! JSONorBAD commandResult ctx
+      }
 
   let register = 
 
@@ -90,18 +97,10 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
         |> Commands.AddAuction)
         >> Result.mapError exnToInvalidUserData
 
-    let handlePost user: WebPart =
-      fun (ctx : HttpContext) ->
-        async {
-          let r = toPostedAuction user ctx
-          let! commandResult= handleCommandAsync r
-          return! JSONorBAD commandResult ctx
-        }
-
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
-        POST >=> handlePost user)
+        POST >=> handleCommandAsync (toPostedAuction user))
 
   let placeBid (id : AuctionId) = 
     let toPostedPlaceBid user = 
@@ -115,18 +114,10 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
         |> Commands.PlaceBid)
         >> Result.mapError exnToInvalidUserData
 
-    let handlePost user: WebPart = 
-      fun (ctx : HttpContext) ->
-        async {
-          let r = toPostedPlaceBid user ctx
-          let! commandResult= handleCommandAsync r
-          return! JSONorBAD commandResult ctx
-        }
-
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
-        POST >=> handlePost user)
+        POST >=> handleCommandAsync (toPostedPlaceBid user))
   
   choose [ path "/" >=> (Successful.OK "")
            path Paths.Auction.overview >=> overview

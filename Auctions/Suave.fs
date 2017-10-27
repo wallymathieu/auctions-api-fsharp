@@ -15,7 +15,7 @@ module Json=
   let stringify v=
     JsonConvert.SerializeObject(v, jsonSerializerSettings)
 
-let JSON v = 
+let JSON v : WebPart= 
   Json.stringify v
   |> OK
   >=> Writers.setMimeType "application/json; charset=utf-8"
