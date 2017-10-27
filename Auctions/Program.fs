@@ -77,44 +77,50 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       do addCommandResultToRepo r
       return r
     }
+  /// turn handle command to webpart
+  let handleCommandAsync toCommand: WebPart = 
+    fun (ctx : HttpContext) ->
+      async {
+        let r = toCommand ctx
+        let! commandResult= handleCommandAsync r
+        return! JSONorBAD commandResult ctx
+      }
 
   let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
 
+  /// register auction
   let register = 
 
     let toPostedAuction user = 
-      getBodyAsJSON<AddAuctionReq> >> Result.map (fun a -> 
-                                  { user = user; id=a.id; startsAt=a.startsAt; endsAt=a.endsAt; title=a.title }
-                                  |> Timed.atNow
-                                  |> Commands.AddAuction)
+      getBodyAsJSON<AddAuctionReq> 
+        >> Result.map (fun a -> 
+        { user = user; id=a.id; startsAt=a.startsAt; endsAt=a.endsAt; title=a.title }
+        |> Timed.atNow
+        |> Commands.AddAuction)
+        >> Result.mapError exnToInvalidUserData
+
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
-        POST >=> request (toPostedAuction user
-                          >> Result.mapError exnToInvalidUserData
-                          >> handleCommandAsync
-                          >> Async.RunSynchronously // TODO: Fix
-                          >> JSONorBAD
-                         ))
+        POST >=> handleCommandAsync (toPostedAuction user))
 
+  /// place bid
   let placeBid (id : AuctionId) = 
     let toPostedPlaceBid user = 
-      getBodyAsJSON<BidReq> >> Result.map (fun a -> 
-                              let d = DateTime.UtcNow
-                              (d, 
-                               { user = user; id= BidId.NewGuid();
-                                 amount=a.amount;auction=id
-                                 at = d })
-                              |> Commands.PlaceBid)
+      getBodyAsJSON<BidReq> 
+        >> Result.map (fun a -> 
+        let d = DateTime.UtcNow
+        (d, 
+         { user = user; id= BidId.NewGuid();
+           amount=a.amount;auction=id
+           at = d })
+        |> Commands.PlaceBid)
+        >> Result.mapError exnToInvalidUserData
+
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
-        POST >=> request (toPostedPlaceBid user
-                          >> Result.mapError exnToInvalidUserData
-                          >> handleCommandAsync
-                          >> Async.RunSynchronously // TODO: Fix
-                          >> JSONorBAD
-                          ))
+        POST >=> handleCommandAsync (toPostedPlaceBid user))
   
   choose [ path "/" >=> (Successful.OK "")
            path Paths.Auction.overview >=> overview
