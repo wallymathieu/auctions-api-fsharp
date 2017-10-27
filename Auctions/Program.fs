@@ -77,8 +77,7 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       do addCommandResultToRepo r
       return r
     }
-
-  let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
+  /// turn handle command to webpart
   let handleCommandAsync toCommand: WebPart = 
     fun (ctx : HttpContext) ->
       async {
@@ -87,6 +86,9 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
         return! JSONorBAD commandResult ctx
       }
 
+  let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
+
+  /// register auction
   let register = 
 
     let toPostedAuction user = 
@@ -102,6 +104,7 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
       | UserLoggedOn user -> 
         POST >=> handleCommandAsync (toPostedAuction user))
 
+  /// place bid
   let placeBid (id : AuctionId) = 
     let toPostedPlaceBid user = 
       getBodyAsJSON<BidReq> 
