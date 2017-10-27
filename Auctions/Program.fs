@@ -87,11 +87,11 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
                                   { user = user; id=a.id; startsAt=a.startsAt; endsAt=a.endsAt; title=a.title }
                                   |> Timed.atNow
                                   |> Commands.AddAuction)
+                                  >> Result.mapError exnToInvalidUserData
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
         POST >=> request (toPostedAuction user
-                          >> Result.mapError exnToInvalidUserData
                           >> handleCommandAsync
                           >> Async.RunSynchronously // TODO: Fix
                           >> JSONorBAD
@@ -106,15 +106,21 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
                                  amount=a.amount;auction=id
                                  at = d })
                               |> Commands.PlaceBid)
+                              >> Result.mapError exnToInvalidUserData
+
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
-        POST >=> request (toPostedPlaceBid user
-                          >> Result.mapError exnToInvalidUserData
-                          >> handleCommandAsync
-                          >> Async.RunSynchronously // TODO: Fix
-                          >> JSONorBAD
-                          ))
+        POST >=> request (fun r -> 
+                              let res =toPostedPlaceBid user r
+
+
+                              OK ""
+                              //res
+                              //>> handleCommandAsync
+                              //>> Async.RunSynchronously // TODO: Fix
+                              //>> JSONorBAD
+                              ))
   
   choose [ path "/" >=> (Successful.OK "")
            path Paths.Auction.overview >=> overview
