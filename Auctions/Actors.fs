@@ -50,10 +50,10 @@ type AgentSignals =
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded option>
 
 //type AuctionAgent = Agent<AgentSignals>
-type AuctionAgent(auction) =
+type AuctionAgent(auction, bids) =
   let agent = Agent<AgentSignals>.Start(fun inbox -> 
     (let validateBid = validateBid auction
-     let mutable bids = []
+     let mutable bids = bids
      
      let maxBid() = 
        if List.isEmpty bids then None
@@ -111,7 +111,7 @@ type AuctionAgent(auction) =
   member this.Collect time = agent.PostAndAsyncReply(fun reply -> CollectAgent(time, reply))
 
 
-let createAgent auction = AuctionAgent auction
+let createAgent auction bids = AuctionAgent (auction,bids)
  
 type DelegatorSignals = 
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
@@ -128,7 +128,7 @@ type AuctionDelegator(r, persistCommand) =
      let mutable activeAuctions = r |> Repo.auctions |> List.filter (not<< Auction.hasEnded DateTime.UtcNow)
      let agents = Dictionary<AuctionId, AuctionAgent>()
      for auction in activeAuctions do
-        agents.Add( auction.id, createAgent auction)
+        agents.Add( auction.id, createAgent auction (r.GetBidsForAuction auction.id))
 
      let userCommand cmd now (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
        async{
@@ -136,7 +136,7 @@ type AuctionDelegator(r, persistCommand) =
          match cmd with
          | AddAuction(at, auction) -> 
            if not (auctionHasEnded auction) then
-             agents.Add(auction.id, createAgent auction)
+             agents.Add(auction.id, createAgent auction [])
              activeAuctions <- auction :: activeAuctions
              reply.Reply(Ok (AuctionAdded(at, auction)))
            else reply.Reply(Error (AuctionHasEnded auction.id))
