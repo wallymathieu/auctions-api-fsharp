@@ -20,7 +20,7 @@ let JSON v =
   |> OK
   >=> Writers.setMimeType "application/json; charset=utf-8"
 
-let JSONorBAD (result:Result<_,_>)=
+let JSONorBAD (result:Result<_,_>) : WebPart=
   match result with
   | Ok v -> JSON v
   | Error err -> 
@@ -28,21 +28,10 @@ let JSONorBAD (result:Result<_,_>)=
     |> BAD_REQUEST
     >=> Writers.setMimeType "application/json; charset=utf-8"
 
+let private getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
 
-let getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
-
-let mapJsonPayload<'a> (req : HttpRequest) = 
-  let fromJson json = 
-    try 
-      let obj = JsonConvert.DeserializeObject<'a>(json)
-      Ok obj
-    with e -> Error e
-  req.rawForm
-  |> getStringFromBytes
-  |> fromJson
-
-let getBodyAsJSON<'a> (req : HttpRequest) = 
-  let str = req.rawForm |> getStringFromBytes
+let getBodyAsJSON<'a> (ctx : HttpContext) = 
+  let str = ctx.request.rawForm |> getStringFromBytes
   try 
     Ok(JsonConvert.DeserializeObject<'a> str)
   with exn -> Error exn
