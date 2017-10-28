@@ -18,7 +18,7 @@ open Auctions.Actors
 open Auctions
 open Auctions.Either
 open Auctions.Commands
-
+open Newtonsoft.Json
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
   
@@ -29,8 +29,6 @@ module Paths =
     let register = "/auction"
     /// /auction/INT
     let details : Int64Path = "/auction/%d"
-    /// /auction/INT/bids
-    let bids : Int64Path = "/auction/%d/bids"
     /// /auction/INT/bid
     let placeBid : Int64Path = "/auction/%d/bid"
 
@@ -53,15 +51,53 @@ type AddAuctionReq = {
     startsAt : DateTime
     title : string
     endsAt : DateTime
+    currency : string
+    [<JsonProperty("type")>]
+    typ:string
 }
+type BidJsonResult = { 
+      amount:Amount
+      bidder:string
+    }
+type AuctionJsonResult = {
+      id : AuctionId
+      startsAt : DateTime
+      title : string
+      endsAt : DateTime
+      currency : Currency
+      bids : BidJsonResult array
+    }
+
 let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) = 
   let overview = 
     GET >=> JSON(r
                  |> Repo.auctions
                  |> List.toArray)
+
+  let getAuctionResult r id :Result<AuctionJsonResult,Errors>=
+    let now =DateTime.UtcNow
+    either{
+      let! a =Repo.getAuction r id
+      let discloseBidders =Auction.biddersAreOpen a
+      let mapBid (b:Bid) :BidJsonResult = { 
+        amount=b.amount
+        bidder= if discloseBidders 
+                then b.user.ToString() 
+                else b.user.GetHashCode().ToString() // here you might want bidder number
+      }
+      let getBids ()= Repo.getAuctionBids r id 
+      let bids = match a.typ with
+                 | English _ -> getBids()
+                 // the bids are not disclosed until after the end :
+                 | Vickrey -> if Auction.hasEnded now a then getBids() else []
+                 | Blind -> if Auction.hasEnded now a then getBids() else [] 
+      return { id=a.id; startsAt=a.startsAt; title=a.title;endsAt=a.endsAt; currency=a.currency
+               bids=bids |> List.map mapBid |> List.toArray
+             }
+    }
   
-  let details (id : AuctionId) = GET >=> JSON(Repo.getAuction r id)
-  let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
+  let details id  = GET >=> JSON(getAuctionResult r id)
+  //let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
   
   let addCommandResultToRepo result = 
     match result with
@@ -94,7 +130,20 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
     let toPostedAuction user = 
       getBodyAsJSON<AddAuctionReq> 
         >> Result.map (fun a -> 
-        { user = user; id=a.id; startsAt=a.startsAt; endsAt=a.endsAt; title=a.title }
+        let currency= Currency.tryParse a.currency |> Option.getOrElse Currency.VAC
+        
+        let typ = Type.tryParse a.typ |> Option.getOrElse (English { // default is english auctions
+                                                                      reservePrice=Amount.zero currency 
+                                                                      minRaise =Amount.zero currency
+                                                                    })
+        { user = user
+          id=a.id
+          startsAt=a.startsAt
+          endsAt=a.endsAt
+          title=a.title
+          currency=currency
+          typ=typ
+        }
         |> Timed.atNow
         |> Commands.AddAuction)
         >> Result.mapError exnToInvalidUserData
@@ -126,20 +175,14 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
            path Paths.Auction.overview >=> overview
            path Paths.Auction.register >=> register
            pathScan Paths.Auction.details details
-           pathScan Paths.Auction.bids bids
            pathScan Paths.Auction.placeBid placeBid ]
 
 [<EntryPoint>]
 let main argv = 
   // parse arguments
   let args = 
-    let parse f str = 
-      match f str with
-      | (true, i) -> Some i
-      | _ -> None
-    
-    let (|Port|_|) = parse System.UInt16.TryParse
-    let (|IPAddress|_|) = parse System.Net.IPAddress.TryParse
+    let (|Port|_|) = Parse.toTryParse System.UInt16.TryParse
+    let (|IPAddress|_|) = Parse.toTryParse System.Net.IPAddress.TryParse
     
     //default bind to 127.0.0.1:8083
     let defaultArgs = 
@@ -172,7 +215,7 @@ let main argv =
         if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
       }
-  let persist = PersistCommands (appenders |> List.ofSeq)
+  let persist = PersistCommands (appenders |> Seq.map (fun a->a.Batch) |> List.ofSeq)
   let handleCommand c = handleCommand r c |> ignore
   for appender in appenders do
     appender.ReadAll() |> List.iter handleCommand

@@ -5,11 +5,6 @@ type EitherBuilder() =
   member this.ReturnFrom x = x
   member this.Zero() = Result.Ok()
   member this.Return(x) = Result.Ok(x)
-  member this.Combine (a: Result<'a,_>,b:Result<'b,_>) = 
-    match a,b with
-    | Error err, _ -> Error err
-    | _ , Error err -> Error err
-    | Ok a1, Ok b2 -> Ok (a1,b2)
 
   member this.Combine (a: Result<unit,_>,b:Result<'a,_>) = 
     match a,b with

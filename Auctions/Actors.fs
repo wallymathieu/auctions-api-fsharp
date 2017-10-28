@@ -42,7 +42,7 @@ signal -> delegator
 
 type Agent<'T> = MailboxProcessor<'T>
 
-type AuctionEnded = Auction * Bid option
+type AuctionEnded = Auction * (Amount * User) option
 
 type AgentSignals = 
   | AgentBid of Bid * AsyncReplyChannel<Result<unit, Errors>>
@@ -53,15 +53,17 @@ type AgentSignals =
 type AuctionAgent(auction, bids) =
   let agent = Agent<AgentSignals>.Start(fun inbox -> 
     (let validateBid = validateBid auction
+     let validateBidForAuctionType = validateBidForAuctionType auction 
      let mutable bids = bids
      
+     (*
      let maxBid() = 
        if List.isEmpty bids then None
        else Some(bids |> List.maxBy (fun b -> b.amount)) // we assume that we use a fixed currency
-     
+     *)
      /// try to signal auction ended
      let tryGetAuctionEnded time : AuctionEnded option = 
-       if auction.endsAt < time then Some(auction, maxBid())
+       if auction.endsAt < time then Some(auction, (Auction.getAmountAndWinner auction bids time))
        else None
      
      let rec messageLoop() = 
@@ -70,18 +72,8 @@ type AuctionAgent(auction, bids) =
          match msg with
          | AgentBid(bid, reply) -> 
            reply.Reply(either { 
-                         (* 
-                        We assume that you convert to VAC before sending bid to agent
-
-                        in a future scenario we might want to add different 
-                        auction type rules
-
-                        - perhaps you cannot bid lower than the "current bid"
-                        - perhaps you are forbidden from raising with to small of a sum
-                          compared to the "current bid"
-                        *)
                          do! validateBid bid
-                         do! validateCurrency bid
+                         do! validateBidForAuctionType bids bid
                          bids <- bid :: bids
                        })
            return! messageLoop()

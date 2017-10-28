@@ -13,7 +13,13 @@ module ``Auction Bid tests`` =
   let auction = { id = 1L; startsAt = DateTime(2001,1,1)
                   title = "auction"
                   endsAt = DateTime(2009,1,1)
-                  user = seller }
+                  user = seller 
+                  currency=Currency.VAC
+                  typ=English { // let's start out with english auctions
+                    reservePrice=Amount.parse "VAC0" 
+                    minRaise =Amount.parse "VAC0"
+                  } 
+                }
   let validBid = { id = BidId.NewGuid()
                    auction =1L
                    user=buyer

@@ -6,7 +6,7 @@ open System.Collections.Generic
 open System.Threading
 open Commands
 
-type PersistCommands(appendBatches : IAppendBatch list) = 
+type PersistCommands(appendBatches : (Command list -> unit) list) = 
   let mutable thread = null
   let stop = ref false
   let commands = new ConcurrentQueue<Command>()
@@ -19,7 +19,7 @@ type PersistCommands(appendBatches : IAppendBatch list) =
       receivedCommands.Add(!command)
     let toAppend=receivedCommands |> Seq.toList
     for appendBatch in appendBatches do 
-      appendBatch.Batch toAppend
+      appendBatch toAppend
   
   member this.ThreadStart() = 
     while (not !stop) do
