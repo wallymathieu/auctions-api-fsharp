@@ -108,8 +108,8 @@ let mapFromHashEntries entries : Command =
               |> function
                  | Some t -> t 
                  | None -> Auctions.English { // if no typ serialized, use english
-                    reservePrice={ currency=currency; value=0.0 } 
-                    minRaise ={ currency=currency; value=0.0 } 
+                    reservePrice=Amount.zero currency
+                    minRaise =Amount.zero currency
                   } 
       }// null ref expn
     

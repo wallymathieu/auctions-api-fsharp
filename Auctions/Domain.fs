@@ -82,6 +82,9 @@ type Amount =
   static member (-) (a1 : Amount, a2 : Amount) = 
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
+module Amount=
+  let zero c= { currency=c ; value=0.0}
+
 let (|Amount|_|) = Amount.tryParse
 
 module Timed = 

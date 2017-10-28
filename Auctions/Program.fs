@@ -18,7 +18,6 @@ open Auctions.Actors
 open Auctions
 open Auctions.Either
 open Auctions.Commands
-open Auctions.Parse
 
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -30,8 +29,6 @@ module Paths =
     let register = "/auction"
     /// /auction/INT
     let details : Int64Path = "/auction/%d"
-    /// /auction/INT/bids
-    let bids : Int64Path = "/auction/%d/bids"
     /// /auction/INT/bid
     let placeBid : Int64Path = "/auction/%d/bid"
 
@@ -54,6 +51,8 @@ type AddAuctionReq = {
     startsAt : DateTime
     title : string
     endsAt : DateTime
+    currency : string
+    typ:string
 }
 let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) = 
   let overview = 
@@ -62,7 +61,7 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
                  |> List.toArray)
   
   let details (id : AuctionId) = GET >=> JSON(Repo.getAuction r id)
-  let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
+  //let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
   
   let addCommandResultToRepo result = 
     match result with
@@ -95,16 +94,19 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
     let toPostedAuction user = 
       getBodyAsJSON<AddAuctionReq> 
         >> Result.map (fun a -> 
+        let currency= Currency.tryParse a.currency |> Option.getOrElse Currency.VAC
+        
+        let typ = Type.tryParse a.typ |> Option.getOrElse (English { // default is english auctions
+                                                                      reservePrice=Amount.zero currency 
+                                                                      minRaise =Amount.zero currency
+                                                                    })
         { user = user
           id=a.id
           startsAt=a.startsAt
           endsAt=a.endsAt
           title=a.title
-          currency=Currency.VAC
-          typ=English { // let's start out with english auctions
-            reservePrice=Amount.parse "VAC0" 
-            minRaise =Amount.parse "VAC0"
-          } 
+          currency=currency
+          typ=typ
         }
         |> Timed.atNow
         |> Commands.AddAuction)
@@ -137,15 +139,14 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
            path Paths.Auction.overview >=> overview
            path Paths.Auction.register >=> register
            pathScan Paths.Auction.details details
-           pathScan Paths.Auction.bids bids
            pathScan Paths.Auction.placeBid placeBid ]
 
 [<EntryPoint>]
 let main argv = 
   // parse arguments
   let args = 
-    let (|Port|_|) = toTryParse System.UInt16.TryParse
-    let (|IPAddress|_|) = toTryParse System.Net.IPAddress.TryParse
+    let (|Port|_|) = Parse.toTryParse System.UInt16.TryParse
+    let (|IPAddress|_|) = Parse.toTryParse System.Net.IPAddress.TryParse
     
     //default bind to 127.0.0.1:8083
     let defaultArgs = 
