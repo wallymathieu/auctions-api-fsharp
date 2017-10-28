@@ -18,7 +18,7 @@ open Auctions.Actors
 open Auctions
 open Auctions.Either
 open Auctions.Commands
-
+open Newtonsoft.Json
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
   
@@ -52,15 +52,51 @@ type AddAuctionReq = {
     title : string
     endsAt : DateTime
     currency : string
+    [<JsonProperty("type")>]
     typ:string
 }
+type BidJsonResult = { 
+      amount:Amount
+      bidder:string
+    }
+type AuctionJsonResult = {
+      id : AuctionId
+      startsAt : DateTime
+      title : string
+      endsAt : DateTime
+      currency : Currency
+      bids : BidJsonResult array
+    }
+
 let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) = 
   let overview = 
     GET >=> JSON(r
                  |> Repo.auctions
                  |> List.toArray)
+
+  let getAuctionResult r id :Result<AuctionJsonResult,Errors>=
+    let now =DateTime.UtcNow
+    either{
+      let! a =Repo.getAuction r id
+      let discloseBidders =Auction.biddersAreOpen a
+      let mapBid (b:Bid) :BidJsonResult = { 
+        amount=b.amount
+        bidder= if discloseBidders 
+                then b.user.ToString() 
+                else b.user.GetHashCode().ToString() // here you might want bidder number
+      }
+      let getBids ()= Repo.getAuctionBids r id 
+      let bids = match a.typ with
+                 | English _ -> getBids()
+                 // the bids are not disclosed until after the end :
+                 | Vickrey -> if Auction.hasEnded now a then getBids() else []
+                 | Blind -> if Auction.hasEnded now a then getBids() else [] 
+      return { id=a.id; startsAt=a.startsAt; title=a.title;endsAt=a.endsAt; currency=a.currency
+               bids=bids |> List.map mapBid |> List.toArray
+             }
+    }
   
-  let details (id : AuctionId) = GET >=> JSON(Repo.getAuction r id)
+  let details id  = GET >=> JSON(getAuctionResult r id)
   //let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
   
   let addCommandResultToRepo result = 

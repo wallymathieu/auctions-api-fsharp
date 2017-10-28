@@ -105,7 +105,6 @@ module Auctions=
      /// also known as an open ascending price auction
      /// The auction ends when no participant is willing to bid further
      | English of EnglishOptions
-     // since this presumes a different kind of model | Dutch of DutchOptions
      /// Sealed first-price auction 
      /// In this type of auction all bidders simultaneously submit sealed bids so that no bidder knows the bid of any
      /// other participant. The highest bidder pays the price they submitted.
@@ -115,6 +114,12 @@ module Auctions=
      /// This is identical to the sealed first-price auction except that the winning bidder pays the second-highest bid
      /// rather than his or her own
      | Vickrey 
+     // | Swedish : same as english, but bidders are not bound by bids and the seller is free to accept or decline any bid 
+     // swedish auction might require us to track more things
+     // | Dutch of DutchOptions : since this presumes a different kind of model 
+     // we could model this as first bid ends auction
+     // the time of the bid implies the price
+    
     with
     override this.ToString() = 
       match this with
@@ -150,6 +155,9 @@ type Auction =
 module Auction=
   let getId (auction : Auction) = auction.id
   let hasEnded now (auction : Auction) = auction.endsAt < now
+  /// if the bidders are open or anonymous
+  /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
+  let biddersAreOpen (auction : Auction) = true
 
 type Bid = 
   { id : BidId
@@ -183,6 +191,12 @@ let containsBidder bidder bids = bids
                                   |> List.contains bidder
 
 let validateBidForAuctionType (auction : Auction) (bids: Bid list) (bid : Bid) = 
+  (*
+    NOTE: the assumption here is that we do not have
+    - English auctions with a large number of bids (i.e. highest bid calculation takes time)
+    - Blind or Vickrey with a lot of participants (i.e. the contains bidder operation takes time)
+    For real auction engines, you would weigh the pros and cons of these things 
+  *)
   match auction.typ with 
   | English english-> 
     match bids with
