@@ -18,6 +18,7 @@ open Auctions.Actors
 open Auctions
 open Auctions.Either
 open Auctions.Commands
+open Auctions.Parse
 
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -94,7 +95,17 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
     let toPostedAuction user = 
       getBodyAsJSON<AddAuctionReq> 
         >> Result.map (fun a -> 
-        { user = user; id=a.id; startsAt=a.startsAt; endsAt=a.endsAt; title=a.title }
+        { user = user
+          id=a.id
+          startsAt=a.startsAt
+          endsAt=a.endsAt
+          title=a.title
+          currency=Currency.VAC
+          typ=English { // let's start out with english auctions
+            reservePrice=Amount.parse "VAC0" 
+            minRaise =Amount.parse "VAC0"
+          } 
+        }
         |> Timed.atNow
         |> Commands.AddAuction)
         >> Result.mapError exnToInvalidUserData
@@ -133,13 +144,8 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
 let main argv = 
   // parse arguments
   let args = 
-    let parse f str = 
-      match f str with
-      | (true, i) -> Some i
-      | _ -> None
-    
-    let (|Port|_|) = parse System.UInt16.TryParse
-    let (|IPAddress|_|) = parse System.Net.IPAddress.TryParse
+    let (|Port|_|) = toTryParse System.UInt16.TryParse
+    let (|IPAddress|_|) = toTryParse System.Net.IPAddress.TryParse
     
     //default bind to 127.0.0.1:8083
     let defaultArgs = 
@@ -172,7 +178,7 @@ let main argv =
         if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
       }
-  let persist = PersistCommands (appenders |> List.ofSeq)
+  let persist = PersistCommands (appenders |> Seq.map (fun a->a.Batch) |> List.ofSeq)
   let handleCommand c = handleCommand r c |> ignore
   for appender in appenders do
     appender.ReadAll() |> List.iter handleCommand

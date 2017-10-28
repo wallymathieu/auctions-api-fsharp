@@ -19,7 +19,13 @@ module ``Bid commands tests`` =
       title = title
       startsAt = startsAt
       endsAt = endsAt
-      user = seller }
+      user = seller
+      currency=Currency.VAC
+      typ=English { // let's start out with english auctions
+        reservePrice=Amount.parse "VAC0" 
+        minRaise =Amount.parse "VAC0"
+      } 
+     }
   
   let sek a = 
     { value = a

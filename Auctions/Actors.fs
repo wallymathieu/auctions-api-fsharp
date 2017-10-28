@@ -53,6 +53,7 @@ type AgentSignals =
 type AuctionAgent(auction, bids) =
   let agent = Agent<AgentSignals>.Start(fun inbox -> 
     (let validateBid = validateBid auction
+     let validateBidForAuctionType = validateBidForAuctionType auction 
      let mutable bids = bids
      
      let maxBid() = 
@@ -70,18 +71,8 @@ type AuctionAgent(auction, bids) =
          match msg with
          | AgentBid(bid, reply) -> 
            reply.Reply(either { 
-                         (* 
-                        We assume that you convert to VAC before sending bid to agent
-
-                        in a future scenario we might want to add different 
-                        auction type rules
-
-                        - perhaps you cannot bid lower than the "current bid"
-                        - perhaps you are forbidden from raising with to small of a sum
-                          compared to the "current bid"
-                        *)
                          do! validateBid bid
-                         do! validateCurrency bid
+                         do! validateBidForAuctionType bids bid
                          bids <- bid :: bids
                        })
            return! messageLoop()

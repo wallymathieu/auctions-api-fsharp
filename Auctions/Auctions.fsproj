@@ -20,6 +20,7 @@
     <Compile Include="Either.fs" />
     <Compile Include="AsyncResult.fs" />
     <Compile Include="Dic.fs" />
+    <Compile Include="Parse.fs" />
     <Compile Include="Suave.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="Repository.fs" />

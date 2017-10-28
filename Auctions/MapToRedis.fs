@@ -22,7 +22,10 @@ let mapToHashEntries command =
       hashEntryStr "Title" (auction.title)
       hashEntryInt64 "EndsAt" auction.endsAt.Ticks
       hashEntryInt64 "StartsAt" auction.startsAt.Ticks
-      hashEntryInt64 "At" at.Ticks ]
+      hashEntryInt64 "At" at.Ticks 
+      hashEntryStr "Typ" (auction.typ.ToString())
+      hashEntryInt64 "Currency" (int64(LanguagePrimitives.EnumToValue auction.currency))
+      ]
     |> withType "AddAuction"
   | PlaceBid(at, bid) -> 
     [ hashEntryStr "Id" (bid.id.ToString())
@@ -75,18 +78,40 @@ let mapFromHashEntries entries : Command =
       entries
       |> findEntryInt64 "At"
       |> DateTime
+
+    let currency = 
+      entries
+      |> findEntryInt64 "Currency"
+      |> int
+      |> LanguagePrimitives.EnumOfValue<int,Currency>
     
     let user = 
       entries
       |> findEntryStr "User"
       |> Domain.User.tryParse
-    
+
+    if user.IsNone then failwith "missing user in auction data!"
+
+    let typ = 
+      entries
+      |> findEntryStr "Typ"
+      |> Domain.Auctions.Type.tryParse
+
     let auction : Auction = 
       { id = id
         title = title
         startsAt = startsAt
         endsAt = endsAt
-        user = user.Value }// null ref expn
+        user = user.Value 
+        currency = currency
+        typ = typ 
+              |> function
+                 | Some t -> t 
+                 | None -> Auctions.English { // if no typ serialized, use english
+                    reservePrice={ currency=currency; value=0.0 } 
+                    minRaise ={ currency=currency; value=0.0 } 
+                  } 
+      }// null ref expn
     
     AddAuction(at, auction)
   | "PlaceBid" -> 
