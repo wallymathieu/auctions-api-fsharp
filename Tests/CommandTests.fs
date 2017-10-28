@@ -26,10 +26,17 @@ module ``Bid commands tests`` =
         minRaise =Amount.parse "SEK0"
       } 
      }
-  
+
   let sek a = 
     { value = a
       currency = Currency.SEK }
+
+  let bid = 
+      { id = Guid.NewGuid()
+        auction = auctionId
+        user = buyer
+        amount = sek 100L
+        at = DateTime(2016, 1, 2) }
   
   [<Fact>]
   let ``Seller cant bid``() = 
@@ -41,11 +48,7 @@ module ``Bid commands tests`` =
     // act
     let res = 
       handleCommand r (PlaceBid(d, 
-                                { id = Guid.NewGuid()
-                                  auction = auctionId
-                                  user = seller
-                                  amount = sek 100.0
-                                  at = d }))
+                                { bid with user = seller; at = d }))
     // assert
     Assert.Equal(Error(SellerCannotPlaceBids(User.getId seller, auctionId)), res)
     Assert.True(r.GetBidsForAuction(auctionId).IsEmpty)
@@ -57,16 +60,27 @@ module ``Bid commands tests`` =
     handleCommand r (AddAuction(startsAt, auction)) |> ignore
     let d = DateTime(2016, 1, 2)
     
-    let bid = 
-      d, 
-      { id = Guid.NewGuid()
-        auction = auctionId
-        user = buyer
-        amount = sek 100.0
-        at = d }
+    let bid = d, { bid with at = d }
     
     // act
     let res = handleCommand r (PlaceBid bid) |> Result.map snd
     // assert
     Assert.Equal(Ok(BidAccepted bid), res)
     Assert.False(r.GetBidsForAuction(auctionId).IsEmpty)
+
+  [<Fact>]
+  let ``Can't place bid lower than highest bid``() = 
+    // setup
+    let r = ConcurrentRepository() :> IRepository
+    handleCommand r (AddAuction(startsAt, auction)) |> ignore
+
+    handleCommand r (PlaceBid (DateTime(2016, 1, 2),bid)) |> ignore
+    let d2 = DateTime(2016, 1, 3)
+    let nextBid = d2, {bid with at=d2; id=Guid.NewGuid()}
+    
+    // act
+    let res = handleCommand r (PlaceBid nextBid) |> Result.map snd
+    // assert
+    //printf "%A" res
+    Assert.Equal(Error(MustPlaceBidOverHighestBid bid.amount), res)
+    

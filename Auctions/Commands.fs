@@ -34,8 +34,8 @@ let handleCommand (r : IRepository) command : Result<IRepository * CommandSucces
       match r.TryGetAuction id with
       | Some _ -> return! Error(AuctionAlreadyExists id)
       | None -> 
-        yield! r.SaveAuction auction
-        yield AuctionAdded (at, auction)
+        let! res= r.SaveAuction auction
+        return res,AuctionAdded (at, auction)
     }
   | PlaceBid(at, bid) -> 
     either { 
@@ -45,8 +45,8 @@ let handleCommand (r : IRepository) command : Result<IRepository * CommandSucces
                  either { 
                    do! validateBid auction bid
                    do! validateBidForAuctionType auction (r.GetBidsForAuction auction.id) bid
-                   yield! r.SaveBid bid
-                   yield BidAccepted (at, bid)
+                   let! res= r.SaveBid bid
+                   return res,BidAccepted (at, bid)
                  }
                | Some _ -> Error(BidAlreadyExists bid.id))
     }

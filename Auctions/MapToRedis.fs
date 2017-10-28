@@ -30,7 +30,7 @@ let mapToHashEntries command =
   | PlaceBid(at, bid) -> 
     [ hashEntryStr "Id" (bid.id.ToString())
       hashEntryInt64 "Auction" (bid.auction)
-      hashEntryFloat "AmountValue" bid.amount.value
+      hashEntryInt64 "AmountValue" bid.amount.value
       hashEntryStr "AmountCurrency" (bid.amount.currency.ToString())
       hashEntryInt64 "At" at.Ticks
       hashEntryStr "User" (bid.user.ToString()) ]
@@ -121,7 +121,7 @@ let mapFromHashEntries entries : Command =
       |> Domain.BidId.Parse
     
     let auction = entries |> findEntryInt64 "Auction"
-    let amount = entries |> findEntryFloat "AmountValue"
+    let amount = entries |> findEntryInt64 "AmountValue"
     let currency = entries |> findEntryStr "AmountCurrency"
     
     let user = 

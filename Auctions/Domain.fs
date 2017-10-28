@@ -58,17 +58,17 @@ let (|Currency|_|) = Currency.tryParse
 [<TypeConverter(typeof<ParseTypeConverter<Amount>>)>]
 [<JsonConverter(typeof<ParseTypeJsonConverter<Amount>>)>]
 type Amount = 
-  { value : float
+  { value : int64
     currency : Currency }
   override this.ToString() = 
-    sprintf "%s%f" (this.currency.ToString()) this.value
+    sprintf "%s%i" (this.currency.ToString()) this.value
 
   static member tryParse amount = 
     let userRegex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
     let m = userRegex.Match(amount)
     if m.Success then 
       match (m.Groups.["currency"].Value, m.Groups.["value"].Value) with
-      | Currency c, amount -> Some { currency=c; value=Double.Parse amount }
+      | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
       | type', _ -> None
     else None
   [<CompiledName("Parse")>]
@@ -76,14 +76,14 @@ type Amount =
     match Amount.tryParse amount with
     | Some amount->amount
     | None -> raise (FormatException "InvalidAmount")
-  static member (+) (a1 : Amount, a2 : Amount) = 
+  static member (+) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value + a2.value }
   static member (-) (a1 : Amount, a2 : Amount) = 
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
 module Amount=
-  let zero c= { currency=c ; value=0.0}
+  let zero c= { currency=c ; value=0L}
 
 let (|Amount|_|) = Amount.tryParse
 
@@ -204,7 +204,7 @@ let validateBidForAuctionType (auction : Auction) (bids: Bid list) (bid : Bid) =
     | xs -> 
       let highestBid = bids |> List.maxBy Bid.getAmount
       // you cannot bid lower than the "current bid"
-      if bid.amount >= (highestBid.amount + english.minRaise)
+      if bid.amount > (highestBid.amount + english.minRaise)
       then Ok() 
       else Error (MustPlaceBidOverHighestBid highestBid.amount)
 
