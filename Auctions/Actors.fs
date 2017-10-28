@@ -42,7 +42,7 @@ signal -> delegator
 
 type Agent<'T> = MailboxProcessor<'T>
 
-type AuctionEnded = Auction * Bid option
+type AuctionEnded = Auction * (Amount * User) option
 
 type AgentSignals = 
   | AgentBid of Bid * AsyncReplyChannel<Result<unit, Errors>>
@@ -56,13 +56,14 @@ type AuctionAgent(auction, bids) =
      let validateBidForAuctionType = validateBidForAuctionType auction 
      let mutable bids = bids
      
+     (*
      let maxBid() = 
        if List.isEmpty bids then None
        else Some(bids |> List.maxBy (fun b -> b.amount)) // we assume that we use a fixed currency
-     
+     *)
      /// try to signal auction ended
      let tryGetAuctionEnded time : AuctionEnded option = 
-       if auction.endsAt < time then Some(auction, maxBid())
+       if auction.endsAt < time then Some(auction, (Auction.getAmountAndWinner auction bids time))
        else None
      
      let rec messageLoop() = 

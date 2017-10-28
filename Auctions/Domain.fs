@@ -142,22 +142,16 @@ module Auctions=
       match Type.tryParse typ with
       | Some t->t
       | None -> raise (FormatException "Invalid Type")
-
+open Auctions
 type Auction = 
   { id : AuctionId
     startsAt : DateTime
     title : string
     endsAt : DateTime
     user : User 
-    typ : Auctions.Type
+    typ : Type
     currency:Currency
   }
-module Auction=
-  let getId (auction : Auction) = auction.id
-  let hasEnded now (auction : Auction) = auction.endsAt < now
-  /// if the bidders are open or anonymous
-  /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
-  let biddersAreOpen (auction : Auction) = true
 
 type Bid = 
   { id : BidId
@@ -166,11 +160,41 @@ type Bid =
     amount : Amount
     at : DateTime
   }
-
 module Bid=
   let getId (bid : Bid) = bid.id
   let getAmount (bid : Bid) = bid.amount
   let getBidder (bid: Bid) = bid.user
+
+module Auction=
+  let getId (auction : Auction) = auction.id
+  let hasEnded now (auction : Auction) = auction.endsAt < now
+  /// if the bidders are open or anonymous
+  /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
+  let biddersAreOpen (auction : Auction) = true
+
+  let getAmountAndWinner (auction : Auction) (bids:Bid list) (now)= 
+    if hasEnded now auction then
+      let bids = bids |> List.sortByDescending Bid.getAmount
+      match auction.typ with
+      | English english ->
+        match bids with
+        | [] -> None
+        | highestBid :: _ ->
+          Some (highestBid.amount, highestBid.user)
+      | Vickrey -> 
+        match bids with
+        | [] -> None
+        | highestBid :: secondHighest :: _ ->
+          Some (secondHighest.amount, highestBid.user)
+        | _ -> 
+          None // What happens in a Vickrey auction in this case?
+      | Blind ->
+        match bids with
+        | [] -> None
+        | highestBid :: _ ->
+          Some (highestBid.amount, highestBid.user)
+    else
+      None
 
 type Errors = 
   | UnknownAuction of AuctionId
@@ -185,7 +209,6 @@ type Errors =
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
 
-open Auctions
 let containsBidder bidder bids = bids 
                                   |> List.map Bid.getBidder
                                   |> List.contains bidder
