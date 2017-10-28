@@ -20,10 +20,10 @@ module ``Bid commands tests`` =
       startsAt = startsAt
       endsAt = endsAt
       user = seller
-      currency=Currency.VAC
+      currency=Currency.SEK
       typ=English { // let's start out with english auctions
-        reservePrice=Amount.parse "VAC0" 
-        minRaise =Amount.parse "VAC0"
+        reservePrice=Amount.parse "SEK0" 
+        minRaise =Amount.parse "SEK0"
       } 
      }
   
