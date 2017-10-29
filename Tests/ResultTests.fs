@@ -2,26 +2,26 @@
 
 open Auctions.Domain
 open Auctions.Commands
-open Auctions.Either
+open Auctions.Result
 open Auctions
 open System
 open Xunit
 
-module ``Either tests`` = 
+module ``Result tests`` = 
   let errorIfFalse v = if v then Ok () else Error ()
-  let func param sideEffect= either { 
+  let func param sideEffect= result { 
                          do! errorIfFalse param
                          sideEffect()
                          return param
                        }
   let returnsOk ()=Ok ()
-  let func2 param sideEffect= either { 
+  let func2 param sideEffect= result { 
                          do! returnsOk()
                          do! errorIfFalse param
                          sideEffect()
                          return param
                        }
-  let func3 param sideEffect= either { 
+  let func3 param sideEffect= result { 
                          do! errorIfFalse param
                          do! returnsOk()
                          sideEffect()

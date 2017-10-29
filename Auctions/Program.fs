@@ -16,7 +16,6 @@ type CmdArgs =
 open Auctions.Domain
 open Auctions.Actors
 open Auctions
-open Auctions.Either
 open Auctions.Commands
 open Newtonsoft.Json
 module Paths = 
@@ -68,16 +67,24 @@ type AuctionJsonResult = {
       bids : BidJsonResult array
     }
 
-let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) = 
-  let overview = 
-    GET >=> JSON(r
-                 |> Repo.auctions
-                 |> List.toArray)
+let webPart (agent : AuctionDelegator) = 
 
-  let getAuctionResult r id :Result<AuctionJsonResult,Errors>=
+  let overview = 
+    GET >=> fun (ctx) ->
+            async {
+              let! r = agent.GetAuctions()
+              return! JSON (r |>List.toArray) ctx
+            }
+
+  let getAuctionResult id :Async<Result<AuctionJsonResult,Errors>>=
     let now =DateTime.UtcNow
-    either{
-      let! a =Repo.getAuction r id
+    asyncResult{
+      let! (a,bids) = async{
+                        let! auctionAndBids = agent.GetAuction id
+                        return match auctionAndBids with
+                                | Some v-> Ok v
+                                | None -> Error (UnknownAuction id)
+                      }
       let discloseBidders =Auction.biddersAreOpen a
       let mapBid (b:Bid) :BidJsonResult = { 
         amount=b.amount
@@ -85,33 +92,23 @@ let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) =
                 then b.user.ToString() 
                 else b.user.GetHashCode().ToString() // here you might want bidder number
       }
-      let getBids ()= Repo.getAuctionBids r id 
       let bids = match a.typ with
-                 | English _ -> getBids()
+                 | English _ -> bids
                  // the bids are not disclosed until after the end :
-                 | Vickrey -> if Auction.hasEnded now a then getBids() else []
-                 | Blind -> if Auction.hasEnded now a then getBids() else [] 
+                 | Vickrey -> if Auction.hasEnded now a then bids else []
+                 | Blind -> if Auction.hasEnded now a then bids else [] 
       return { id=a.id; startsAt=a.startsAt; title=a.title;endsAt=a.endsAt; currency=a.currency
                bids=bids |> List.map mapBid |> List.toArray
              }
     }
   
-  let details id  = GET >=> JSON(getAuctionResult r id)
-  //let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
-  
-  let addCommandResultToRepo result = 
-    match result with
-    | AuctionAdded(t, a) -> r |> Repo.saveAuction a
-    | BidAccepted(t, b) -> r |> Repo.saveBid b
-    |> ignore
+  let details id  = GET >=> JSON(getAuctionResult id)
 
   /// handle command and add result to repository
   let handleCommandAsync (maybeC:Result<_,_>) = 
     asyncResult{
       let! c=maybeC
-      let! r = agent.UserCommand c
-      do addCommandResultToRepo r
-      return r
+      return agent.UserCommand c
     }
   /// turn handle command to webpart
   let handleCommandAsync toCommand: WebPart = 
@@ -210,7 +207,7 @@ let main argv =
     |> List.ofArray
     |> parseArgs defaultArgs
   
-  let r = ConcurrentRepository()
+  let r = MutableRepository()
   let appenders = seq {
         if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
@@ -223,7 +220,7 @@ let main argv =
   persist.Start()
   let agent = createAgentDelegator(r, persist.Handle)
   // start suave
-  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart r agent)
+  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart agent)
   0
 //curl  -X POST -d '{ "id":"1","startsAt":"2017-01-01","endsAt":"2018-01-01","title":"First auction" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
 

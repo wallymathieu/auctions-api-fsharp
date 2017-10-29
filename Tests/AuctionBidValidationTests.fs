@@ -2,7 +2,6 @@
 
 open Auctions.Domain
 open Auctions.Commands
-open Auctions.Either
 open Auctions
 open System
 open Xunit

@@ -1,44 +1,9 @@
 ﻿module Auctions.Actors
 
 open System
-open System.Threading
-open System.Threading.Tasks
 open Commands
 open Domain
-open Either
 open System.Collections.Generic
-
-(*
-
-signal -> delegator (calculate x) -> agents.[x] 
-
-signal start auction -> 
-                        agent.Start()
-                        agents <- agent :: agents 
-singal end auction ->
-                        agent.Stop()
-                        agents <- agents |> List.except [agent]
-
-command    -> agents.[x] --> auction listeners
-           |
-           \-> persisters.[...] -> persist command
-
-
-Assumptions:
-
-- each auction get 1 agent 
-- all commands are logged in redis, json et.c. 
-- one dedicated thread per command persister (json, redis)
-
-
-query      -> query agent.[y] --> Result<QueryResult,QueryError>
-
-
-signal -> delegator 
-
- message time 
-
-*)
 
 type Agent<'T> = MailboxProcessor<'T>
 
@@ -46,21 +11,16 @@ type AuctionEnded = Auction * (Amount * User) option
 
 type AgentSignals = 
   | AgentBid of Bid * AsyncReplyChannel<Result<unit, Errors>>
+  | GetBids of AsyncReplyChannel<Bid list>
   | AuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded option>
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded option>
 
-//type AuctionAgent = Agent<AgentSignals>
 type AuctionAgent(auction, bids) =
   let agent = Agent<AgentSignals>.Start(fun inbox -> 
     (let validateBid = validateBid auction
      let validateBidForAuctionType = validateBidForAuctionType auction 
      let mutable bids = bids
      
-     (*
-     let maxBid() = 
-       if List.isEmpty bids then None
-       else Some(bids |> List.maxBy (fun b -> b.amount)) // we assume that we use a fixed currency
-     *)
      /// try to signal auction ended
      let tryGetAuctionEnded time : AuctionEnded option = 
        if auction.endsAt < time then Some(auction, (Auction.getAmountAndWinner auction bids time))
@@ -71,11 +31,14 @@ type AuctionAgent(auction, bids) =
          let! msg = inbox.Receive()
          match msg with
          | AgentBid(bid, reply) -> 
-           reply.Reply(either { 
+           reply.Reply(result { 
                          do! validateBid bid
                          do! validateBidForAuctionType bids bid
                          bids <- bid :: bids
                        })
+           return! messageLoop()
+         | GetBids reply->
+           reply.Reply bids
            return! messageLoop()
          | AuctionEnded(now, reply) -> 
            (*
@@ -99,15 +62,19 @@ type AuctionAgent(auction, bids) =
      messageLoop()))
 
   member this.AgentBid bid = agent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
+  member this.GetBids () = agent.PostAndAsyncReply(fun reply -> GetBids(reply))
   member this.AuctionEnded time = agent.PostAndAsyncReply(fun reply -> AuctionEnded(time, reply))
   member this.Collect time = agent.PostAndAsyncReply(fun reply -> CollectAgent(time, reply))
 
 
 let createAgent auction bids = AuctionAgent (auction,bids)
- 
+type AuctionAndBids = Auction * (Bid list)
 type DelegatorSignals = 
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
   | UserCommand of Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>
+  | GetAuction of AuctionId *AsyncReplyChannel<AuctionAndBids option>
+  | GetAuctions of AsyncReplyChannel<Auction list>
+
   /// ping delegator to make sure that time based logic can run (i.e. CRON dependent auction logic)
   /// this is needed due to the fact that you have auction end time 
   /// (you expect something to happen roughly then, and not a few hours later)
@@ -117,7 +84,9 @@ type DelegatorSignals =
 
 type AuctionDelegator(r, persistCommand) = 
   let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
+     let mutable auctions = r |> Repo.auctions |> List.map (fun a->a.id,a) |> Map
      let mutable activeAuctions = r |> Repo.auctions |> List.filter (not<< Auction.hasEnded DateTime.UtcNow)
+     
      let agents = Dictionary<AuctionId, AuctionAgent>()
      for auction in activeAuctions do
         agents.Add( auction.id, createAgent auction (r.GetBidsForAuction auction.id))
@@ -129,6 +98,7 @@ type AuctionDelegator(r, persistCommand) =
          | AddAuction(at, auction) -> 
            if not (auctionHasEnded auction) then
              agents.Add(auction.id, createAgent auction [])
+             auctions <- auctions.Add (auction.id, auction)
              activeAuctions <- auction :: activeAuctions
              reply.Reply(Ok (AuctionAdded(at, auction)))
            else reply.Reply(Error (AuctionHasEnded auction.id))
@@ -179,6 +149,21 @@ type AuctionDelegator(r, persistCommand) =
            do persistCommand cmd
            do! userCommand cmd now reply
            return! messageLoop()
+         | GetAuction (auctionId,reply) ->
+            do! (agents |> Dic.tryGet auctionId , auctions.TryFind auctionId)
+              |> function 
+                  | Some agent, Some auction -> 
+                    async{
+                      let! bids= agent.GetBids()
+                      reply.Reply (Some(auction,bids))
+                    }
+                  | None,None  -> async{ reply.Reply None }
+                  | None,Some auction-> async { reply.Reply (Some(auction,[])) } //TODO
+                  | Some agent,None-> failwith "An agent exists without there being an auction"
+            return! messageLoop()
+            //reply.Reply( auctions |> List.tryFind (fun a->a.id=auctionId) )
+         | GetAuctions (reply) ->
+            reply.Reply (auctions |> Map.toList |> List.map snd)
          | WakeUp -> 
            do! wakeUp now
            return! messageLoop()
@@ -189,5 +174,7 @@ type AuctionDelegator(r, persistCommand) =
   member this.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
   member this.WakeUp time = agent.Post WakeUp 
   member this.Collect time = agent.Post CollectDelegator
+  member this.GetAuctions ()= agent.PostAndAsyncReply(fun reply -> GetAuctions(reply))
+  member this.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
 
 let createAgentDelegator r = AuctionDelegator r

@@ -1,5 +1,4 @@
 ﻿module Auctions.Commands
-open Either
 open Domain
 open System
 open Repo
@@ -30,7 +29,7 @@ let handleCommand (r : IRepository) command : Result<IRepository * CommandSucces
   match command with
   | AddAuction(at, auction) -> 
     let id = auction.id
-    either { 
+    result { 
       match r.TryGetAuction id with
       | Some _ -> return! Error(AuctionAlreadyExists id)
       | None -> 
@@ -38,11 +37,11 @@ let handleCommand (r : IRepository) command : Result<IRepository * CommandSucces
         return res,AuctionAdded (at, auction)
     }
   | PlaceBid(at, bid) -> 
-    either { 
+    result { 
       let! auction = r.GetAuction bid.auction
-      return! (match r.TryGetBid bid.id with
+      return! (match r.TryGetBid(bid.auction, bid.id) with
                | None -> 
-                 either { 
+                 result { 
                    do! validateBid auction bid
                    do! validateBidForAuctionType auction (r.GetBidsForAuction auction.id) bid
                    let! res= r.SaveBid bid
