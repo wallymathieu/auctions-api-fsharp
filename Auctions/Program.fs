@@ -66,7 +66,7 @@ type AuctionJsonResult = {
       currency : Currency
       bids : BidJsonResult array
       winner : string
-      winnerPrice : Amount option
+      winnerPrice : string
     }
 
 let webPart (agent : AuctionDelegator) = 
@@ -81,7 +81,7 @@ let webPart (agent : AuctionDelegator) =
   let getAuctionResult id :Async<Result<AuctionJsonResult,Errors>>=
     let now =DateTime.UtcNow
     asyncResult{
-      let! (a,bids) = async{
+      let! (a,bidsOrEnded) = async{
                         let! auctionAndBids = agent.GetAuction id
                         return match auctionAndBids with
                                 | Some v-> Ok v
@@ -94,18 +94,25 @@ let webPart (agent : AuctionDelegator) =
                 then b.user.ToString() 
                 else b.user.GetHashCode().ToString() // here you might want bidder number
       }
+      let bids =match bidsOrEnded with
+                | Choice1Of2 bids->bids
+                | Choice2Of2 _->[] 
+
       let bids = match a.typ with
                  | English _ -> bids
                  // the bids are not disclosed until after the end :
-                 | Vickrey -> if Auction.hasEnded now a then bids else Choice1Of2 []
-                 | Blind -> if Auction.hasEnded now a then bids else Choice1Of2 [] 
-                 |> function | Choice1Of2 bids->bids
-                             | Choice2Of2 _->[]
-
+                 | Vickrey -> if Auction.hasEnded now a then bids else []
+                 | Blind -> if Auction.hasEnded now a then bids else [] 
+      let (winner,winnerPrice) = 
+                match bidsOrEnded with
+                | Choice2Of2 None
+                | Choice1Of2 _ -> ("", "")
+                | Choice2Of2 (Some (amount, winner))->
+                    (winner.ToString(), amount.ToString())
       return { id=a.id; startsAt=a.startsAt; title=a.title;endsAt=a.endsAt; currency=a.currency
                bids=bids |> List.map mapBid |> List.toArray
-               winner = ""
-               winnerPrice = Some (Amount.zero a.currency)
+               winner = winner
+               winnerPrice = winnerPrice
              }
     }
   
