@@ -65,6 +65,8 @@ type AuctionJsonResult = {
       endsAt : DateTime
       currency : Currency
       bids : BidJsonResult array
+      winner : string
+      winnerPrice : Amount option
     }
 
 let webPart (agent : AuctionDelegator) = 
@@ -95,10 +97,15 @@ let webPart (agent : AuctionDelegator) =
       let bids = match a.typ with
                  | English _ -> bids
                  // the bids are not disclosed until after the end :
-                 | Vickrey -> if Auction.hasEnded now a then bids else []
-                 | Blind -> if Auction.hasEnded now a then bids else [] 
+                 | Vickrey -> if Auction.hasEnded now a then bids else Choice1Of2 []
+                 | Blind -> if Auction.hasEnded now a then bids else Choice1Of2 [] 
+                 |> function | Choice1Of2 bids->bids
+                             | Choice2Of2 _->[]
+
       return { id=a.id; startsAt=a.startsAt; title=a.title;endsAt=a.endsAt; currency=a.currency
                bids=bids |> List.map mapBid |> List.toArray
+               winner = ""
+               winnerPrice = Some (Amount.zero a.currency)
              }
     }
   
