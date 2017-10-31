@@ -68,7 +68,7 @@ type AuctionJsonResult = {
   winner : string
   winnerPrice : string
 }
-module MapToWeb=
+module JsonResult=
   let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
 
   let getAuctionResult (a:Auction,bidsOrEnded:Choice<Bid list,(Amount*User) option>) =
@@ -150,7 +150,7 @@ let webPart (agent : AuctionDelegator) =
                                 | Some v-> Ok v
                                 | None -> Error (UnknownAuction id)
                       }
-      return MapToWeb.getAuctionResult (a,bidsOrEnded)
+      return JsonResult.getAuctionResult (a,bidsOrEnded)
     }
 
   let details id  = GET >=> JSON(getAuctionResult id)
@@ -175,14 +175,14 @@ let webPart (agent : AuctionDelegator) =
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
-        POST >=> handleCommandAsync (MapToWeb.toPostedAuction user))
+        POST >=> handleCommandAsync (JsonResult.toPostedAuction user))
 
   /// place bid
   let placeBid (id : AuctionId) = 
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user -> 
-        POST >=> handleCommandAsync (MapToWeb.toPostedPlaceBid id user))
+        POST >=> handleCommandAsync (JsonResult.toPostedPlaceBid id user))
   
   choose [ path "/" >=> (Successful.OK "")
            path Paths.Auction.overview >=> overview
