@@ -20,7 +20,7 @@ let JSON v : WebPart=
   |> OK
   >=> Writers.setMimeType "application/json; charset=utf-8"
 
-let JSONorBAD (result:Result<_,_>) : WebPart=
+let JSONorBAD_REQUEST (result:Result<_,_>) : WebPart=
   match result with
   | Ok v -> JSON v
   | Error err -> 

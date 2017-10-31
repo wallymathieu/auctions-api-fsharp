@@ -32,6 +32,7 @@
     <Compile Include="PersistCommands.fs" />
     <Compile Include="Actors.fs" />
     <None Include="Script.fsx" />
+    <Compile Include="Web.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>
