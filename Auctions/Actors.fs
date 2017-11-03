@@ -127,8 +127,10 @@ type AuctionDelegator(r, persistCommand) =
                       async{
                         let! res =agent.AuctionEnded now
                         match res with 
-                            | Some auctionHasEnded-> () // do stuff!
-                            | None->()
+                            | Some (auction,maybeUserAndAmount)-> 
+                                endedAuctions <- Map.add auction.id maybeUserAndAmount endedAuctions
+                                // NOTE: here we might want to send out a signal
+                            | None ->()
                       }
 
                   | None -> async { return () }
@@ -140,7 +142,9 @@ type AuctionDelegator(r, persistCommand) =
          for agent in agents.Values do 
              let! res = agent.Collect now
              match res with
-                 | Some auctionHasEnded-> () // what should you do here? 
+                 | Some auctionHasEnded-> () 
+                    // what should you do here? 
+                    // NOTE: here we might want to send out a signal
                  | None->()
        }
 
