@@ -13,7 +13,7 @@ type AgentSignals =
   | AgentBid of Bid * AsyncReplyChannel<Result<unit, Errors>>
   | GetBids of AsyncReplyChannel<Bid list>
   | AuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded option>
-  | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded option>
+  | CollectAgent of DateTime * AsyncReplyChannel<unit>
 
 type AuctionAgent(auction, bids) =
   let agent = Agent<AgentSignals>.Start(fun inbox -> 
@@ -55,7 +55,7 @@ type AuctionAgent(auction, bids) =
                 - for instance send out auction end signals 
             - quit
             *)
-           reply.Reply(tryGetAuctionEnded now)
+           reply.Reply()
            return ()
        }
      
@@ -78,23 +78,23 @@ type DelegatorSignals =
   /// ping delegator to make sure that time based logic can run (i.e. CRON dependent auction logic)
   /// this is needed due to the fact that you have auction end time 
   /// (you expect something to happen roughly then, and not a few hours later)
-  | WakeUp
+  | WakeUp of AsyncReplyChannel<unit>
   /// Do we need to do anything if we have a handled shutdown of the delegator?
   | CollectDelegator
 
-type AuctionDelegator(r, persistCommand) = 
+type AuctionDelegator(r, persistCommand, now) = 
   let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
      let _a=r |> Repo.auctions
-     let _now =DateTime.UtcNow
+     let _now =now()
      let (_active,_ended) = _a |> List.partition (not<< Auction.hasEnded _now)
      let mutable auctions = _a |> List.map (fun a->a.id,a) |> Map
      let mutable activeAuctions = _active
      let mutable endedAuctions = _ended 
                                   |> List.map (fun a-> (a.id,Auction.getAmountAndWinner a (r.GetBidsForAuction a.id) _now))
                                   |> Map
-     let agents = Dictionary<AuctionId, AuctionAgent>()
-     for auction in activeAuctions do
-        agents.Add( auction.id, createAgent auction (r.GetBidsForAuction auction.id))
+     let mutable agents = activeAuctions
+                          |> List.map (fun auction->auction.id, createAgent auction (r.GetBidsForAuction auction.id))
+                          |> Map
 
      let userCommand cmd now (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
        async{
@@ -102,14 +102,14 @@ type AuctionDelegator(r, persistCommand) =
          match cmd with
          | AddAuction(at, auction) -> 
            if not (auctionHasEnded auction) then
-             agents.Add(auction.id, createAgent auction [])
+             agents <- agents.Add(auction.id, createAgent auction [])
              auctions <- auctions.Add (auction.id, auction)
              activeAuctions <- auction :: activeAuctions
              reply.Reply(Ok (AuctionAdded(at, auction)))
            else reply.Reply(Error (AuctionHasEnded auction.id))
          | PlaceBid(at, bid) -> 
            let auctionId = Command.getAuction cmd
-           match agents |> Dic.tryGet auctionId with
+           match agents |> Map.tryFind auctionId with
            | Some auctionAgent -> let! m = auctionAgent.AgentBid bid
                                   reply.Reply(m |> Result.map (fun () -> BidAccepted(at, bid)))
            | None -> reply.Reply(Error (AuctionNotFound bid.auction))
@@ -128,34 +128,32 @@ type AuctionDelegator(r, persistCommand) =
                         let! res =agent.AuctionEnded now
                         match res with 
                             | Some (auction,maybeUserAndAmount)-> 
-                                endedAuctions <- Map.add auction.id maybeUserAndAmount endedAuctions
+                                do endedAuctions <- Map.add auction.id maybeUserAndAmount endedAuctions
+                                do! agent.Collect now
+                                do agents <- agents.Remove auction.id
                                 // NOTE: here we might want to send out a signal
-                            | None ->()
+                                return ()
+                            | None -> return ()
                       }
-
                   | None -> async { return () }
-         activeAuctions <- isStillActive
+         do activeAuctions <- isStillActive
+         return ()
        }
 
-     let collect now =
+     let collect now = 
        async{
-         for agent in agents.Values do 
-             let! res = agent.Collect now
-             match res with
-                 | Some auctionHasEnded-> () 
-                    // what should you do here? 
-                    // NOTE: here we might want to send out a signal
-                 | None->()
+         for agent in agents do 
+             do! agent.Value.Collect now
        }
 
      let getAuction auctionId (reply:AsyncReplyChannel<AuctionAndBids option>)=
         match (Dic.tryGet auctionId agents, auctions.TryFind auctionId) with
+        | None,None  -> async{ reply.Reply None }
         | Some agent, Some auction -> 
           async{
             let! bids= agent.GetBids()
             reply.Reply (Some(auction,Choice1Of2 bids))
           }
-        | None,None  -> async{ reply.Reply None }
         | None,Some auction-> 
                         async { 
                           let ended= Map.find (auction.id) endedAuctions 
@@ -166,7 +164,7 @@ type AuctionDelegator(r, persistCommand) =
      let rec messageLoop() = 
        async { 
          let! msg = inbox.Receive()
-         let now = DateTime.UtcNow
+         let now = now()
          match msg with
          | UserCommand(cmd, reply) -> 
            do persistCommand cmd
@@ -178,16 +176,17 @@ type AuctionDelegator(r, persistCommand) =
             //reply.Reply( auctions |> List.tryFind (fun a->a.id=auctionId) )
          | GetAuctions (reply) ->
             reply.Reply (auctions |> Map.toList |> List.map snd)
-         | WakeUp -> 
+         | WakeUp reply -> 
            do! wakeUp now
+           do reply.Reply()
            return! messageLoop()
          | CollectDelegator -> 
            do! collect now
        }
      messageLoop())
   member this.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
-  member this.WakeUp time = agent.Post WakeUp 
-  member this.Collect time = agent.Post CollectDelegator
+  member this.WakeUp () = agent.PostAndAsyncReply (fun reply-> WakeUp reply )
+  member this.Collect () = agent.Post CollectDelegator
   member this.GetAuctions ()= agent.PostAndAsyncReply(fun reply -> GetAuctions(reply))
   member this.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
 

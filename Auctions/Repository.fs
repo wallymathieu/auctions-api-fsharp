@@ -41,6 +41,7 @@ type ImmutableRepository =
     member this.SaveAuction auction = Ok({ this with auctions = auction :: this.auctions } :> IRepository)
     member this.SaveBid bid = Ok({ this with bids = bid :: this.bids } :> IRepository)
     member this.GetBidsForAuction auctionId = this.bids |> List.filter (fun b -> b.auction = auctionId)
+  static member empty = {auctions=[]; bids=[] }
 
 /// Concurrent version of repository.
 type MutableRepository() = 

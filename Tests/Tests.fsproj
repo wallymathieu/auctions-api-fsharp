@@ -20,6 +20,7 @@
     <Compile Include="AmountTests.fs" />
     <Compile Include="AuctionEntityTests.fs" />
     <Compile Include="AuctionBidValidationTests.fs" />
+    <Compile Include="ActorTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,10 @@
 ﻿open Suave
+open System
+
+open Auctions.Web
+open Auctions.Actors
+open Auctions
+open Auctions.Commands
 
 type CmdArgs = 
   { IP : System.Net.IPAddress
@@ -6,11 +12,6 @@ type CmdArgs =
     Redis : string option
     Json : string option
   }
-open Auctions.Web
-open Auctions.Actors
-open Auctions
-open Auctions.Commands
-
 [<EntryPoint>]
 let main argv = 
   // parse arguments
@@ -55,7 +56,7 @@ let main argv =
     appender.ReadAll() |> List.iter handleCommand
 
   persist.Start()
-  let agent = createAgentDelegator(r, persist.Handle)
+  let agent = createAgentDelegator(r, persist.Handle, fun ()->DateTime.UtcNow)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart agent)
   0
