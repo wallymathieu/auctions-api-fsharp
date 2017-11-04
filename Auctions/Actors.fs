@@ -151,15 +151,15 @@ type AuctionDelegator(r, persistCommand, now) =
                                                      && match c with | Choice1Of2 agent->true | _->false)
        async {
          for (auction,c) in hasEnded do 
-            do! c |> function 
-                  | Choice1Of2 agent -> 
-                      async{
-                        let! endedAuction = agent.Collect now
-                        do agents <- agents.Add (auction.id,(auction,Choice2Of2 endedAuction))
-                        // NOTE: here we might want to send out a signal
-                        return ()
-                      }
-                  | Choice2Of2 _ -> async { return () }
+            do! match c with
+                | Choice1Of2 agent -> 
+                  async{
+                    let! endedAuction = agent.Collect now
+                    do agents <- agents.Add (auction.id,(auction,Choice2Of2 endedAuction))
+                    // NOTE: here we might want to send out a signal
+                    return ()
+                  }
+                | Choice2Of2 _ -> async { return () }
          return ()
        }
 
