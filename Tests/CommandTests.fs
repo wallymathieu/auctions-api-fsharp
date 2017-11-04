@@ -41,7 +41,7 @@ module ``Bid commands tests`` =
   [<Fact>]
   let ``Seller cant bid``() = 
     // setup
-    let r = ConcurrentRepository() :> IRepository
+    let r = MutableRepository() :> IRepository
     handleCommand r (AddAuction(startsAt, auction)) |> ignore
     let d = DateTime(2016, 1, 2)
     
@@ -56,7 +56,7 @@ module ``Bid commands tests`` =
   [<Fact>]
   let ``Buyer can place bid``() = 
     // setup
-    let r = ConcurrentRepository() :> IRepository
+    let r = MutableRepository() :> IRepository
     handleCommand r (AddAuction(startsAt, auction)) |> ignore
     let d = DateTime(2016, 1, 2)
     
@@ -71,7 +71,7 @@ module ``Bid commands tests`` =
   [<Fact>]
   let ``Can't place bid lower than highest bid``() = 
     // setup
-    let r = ConcurrentRepository() :> IRepository
+    let r = MutableRepository() :> IRepository
     handleCommand r (AddAuction(startsAt, auction)) |> ignore
 
     handleCommand r (PlaceBid (DateTime(2016, 1, 2),bid)) |> ignore

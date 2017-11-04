@@ -1,10 +1,10 @@
-﻿open System
-open Suave
-open Suave.Filters
-open Suave.Operators
-open Suave.RequestErrors
-open Suave.Successful
-open Suave.Writers
+﻿open Suave
+open System
+
+open Auctions.Web
+open Auctions.Actors
+open Auctions
+open Auctions.Commands
 
 type CmdArgs = 
   { IP : System.Net.IPAddress
@@ -12,171 +12,6 @@ type CmdArgs =
     Redis : string option
     Json : string option
   }
-
-open Auctions.Domain
-open Auctions.Actors
-open Auctions
-open Auctions.Either
-open Auctions.Commands
-open Newtonsoft.Json
-module Paths = 
-  type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
-  
-  module Auction = 
-    /// /auctions
-    let overview = "/auctions"
-    /// /auction
-    let register = "/auction"
-    /// /auction/INT
-    let details : Int64Path = "/auction/%d"
-    /// /auction/INT/bid
-    let placeBid : Int64Path = "/auction/%d/bid"
-
-type Session = 
-  | NoSession
-  | UserLoggedOn of User
-
-let authenticated f = 
-  context (fun x -> 
-    match x.request.header "x-fake-auth" with
-    | Choice1Of2 u -> 
-        User.tryParse u |> function | Some user->
-                                        f (UserLoggedOn(user))
-                                    | None ->f NoSession
-    | Choice2Of2 _ -> f NoSession)
-
-type BidReq = {amount : Amount}
-type AddAuctionReq = {
-    id : AuctionId
-    startsAt : DateTime
-    title : string
-    endsAt : DateTime
-    currency : string
-    [<JsonProperty("type")>]
-    typ:string
-}
-type BidJsonResult = { 
-      amount:Amount
-      bidder:string
-    }
-type AuctionJsonResult = {
-      id : AuctionId
-      startsAt : DateTime
-      title : string
-      endsAt : DateTime
-      currency : Currency
-      bids : BidJsonResult array
-    }
-
-let webPart (r:ConcurrentRepository) (agent : AuctionDelegator) = 
-  let overview = 
-    GET >=> JSON(r
-                 |> Repo.auctions
-                 |> List.toArray)
-
-  let getAuctionResult r id :Result<AuctionJsonResult,Errors>=
-    let now =DateTime.UtcNow
-    either{
-      let! a =Repo.getAuction r id
-      let discloseBidders =Auction.biddersAreOpen a
-      let mapBid (b:Bid) :BidJsonResult = { 
-        amount=b.amount
-        bidder= if discloseBidders 
-                then b.user.ToString() 
-                else b.user.GetHashCode().ToString() // here you might want bidder number
-      }
-      let getBids ()= Repo.getAuctionBids r id 
-      let bids = match a.typ with
-                 | English _ -> getBids()
-                 // the bids are not disclosed until after the end :
-                 | Vickrey -> if Auction.hasEnded now a then getBids() else []
-                 | Blind -> if Auction.hasEnded now a then getBids() else [] 
-      return { id=a.id; startsAt=a.startsAt; title=a.title;endsAt=a.endsAt; currency=a.currency
-               bids=bids |> List.map mapBid |> List.toArray
-             }
-    }
-  
-  let details id  = GET >=> JSON(getAuctionResult r id)
-  //let bids (id : AuctionId) = GET >=> JSON(Repo.getAuctionBids r id)
-  
-  let addCommandResultToRepo result = 
-    match result with
-    | AuctionAdded(t, a) -> r |> Repo.saveAuction a
-    | BidAccepted(t, b) -> r |> Repo.saveBid b
-    |> ignore
-
-  /// handle command and add result to repository
-  let handleCommandAsync (maybeC:Result<_,_>) = 
-    asyncResult{
-      let! c=maybeC
-      let! r = agent.UserCommand c
-      do addCommandResultToRepo r
-      return r
-    }
-  /// turn handle command to webpart
-  let handleCommandAsync toCommand: WebPart = 
-    fun (ctx : HttpContext) ->
-      async {
-        let r = toCommand ctx
-        let! commandResult= handleCommandAsync r
-        return! JSONorBAD commandResult ctx
-      }
-
-  let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
-
-  /// register auction
-  let register = 
-
-    let toPostedAuction user = 
-      getBodyAsJSON<AddAuctionReq> 
-        >> Result.map (fun a -> 
-        let currency= Currency.tryParse a.currency |> Option.getOrElse Currency.VAC
-        
-        let typ = Type.tryParse a.typ |> Option.getOrElse (English { // default is english auctions
-                                                                      reservePrice=Amount.zero currency 
-                                                                      minRaise =Amount.zero currency
-                                                                    })
-        { user = user
-          id=a.id
-          startsAt=a.startsAt
-          endsAt=a.endsAt
-          title=a.title
-          currency=currency
-          typ=typ
-        }
-        |> Timed.atNow
-        |> Commands.AddAuction)
-        >> Result.mapError exnToInvalidUserData
-
-    authenticated (function 
-      | NoSession -> UNAUTHORIZED "Not logged in"
-      | UserLoggedOn user -> 
-        POST >=> handleCommandAsync (toPostedAuction user))
-
-  /// place bid
-  let placeBid (id : AuctionId) = 
-    let toPostedPlaceBid user = 
-      getBodyAsJSON<BidReq> 
-        >> Result.map (fun a -> 
-        let d = DateTime.UtcNow
-        (d, 
-         { user = user; id= BidId.NewGuid();
-           amount=a.amount;auction=id
-           at = d })
-        |> Commands.PlaceBid)
-        >> Result.mapError exnToInvalidUserData
-
-    authenticated (function 
-      | NoSession -> UNAUTHORIZED "Not logged in"
-      | UserLoggedOn user -> 
-        POST >=> handleCommandAsync (toPostedPlaceBid user))
-  
-  choose [ path "/" >=> (Successful.OK "")
-           path Paths.Auction.overview >=> overview
-           path Paths.Auction.register >=> register
-           pathScan Paths.Auction.details details
-           pathScan Paths.Auction.placeBid placeBid ]
-
 [<EntryPoint>]
 let main argv = 
   // parse arguments
@@ -210,7 +45,7 @@ let main argv =
     |> List.ofArray
     |> parseArgs defaultArgs
   
-  let r = ConcurrentRepository()
+  let r = MutableRepository()
   let appenders = seq {
         if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
@@ -221,10 +56,7 @@ let main argv =
     appender.ReadAll() |> List.iter handleCommand
 
   persist.Start()
-  let agent = createAgentDelegator(r, persist.Handle)
+  let agent = createAgentDelegator(r, persist.Handle, fun ()->DateTime.UtcNow)
   // start suave
-  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart r agent)
+  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart agent)
   0
-//curl  -X POST -d '{ "id":"1","startsAt":"2017-01-01","endsAt":"2018-01-01","title":"First auction" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
-
-//curl  -X POST -d '{ "auction":"1","amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid 

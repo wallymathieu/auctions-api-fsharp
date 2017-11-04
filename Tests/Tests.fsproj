@@ -16,10 +16,11 @@
     <Compile Include="UserTests.fs" />
     <Content Include="TestData.xml" />
     <Compile Include="CommandTests.fs" />
-    <Compile Include="EitherTests.fs" />
+    <Compile Include="ResultTests.fs" />
     <Compile Include="AmountTests.fs" />
     <Compile Include="AuctionEntityTests.fs" />
     <Compile Include="AuctionBidValidationTests.fs" />
+    <Compile Include="ActorTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>
