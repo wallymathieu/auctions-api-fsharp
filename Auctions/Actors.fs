@@ -117,7 +117,7 @@ type AuctionDelegator(r, persistCommand, now) =
       | Some (auction, Choice1Of2 auctionAgent) ->
         return Ok auctionAgent
       | Some (auction, Choice2Of2 _) -> 
-        return Error (AuctionHasEnded auction.id)
+        return Error (AuctionHasEnded auctionId)
       | None -> 
         return Error (AuctionNotFound auctionId)
       }
@@ -197,7 +197,6 @@ type AuctionDelegator(r, persistCommand, now) =
          | GetAuction (auctionId,reply) ->
            do! getAuction auctionId reply
            return! messageLoop()
-            //reply.Reply( auctions |> List.tryFind (fun a->a.id=auctionId) )
          | GetAuctions (reply) ->
            let auctions =agents 
                           |> Map.toList
