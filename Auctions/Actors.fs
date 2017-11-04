@@ -143,25 +143,26 @@ type AuctionDelegator(r, persistCommand, now) =
        }
 
     let wakeUp now= 
-       let auctionHasEnded = Auction.hasEnded now
-       let hasEnded = agents 
+      let auctionHasEnded = Auction.hasEnded now
+      let hasEnded = agents 
                           |> Map.toSeq
                           |> Seq.map snd
                           |> Seq.filter (fun (a,c)-> auctionHasEnded a 
                                                      && match c with | Choice1Of2 agent->true | _->false)
-       async {
+      let endAgent (auction:Auction) (c:Choice<AuctionAgent,_>)= 
+          async{
+            match c with
+            | Choice1Of2 agent -> 
+              let! endedAuction = agent.Collect now
+              do agents <- agents.Add (auction.id,(auction,Choice2Of2 endedAuction))
+              // NOTE: here we might want to send out a signal
+            | Choice2Of2 _ -> 
+              return()
+          }
+      async {
          for (auction,c) in hasEnded do 
-            do! match c with
-                | Choice1Of2 agent -> 
-                  async{
-                    let! endedAuction = agent.Collect now
-                    do agents <- agents.Add (auction.id,(auction,Choice2Of2 endedAuction))
-                    // NOTE: here we might want to send out a signal
-                    return ()
-                  }
-                | Choice2Of2 _ -> async { return () }
-         return ()
-       }
+            do! endAgent auction c
+      }
 
     let collect now = 
        async{
@@ -194,14 +195,15 @@ type AuctionDelegator(r, persistCommand, now) =
            do! userCommand cmd now reply
            return! messageLoop()
          | GetAuction (auctionId,reply) ->
-            do! getAuction auctionId reply
-            return! messageLoop()
+           do! getAuction auctionId reply
+           return! messageLoop()
             //reply.Reply( auctions |> List.tryFind (fun a->a.id=auctionId) )
          | GetAuctions (reply) ->
-            let auctions =agents 
+           let auctions =agents 
                           |> Map.toList
                           |> List.map (snd >> fst)
-            reply.Reply auctions
+           reply.Reply auctions
+           return! messageLoop()
          | WakeUp reply -> 
            do! wakeUp now
            do reply.Reply()
