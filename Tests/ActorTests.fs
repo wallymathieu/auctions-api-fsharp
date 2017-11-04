@@ -45,4 +45,5 @@ module ``Auction agent tests`` =
     t <- auction.endsAt.AddDays(1.5)
     Async.RunSynchronously(d.WakeUp())
     let maybeAuctionAndBids = Async.RunSynchronously( d.GetAuction auction.id )
-    Assert.Equal( (Some (auction,Choice2Of2 (Some (Amount.parse "VAC10",buyer )))),maybeAuctionAndBids)
+    //printfn "++++++++++++++++++++++++\n%A\n++++++++++++++++++++++++" maybeAuctionAndBids
+    Assert.Equal( (Some (auction,Choice2Of2 (Some (validBid.amount, buyer)))),maybeAuctionAndBids)

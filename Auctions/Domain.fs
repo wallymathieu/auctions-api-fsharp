@@ -172,7 +172,9 @@ module Auction=
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
   let biddersAreOpen (auction : Auction) = true
 
-  let getAmountAndWinner (auction : Auction) (bids:Bid list) (now)= 
+  type AuctionEnded = (Amount * User) option
+
+  let getAmountAndWinner (auction : Auction) (bids:Bid list) (now) : AuctionEnded= 
     if hasEnded now auction then
       let bids = bids |> List.sortByDescending Bid.getAmount
       match auction.typ with
