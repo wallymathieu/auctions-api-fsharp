@@ -94,9 +94,11 @@ module Auctions=
   type EnglishOptions = { 
       /// the seller has set a minimum sale price in advance (the 'reserve' price) 
       /// and the final bid does not reach that price the item remains unsold
-      reservePrice: Amount //if the reserve price is 0, that is the equivalent of not setting it 
+      /// If the reserve price is 0, that is the equivalent of not setting it.
+      reservePrice: Amount
       /// Sometimes the auctioneer sets a minimum amount by which the next bid must exceed the current highest bid.
-      minRaise: Amount //min raise 0 is the equivalent of not setting it
+      /// Having min raise equal to 0 is the equivalent of not setting it.
+      minRaise: Amount 
     }
 
   [<TypeConverter(typeof<ParseTypeConverter<Type>>)>]
@@ -115,7 +117,7 @@ module Auctions=
      /// rather than his or her own
      | Vickrey 
      // | Swedish : same as english, but bidders are not bound by bids and the seller is free to accept or decline any bid 
-     // swedish auction might require us to track more things
+     // this is a distinction compared to the English auction with open exit rule
      // | Dutch of DutchOptions : since this presumes a different kind of model 
      // we could model this as first bid ends auction
      // the time of the bid implies the price
@@ -246,3 +248,4 @@ let validateBid (auction : Auction) (bid : Bid) =
   else if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
   else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
   else Ok()
+
