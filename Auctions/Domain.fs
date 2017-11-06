@@ -86,6 +86,7 @@ module Amount=
   let zero c= { currency=c ; value=0L}
 
 let (|Amount|_|) = Amount.tryParse
+let (|Int64|_|) = Parse.toTryParse Int64.TryParse
 
 module Timed = 
   let atNow a = (DateTime.UtcNow, a)
@@ -99,6 +100,10 @@ module Auctions=
       /// Sometimes the auctioneer sets a minimum amount by which the next bid must exceed the current highest bid.
       /// Having min raise equal to 0 is the equivalent of not setting it.
       minRaise: Amount 
+      /// If no competing bidder challenges the standing bid within a given time frame, 
+      /// the standing bid becomes the winner, and the item is sold to the highest bidder 
+      /// at a price equal to his or her bid.
+      timeFrame: TimeSpan
     }
 
   [<TypeConverter(typeof<ParseTypeConverter<Type>>)>]
@@ -125,7 +130,8 @@ module Auctions=
     with
     override this.ToString() = 
       match this with
-      | English english -> sprintf "English|%s|%s" (english.reservePrice.ToString()) (english.minRaise.ToString())
+      | English english -> sprintf "English|%s|%s|%d" 
+                                    (english.reservePrice.ToString()) (english.minRaise.ToString()) english.timeFrame.Ticks
       | Blind -> sprintf "Blind"
       | Vickrey -> sprintf "Vickrey"
     static member tryParse typ =
@@ -133,8 +139,11 @@ module Auctions=
         None
       else
         match (typ.Split('|') |> Seq.toList) with
-        | "English"::(Amount reservePrice)::(Amount minRaise) :: [] -> 
-           Some (Type.English { reservePrice=reservePrice;minRaise=minRaise } )
+        | "English"::(Amount reservePrice)::(Amount minRaise):: (Int64 timeframe) :: [] -> 
+           Some (English { 
+                  reservePrice=reservePrice
+                  minRaise=minRaise
+                  timeFrame=TimeSpan.FromTicks(timeframe) })
         | ["Blind"] -> Some (Blind)
         | ["Vickrey"] -> Some (Vickrey)
         | _ -> None
@@ -149,7 +158,8 @@ type Auction =
   { id : AuctionId
     startsAt : DateTime
     title : string
-    endsAt : DateTime
+    /// initial expiry
+    expiry : DateTime
     user : User 
     typ : Type
     currency:Currency
@@ -169,11 +179,11 @@ module Bid=
 
 module Auction=
   let getId (auction : Auction) = auction.id
-  let hasEnded now (auction : Auction) = auction.endsAt < now
   /// if the bidders are open or anonymous
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
   let biddersAreOpen (auction : Auction) = true
 
+(*
   type AuctionEnded = (Amount * User) option
 
   let getAmountAndWinner (auction : Auction) (bids:Bid list) (now) : AuctionEnded= 
@@ -199,6 +209,7 @@ module Auction=
           Some (highestBid.amount, highestBid.user)
     else
       None
+*)
 
 type Errors = 
   | UnknownAuction of AuctionId
@@ -206,6 +217,7 @@ type Errors =
   | BidAlreadyExists of BidId
   | AuctionAlreadyExists of AuctionId
   | AuctionHasEnded of AuctionId
+  | AuctionHasNotStarted of AuctionId
   | AuctionNotFound of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
   | BidCurrencyConversion of BidId * Currency
@@ -213,39 +225,55 @@ type Errors =
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
 
-let containsBidder bidder bids = bids 
-                                  |> List.map Bid.getBidder
-                                  |> List.contains bidder
+module State=
+  type TimedAscending =
+     | AwaitingStart of start: DateTime * expiry: DateTime
+     | OnGoing of bids: Bid list * expiry: DateTime
+     | HasEnded of bids: Bid list * expired: DateTime
+  module TimedAscending=
+    let addBid (b:Bid) (opt:EnglishOptions) = function
+      | AwaitingStart (start,expiry) as awaitingStart->
+        match (b.at>start, b.at<expiry) with 
+        | true,true->
+          OnGoing([b], max expiry (b.at+opt.timeFrame)),Ok()
+        | true,false->
+          HasEnded([],expiry),Error (AuctionHasEnded b.auction)
+        | false, _ ->
+          awaitingStart,Error (AuctionHasNotStarted b.auction)
+      | OnGoing (bids,expiry) as ongoing->
+        if b.at<expiry then
+          match bids with
+          | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame)),Ok()
+          | highestBid::xs -> 
+            // you cannot bid lower than the "current bid"
+            if b.amount > (highestBid.amount + opt.minRaise)
+            then
+              OnGoing (b::bids, max expiry (b.at+opt.timeFrame)),Ok()
+            else 
+              ongoing, Error (MustPlaceBidOverHighestBid highestBid.amount)
+        else
+          HasEnded (bids, expiry), Error (AuctionHasEnded b.auction)
+      | HasEnded (bids,expired) as ended ->
+          ended,Error (AuctionHasEnded b.auction)
 
-let validateBidForAuctionType (auction : Auction) (bids: Bid list) (bid : Bid) = 
-  (*
-    NOTE: the assumption here is that we do not have
-    - English auctions with a large number of bids (i.e. highest bid calculation takes time)
-    - Blind or Vickrey with a lot of participants (i.e. the contains bidder operation takes time)
-    For real auction engines, you would weigh the pros and cons of these things 
-  *)
-  match auction.typ with 
-  | English english-> 
-    match bids with
-    | [] -> Ok()
-    | xs -> 
-      let highestBid = bids |> List.maxBy Bid.getAmount
-      // you cannot bid lower than the "current bid"
-      if bid.amount > (highestBid.amount + english.minRaise)
-      then Ok() 
-      else Error (MustPlaceBidOverHighestBid highestBid.amount)
-
-  //| Dutch dutch -> failwith "not implemented"
-  | Blind -> 
-      if bids|> containsBidder bid.user  then Error AlreadyPlacedBid 
-      else Ok()
-  | Vickrey -> 
-      if bids|> containsBidder bid.user  then Error AlreadyPlacedBid 
-      else Ok()
+  type SingleBidPerUser =
+     | AcceptingBids of bids: Map<UserId, Bid> * expiry: DateTime
+     | DisclosingBids of bids: Bid list * expired: DateTime
+  module SingleBidPerUser=
+    let addBid (b:Bid) (opt:EnglishOptions) = function
+      | AcceptingBids (bids,expiry) as acceptingBids-> 
+        let u=User.getId b.user
+        match b.at>=expiry, bids.ContainsKey (u) with
+        | false, false -> AcceptingBids (bids.Add (u,b), expiry), Ok()
+        | _, true -> acceptingBids, Error AlreadyPlacedBid 
+        | true,_ -> 
+          let bids=bids|>Map.toList|>List.map snd
+          DisclosingBids(bids,expiry), Error (AuctionHasEnded b.auction)
+      | DisclosingBids _ as disclosingBids-> 
+        disclosingBids, Error (AuctionHasEnded b.auction)
 
 let validateBid (auction : Auction) (bid : Bid) = 
-  if bid.at > auction.endsAt then Error(AuctionHasEnded auction.id)
-  else if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
+  if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
   else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
   else Ok()
 
