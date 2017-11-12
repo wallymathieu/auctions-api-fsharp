@@ -10,7 +10,6 @@ open Suave.Writers
 open Auctions.Domain
 open Auctions.Actors
 open Auctions
-open Auctions.Commands
 open Newtonsoft.Json
 
 (* Fake auth in order to simplify web testing *)

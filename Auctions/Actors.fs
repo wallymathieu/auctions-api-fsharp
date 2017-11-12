@@ -1,12 +1,12 @@
 ﻿module Auctions.Actors
 
 open System
-open Commands
 open Domain
 open Auction
 open System.Collections.Generic
 
 type Agent<'T> = MailboxProcessor<'T>
+type AuctionEnded = (Amount * User) option
 
 
 type AgentSignals = 
@@ -18,12 +18,12 @@ type AgentSignals =
 type AuctionAgent(auction, bids) =
   let agent = Agent<AgentSignals>.Start(fun inbox -> 
     (let validateBid = validateBid auction
-     let validateBidForAuctionType = validateBidForAuctionType auction 
+     //let validateBidForAuctionType = validateBidForAuctionType auction 
      let mutable bids = bids
      
      /// try to signal auction ended
-     let tryGetAuctionEnded time : AuctionEnded = 
-       Auction.getAmountAndWinner auction bids time
+     //let tryGetAuctionEnded time : AuctionEnded = 
+     //  Auction.getAmountAndWinner auction bids time
      
      let rec messageLoop() = 
        async { 
@@ -32,7 +32,7 @@ type AuctionAgent(auction, bids) =
          | AgentBid(bid, reply) -> 
            reply.Reply(result { 
                          do! validateBid bid
-                         do! validateBidForAuctionType bids bid
+                         //do! validateBidForAuctionType bids bid
                          bids <- bid :: bids
                        })
            return! messageLoop()
@@ -45,7 +45,7 @@ type AuctionAgent(auction, bids) =
             - it can start replying with only bid rejected response
             - make sure to send out signal about auction status (if there is a winner)
             *)
-           reply.Reply(tryGetAuctionEnded now)
+           //reply.Reply(tryGetAuctionEnded now)
            return! messageLoop()
          | CollectAgent(now, reply) -> 
            (*
@@ -54,7 +54,7 @@ type AuctionAgent(auction, bids) =
                 - for instance send out auction end signals 
             - quit
             *)
-           reply.Reply(tryGetAuctionEnded now)
+           //reply.Reply(tryGetAuctionEnded now)
            return ()
        }
      

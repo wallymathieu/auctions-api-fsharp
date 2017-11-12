@@ -16,6 +16,10 @@ type ResultBuilder() =
 
 let result = new ResultBuilder()
 
+let ofOption onMissing = function
+  | Some x -> Ok x
+  | None   -> Error onMissing
+
 //from https://github.com/SuaveIO/suave/blob/master/src/Suave/WebPart.fs
 type AsyncResult<'a,'e> = Async<Result< 'a,'e>>
 

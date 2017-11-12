@@ -92,7 +92,7 @@ module Timed =
   let atNow a = (DateTime.UtcNow, a)
 
 module Auctions=
-  type EnglishOptions = { 
+  type TimedAscendingOptions = { 
       /// the seller has set a minimum sale price in advance (the 'reserve' price) 
       /// and the final bid does not reach that price the item remains unsold
       /// If the reserve price is 0, that is the equivalent of not setting it.
@@ -105,22 +105,24 @@ module Auctions=
       /// at a price equal to his or her bid.
       timeFrame: TimeSpan
     }
+  type SingleSealedBidOptions =
+    /// Sealed first-price auction 
+    /// In this type of auction all bidders simultaneously submit sealed bids so that no bidder knows the bid of any
+    /// other participant. The highest bidder pays the price they submitted.
+    /// This type of auction is distinct from the English auction, in that bidders can only submit one bid each.
+    |Blind
+    /// Also known as a sealed-bid second-price auction.
+    /// This is identical to the sealed first-price auction except that the winning bidder pays the second-highest bid
+    /// rather than his or her own
+    |Vickrey
 
   [<TypeConverter(typeof<ParseTypeConverter<Type>>)>]
   [<JsonConverter(typeof<ParseTypeJsonConverter<Type>>)>]
   type Type=
      /// also known as an open ascending price auction
      /// The auction ends when no participant is willing to bid further
-     | English of EnglishOptions
-     /// Sealed first-price auction 
-     /// In this type of auction all bidders simultaneously submit sealed bids so that no bidder knows the bid of any
-     /// other participant. The highest bidder pays the price they submitted.
-     /// This type of auction is distinct from the English auction, in that bidders can only submit one bid each.
-     | Blind 
-     /// Also known as a sealed-bid second-price auction.
-     /// This is identical to the sealed first-price auction except that the winning bidder pays the second-highest bid
-     /// rather than his or her own
-     | Vickrey 
+     | TimedAscending of TimedAscendingOptions
+     | SingleSealedBid of SingleSealedBidOptions
      // | Swedish : same as english, but bidders are not bound by bids and the seller is free to accept or decline any bid 
      // this is a distinction compared to the English auction with open exit rule
      // | Dutch of DutchOptions : since this presumes a different kind of model 
@@ -130,22 +132,22 @@ module Auctions=
     with
     override this.ToString() = 
       match this with
-      | English english -> sprintf "English|%s|%s|%d" 
+      | TimedAscending english -> sprintf "English|%s|%s|%d" 
                                     (english.reservePrice.ToString()) (english.minRaise.ToString()) english.timeFrame.Ticks
-      | Blind -> sprintf "Blind"
-      | Vickrey -> sprintf "Vickrey"
+      | SingleSealedBid Blind -> sprintf "Blind"
+      | SingleSealedBid Vickrey -> sprintf "Vickrey"
     static member tryParse typ =
       if String.IsNullOrEmpty typ then
         None
       else
         match (typ.Split('|') |> Seq.toList) with
         | "English"::(Amount reservePrice)::(Amount minRaise):: (Int64 timeframe) :: [] -> 
-           Some (English { 
+           Some (TimedAscending { 
                   reservePrice=reservePrice
                   minRaise=minRaise
                   timeFrame=TimeSpan.FromTicks(timeframe) })
-        | ["Blind"] -> Some (Blind)
-        | ["Vickrey"] -> Some (Vickrey)
+        | ["Blind"] -> Some (SingleSealedBid Blind)
+        | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
     
     [<CompiledName("Parse")>]
@@ -183,33 +185,7 @@ module Auction=
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
   let biddersAreOpen (auction : Auction) = true
 
-(*
-  type AuctionEnded = (Amount * User) option
 
-  let getAmountAndWinner (auction : Auction) (bids:Bid list) (now) : AuctionEnded= 
-    if hasEnded now auction then
-      let bids = bids |> List.sortByDescending Bid.getAmount
-      match auction.typ with
-      | English english ->
-        match bids with
-        | [] -> None
-        | highestBid :: _ ->
-          Some (highestBid.amount, highestBid.user)
-      | Vickrey -> 
-        match bids with
-        | [] -> None
-        | highestBid :: secondHighest :: _ ->
-          Some (secondHighest.amount, highestBid.user)
-        | _ -> 
-          None // What happens in a Vickrey auction in this case?
-      | Blind ->
-        match bids with
-        | [] -> None
-        | highestBid :: _ ->
-          Some (highestBid.amount, highestBid.user)
-    else
-      None
-*)
 
 type Errors = 
   | UnknownAuction of AuctionId
@@ -226,54 +202,98 @@ type Errors =
   | AlreadyPlacedBid
 
 module State=
+
   type TimedAscending =
-     | AwaitingStart of start: DateTime * expiry: DateTime
-     | OnGoing of bids: Bid list * expiry: DateTime
-     | HasEnded of bids: Bid list * expired: DateTime
-  module TimedAscending=
-    let addBid (b:Bid) (opt:EnglishOptions) = function
-      | AwaitingStart (start,expiry) as awaitingStart->
+     | AwaitingStart of start: DateTime * expiry: DateTime * opt:TimedAscendingOptions
+     | OnGoing of bids: Bid list * expiry: DateTime * opt:TimedAscendingOptions
+     | HasEnded of bids: Bid list * expired: DateTime * opt:TimedAscendingOptions
+  with 
+    member state.addBid (b:Bid) = 
+      match state with
+      | AwaitingStart (start,expiry, opt) as awaitingStart->
         match (b.at>start, b.at<expiry) with 
         | true,true->
-          OnGoing([b], max expiry (b.at+opt.timeFrame)),Ok()
+          OnGoing([b], max expiry (b.at+opt.timeFrame), opt),Ok()
         | true,false->
-          HasEnded([],expiry),Error (AuctionHasEnded b.auction)
+          HasEnded([],expiry, opt),Error (AuctionHasEnded b.auction)
         | false, _ ->
           awaitingStart,Error (AuctionHasNotStarted b.auction)
-      | OnGoing (bids,expiry) as ongoing->
+      | OnGoing (bids,expiry,opt) as ongoing->
         if b.at<expiry then
           match bids with
-          | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame)),Ok()
+          | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt),Ok()
           | highestBid::xs -> 
             // you cannot bid lower than the "current bid"
             if b.amount > (highestBid.amount + opt.minRaise)
             then
-              OnGoing (b::bids, max expiry (b.at+opt.timeFrame)),Ok()
+              OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt),Ok()
             else 
               ongoing, Error (MustPlaceBidOverHighestBid highestBid.amount)
         else
-          HasEnded (bids, expiry), Error (AuctionHasEnded b.auction)
-      | HasEnded (bids,expired) as ended ->
+          HasEnded (bids, expiry, opt), Error (AuctionHasEnded b.auction)
+      | HasEnded (bids,expired, opt) as ended ->
           ended,Error (AuctionHasEnded b.auction)
+    member state.tryGetAmountAndWinner () =
+      match state with
+      | HasEnded (bid::rest,expired, opt) when opt.reservePrice<bid.amount -> Some (bid.amount, bid.user)
+      | _ -> None
 
   type SingleBidPerUser =
-     | AcceptingBids of bids: Map<UserId, Bid> * expiry: DateTime
-     | DisclosingBids of bids: Bid list * expired: DateTime
-  module SingleBidPerUser=
-    let addBid (b:Bid) (opt:EnglishOptions) = function
-      | AcceptingBids (bids,expiry) as acceptingBids-> 
+     | AcceptingBids of bids: Map<UserId, Bid> * expiry: DateTime * opt:SingleSealedBidOptions
+     | DisclosingBids of bids: Bid list * expired: DateTime * opt:SingleSealedBidOptions
+  with 
+    member state.addBid (b:Bid) = 
+      match state with
+      | AcceptingBids (bids,expiry, opt) as acceptingBids-> 
         let u=User.getId b.user
         match b.at>=expiry, bids.ContainsKey (u) with
-        | false, false -> AcceptingBids (bids.Add (u,b), expiry), Ok()
+        | false, false -> AcceptingBids (bids.Add (u,b), expiry, opt), Ok()
         | _, true -> acceptingBids, Error AlreadyPlacedBid 
         | true,_ -> 
           let bids=bids|>Map.toList|>List.map snd
-          DisclosingBids(bids,expiry), Error (AuctionHasEnded b.auction)
+          DisclosingBids(bids,expiry, opt), Error (AuctionHasEnded b.auction)
       | DisclosingBids _ as disclosingBids-> 
         disclosingBids, Error (AuctionHasEnded b.auction)
+    member state.tryGetAmountAndWinner () =
+      match state with
+      | DisclosingBids (highestBid :: secondHighest :: _, expired, Vickrey) ->
+        Some (secondHighest.amount,highestBid.user)
+      | DisclosingBids (highestBid :: [], expired, Vickrey) ->
+        Some (highestBid.amount,highestBid.user)
+      | DisclosingBids (highestBid :: _, expired, Blind) ->
+        Some (highestBid.amount,highestBid.user)
+      | _  -> None
+
+
 
 let validateBid (auction : Auction) (bid : Bid) = 
   if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
   else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
   else Ok()
+
+
+let inline addBid (state:^state,bid:Bid) = 
+      (^state : (member addBid: Bid -> ^state* Result<unit ,Errors>) state, bid)
+
+let inline tryGetAmountAndWinner (state:^state, now) = 
+      (^state : (member tryGetAmountAndWinner: unit -> (Amount * User) option) state)
+
+type Command = 
+  | AddAuction of DateTime * Auction
+  | PlaceBid of DateTime * Bid
+  
+  /// the time when the command was issued
+  static member getAt command = 
+    match command with
+    | AddAuction(at, _) -> at
+    | PlaceBid(at, _) -> at
+  
+  static member getAuction command = 
+    match command with
+    | AddAuction(_,auction) -> auction.id
+    | PlaceBid(_,bid) -> bid.auction
+
+type CommandSuccess = 
+  | AuctionAdded of DateTime * Auction
+  | BidAccepted of DateTime * Bid
 
