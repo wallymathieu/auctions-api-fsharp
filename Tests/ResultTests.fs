@@ -1,8 +1,5 @@
 ﻿namespace Tests
 
-open Auctions.Domain
-open Auctions.Commands
-open Auctions.Result
 open Auctions
 open System
 open Xunit

@@ -91,6 +91,7 @@ let (|Int64|_|) = Parse.toTryParse Int64.TryParse
 module Timed = 
   let atNow a = (DateTime.UtcNow, a)
 
+[<AutoOpen>]
 module Auctions=
   type TimedAscendingOptions = { 
       /// the seller has set a minimum sale price in advance (the 'reserve' price) 
@@ -155,7 +156,7 @@ module Auctions=
       match Type.tryParse typ with
       | Some t->t
       | None -> raise (FormatException "Invalid Type")
-open Auctions
+
 type Auction = 
   { id : AuctionId
     startsAt : DateTime
@@ -179,14 +180,6 @@ module Bid=
   let getAmount (bid : Bid) = bid.amount
   let getBidder (bid: Bid) = bid.user
 
-module Auction=
-  let getId (auction : Auction) = auction.id
-  /// if the bidders are open or anonymous
-  /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
-  let biddersAreOpen (auction : Auction) = true
-
-
-
 type Errors = 
   | UnknownAuction of AuctionId
   | UnknownBid of BidId
@@ -201,14 +194,44 @@ type Errors =
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
 
+[<RequireQualifiedAccess>]
+module Auction=
+  let getId (auction : Auction) = auction.id
+  /// if the bidders are open or anonymous
+  /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
+  let biddersAreOpen (auction : Auction) = true
+
+  let validateBid (bid : Bid) (auction : Auction)= 
+    if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
+    else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
+    else Ok()
+
+[<AutoOpen>]
 module State=
 
-  type TimedAscending =
+  type TimedAscendingState =
      | AwaitingStart of start: DateTime * expiry: DateTime * opt:TimedAscendingOptions
      | OnGoing of bids: Bid list * expiry: DateTime * opt:TimedAscendingOptions
      | HasEnded of bids: Bid list * expired: DateTime * opt:TimedAscendingOptions
   with 
-    member state.addBid (b:Bid) = 
+   member state.inc (now) = 
+    match state with
+    | AwaitingStart (start,expiry, opt) as awaitingStart->
+      match (now>start, now<expiry) with 
+      | true,true->
+        OnGoing([],expiry, opt)
+      | true,false->
+        HasEnded([],expiry, opt)
+      | false, _ ->
+        awaitingStart
+    | OnGoing (bids,expiry,opt) as ongoing->
+      if now<expiry then
+        ongoing
+      else
+        HasEnded (bids, expiry, opt)
+    | HasEnded (bids,expired, opt) as ended ->
+        ended
+    member state.addBid (b:Bid) = // note that this is increment + mutate in one operation
       match state with
       | AwaitingStart (start,expiry, opt) as awaitingStart->
         match (b.at>start, b.at<expiry) with 
@@ -237,11 +260,26 @@ module State=
       match state with
       | HasEnded (bid::rest,expired, opt) when opt.reservePrice<bid.amount -> Some (bid.amount, bid.user)
       | _ -> None
+    member state.getBids()=
+      match state with
+      | OnGoing(bids,_,_)->bids
+      | HasEnded(bids,_,_)->bids
+      | AwaitingStart _ ->[]
+    member state.hasEnded ()=match state with | HasEnded _ -> true | _ -> false
 
-  type SingleBidPerUser =
+  type SingleSealedBidState =
      | AcceptingBids of bids: Map<UserId, Bid> * expiry: DateTime * opt:SingleSealedBidOptions
      | DisclosingBids of bids: Bid list * expired: DateTime * opt:SingleSealedBidOptions
   with 
+    member state.inc now = 
+      match state with
+      | AcceptingBids (bids,expiry, opt) as acceptingBids-> 
+        match now>=expiry with
+        | false -> AcceptingBids (bids, expiry, opt)
+        | true -> 
+          let bids=bids|>Map.toList|>List.map snd
+          DisclosingBids(bids, expiry, opt)
+      | DisclosingBids _ as disclosingBids-> disclosingBids
     member state.addBid (b:Bid) = 
       match state with
       | AcceptingBids (bids,expiry, opt) as acceptingBids-> 
@@ -263,20 +301,54 @@ module State=
       | DisclosingBids (highestBid :: _, expired, Blind) ->
         Some (highestBid.amount,highestBid.user)
       | _  -> None
+    member state.getBids() =
+      match state with
+      | DisclosingBids (bids,expired,t)->bids
+      | AcceptingBids _-> []
+    member state.hasEnded ()=match state with | DisclosingBids _ -> true | _ -> false
 
+  let inline inc (now:DateTime, state:^state) = 
+        (^state : (member inc: DateTime -> ^state) state, now)
 
+  let inline addBid (bid:Bid, state:^state) = 
+        (^state : (member addBid: Bid -> ^state* Result<unit ,Errors>) state, bid)
 
-let validateBid (auction : Auction) (bid : Bid) = 
-  if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
-  else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
-  else Ok()
+  let inline getBids (state:^state) = 
+        (^state : (member getBids: unit -> Bid list) state)
 
+  let inline tryGetAmountAndWinner (state:^state) = 
+        (^state : (member tryGetAmountAndWinner: unit -> (Amount * User) option) state)
 
-let inline addBid (state:^state,bid:Bid) = 
-      (^state : (member addBid: Bid -> ^state* Result<unit ,Errors>) state, bid)
+  let inline hasEnded (state:^state) = 
+        (^state : (member hasEnded: unit -> bool) state)
 
-let inline tryGetAmountAndWinner (state:^state, now) = 
-      (^state : (member tryGetAmountAndWinner: unit -> (Amount * User) option) state)
+  type S=Choice<TimedAscendingState,SingleSealedBidState>
+  [<RequireQualifiedAccess>]
+  module Auction=
+    let emptyState (a:Auction) : S= 
+      match a.typ with
+      | SingleSealedBid opt ->  Choice2Of2( AcceptingBids(Map.empty, a.expiry, opt))
+      | TimedAscending opt -> Choice1Of2( AwaitingStart(a.startsAt,a.expiry, opt))
+
+  module S=
+    let map2 f1 f2: Choice<TimedAscendingState,SingleSealedBidState> -> Choice<'c, 'd> = function
+      | Choice1Of2 v -> Choice1Of2 (f1 v)
+      | Choice2Of2 v -> Choice2Of2 (f2 v)
+    /// split into fst and snd, where fst is still made a Choice
+    let splitFstJoinSnd =function
+      | Choice1Of2 (a,b)->(Choice1Of2 a),b
+      | Choice2Of2 (a,b)->(Choice2Of2 a),b
+    /// assume that both choices has the same type
+    let join =function
+      | Choice1Of2 (a)->a
+      | Choice2Of2 (a)->a
+
+    let inline inc (now:DateTime) (state:S) :S=map2 (fun s->inc (now,s)) (fun s->inc (now,s)) state
+    let inline addBid (bid:Bid) (state:S)=
+      map2 (fun s->addBid (bid,s)) (fun s->addBid (bid,s)) state |> splitFstJoinSnd
+    let inline getBids (state:S)=map2 getBids getBids state |> join
+    let inline tryGetAmountAndWinner (state:S)=map2 tryGetAmountAndWinner tryGetAmountAndWinner state |> join
+    let inline hasEnded (state:S)=map2 hasEnded hasEnded state |> join
 
 type Command = 
   | AddAuction of DateTime * Auction
