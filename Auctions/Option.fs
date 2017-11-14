@@ -22,12 +22,6 @@ type MaybeBuilder () =
         value
 
     member inline __.Zero () : 'T option = None
-    member inline __.Delay (generator : unit -> 'T) = generator
-
-    // The signature of Run corresponds closely to that of Delay.
-    // This computation builder needs to define Run because Delay doesn't force evaluation
-    // of the thunk it's given (it simply returns it).
-    member __.Run (generator) : 'T option = generator ()
 
     member inline __.Bind
         (value, binder : 'T -> 'U option) : 'U option =
