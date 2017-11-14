@@ -1,6 +1,6 @@
 ﻿namespace Auctions
 
-open Commands
+open Domain
 
 type IAppendBatch = 
   abstract Batch : Command list -> unit

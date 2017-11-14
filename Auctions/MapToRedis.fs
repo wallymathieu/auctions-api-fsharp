@@ -3,7 +3,6 @@
 open StackExchange.Redis
 open System
 open Domain
-open Commands
 
 let redisKey (str : string) = RedisKey.op_Implicit (str)
 let redisValueStr (str : string) = RedisValue.op_Implicit str
@@ -20,7 +19,7 @@ let mapToHashEntries command =
   | AddAuction(at, auction) -> 
     [ hashEntryInt64 "Id" (auction.id)
       hashEntryStr "Title" (auction.title)
-      hashEntryInt64 "EndsAt" auction.endsAt.Ticks
+      hashEntryInt64 "Expiry" auction.expiry.Ticks
       hashEntryInt64 "StartsAt" auction.startsAt.Ticks
       hashEntryInt64 "At" at.Ticks 
       hashEntryStr "Typ" (auction.typ.ToString())
@@ -64,9 +63,9 @@ let mapFromHashEntries entries : Command =
     let id = entries |> findEntryInt64 "Id"
     let title = entries |> findEntryStr "Title"
     
-    let endsAt = 
+    let expiry = 
       entries
-      |> findEntryInt64 "EndsAt"
+      |> findEntryInt64 "Expiry"
       |> DateTime
     
     let startsAt = 
@@ -101,15 +100,16 @@ let mapFromHashEntries entries : Command =
       { id = id
         title = title
         startsAt = startsAt
-        endsAt = endsAt
+        expiry = expiry
         user = user.Value 
         currency = currency
         typ = typ 
               |> function
                  | Some t -> t 
-                 | None -> Auctions.English { // if no typ serialized, use english
+                 | None -> Auctions.TimedAscending { // if no typ serialized, use english
                     reservePrice=Amount.zero currency
                     minRaise =Amount.zero currency
+                    timeFrame = TimeSpan.FromSeconds(0.0)
                   } 
       }// null ref expn
     

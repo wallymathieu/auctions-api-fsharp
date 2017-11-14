@@ -1,5 +1,10 @@
 ﻿[<AutoOpen>]
-module Auctions.Result
+module Auctions.Results
+
+module Result=
+  let ofOption onMissing = function
+    | Some x -> Ok x
+    | None   -> Error onMissing
 
 type ResultBuilder() = 
   member this.Bind(x, f) = Result.bind f x

@@ -4,7 +4,6 @@ open System
 open Auctions.Web
 open Auctions.Actors
 open Auctions
-open Auctions.Commands
 
 type CmdArgs = 
   { IP : System.Net.IPAddress
@@ -45,18 +44,18 @@ let main argv =
     |> List.ofArray
     |> parseArgs defaultArgs
   
-  let r = MutableRepository()
   let appenders = seq {
         if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
       }
   let persist = PersistCommands (appenders |> Seq.map (fun a->a.Batch) |> List.ofSeq)
-  let handleCommand c = handleCommand r c |> ignore
-  for appender in appenders do
-    appender.ReadAll() |> List.iter handleCommand
+  let commands = appenders
+                 |> Seq.map (fun a->a.ReadAll())
+                 |> Seq.concat
+                 |> Seq.toList
 
   persist.Start()
-  let agent = createAgentDelegator(r, persist.Handle, fun ()->DateTime.UtcNow)
+  let agent = createAgentDelegator(commands, persist.Handle, fun ()->DateTime.UtcNow)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart agent)
   0

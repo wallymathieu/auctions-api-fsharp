@@ -3,7 +3,7 @@
 open StackExchange.Redis
 open System.Collections.Generic
 open System
-open Commands
+open Domain
 open MapToRedis
 
 type AppendAndReadBatchRedis(connStr:string) = 
