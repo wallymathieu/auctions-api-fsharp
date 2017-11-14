@@ -277,7 +277,7 @@ module State=
         match now>=expiry with
         | false -> AcceptingBids (bids, expiry, opt)
         | true -> 
-          let bids=bids|>Map.toList|>List.map snd
+          let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.getAmount
           DisclosingBids(bids, expiry, opt)
       | DisclosingBids _ as disclosingBids-> disclosingBids
     member state.addBid (b:Bid) = 

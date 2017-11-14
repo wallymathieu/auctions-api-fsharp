@@ -23,6 +23,3 @@ module ``Auction Bid tests`` =
   let ``seller bidding on auction``() = 
     Assert.Equal( Error (SellerCannotPlaceBids ("x1",1L)), validateBid bidWithSameUser )
 
-  [<Fact>]
-  let ``bid after auction has ended``() = 
-    Assert.Equal( Error (AuctionHasEnded 1L), validateBid bidAfterAuctionEnded )
