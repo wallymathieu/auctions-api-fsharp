@@ -1,5 +1,4 @@
 ﻿module Suave
-open System
 open Suave
 open Suave.Operators
 open Suave.Successful

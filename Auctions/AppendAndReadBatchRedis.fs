@@ -1,10 +1,10 @@
 ﻿namespace Auctions
+open Auctions.Domain
+open Auctions.MapToRedis
 
 open StackExchange.Redis
 open System.Collections.Generic
 open System
-open Domain
-open MapToRedis
 
 type AppendAndReadBatchRedis(connStr:string) = 
   let conn = ConnectionMultiplexer.Connect(connStr)

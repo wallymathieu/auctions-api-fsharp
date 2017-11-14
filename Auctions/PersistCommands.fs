@@ -1,10 +1,10 @@
 ﻿namespace Auctions
+open Auctions.Domain
 
 open System
 open System.Collections.Concurrent
 open System.Collections.Generic
 open System.Threading
-open Domain
 
 type PersistCommands(appendBatches : (Command list -> unit) list) = 
   let mutable thread = null

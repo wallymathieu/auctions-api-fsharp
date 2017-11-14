@@ -1,7 +1,7 @@
 ﻿module Auctions.Actors
+open Auctions.Domain
 
 open System
-open Domain
 open System.Collections.Generic
 
 type Agent<'T> = MailboxProcessor<'T>
@@ -13,7 +13,7 @@ type AgentSignals =
   | AuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded>
   | HasEnded of DateTime * AsyncReplyChannel<Boolean>
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded>
-open State
+
 type AuctionAgent(auction, state:S) =
   let agent = Agent<AgentSignals>.Start(fun inbox -> 
     (let validateBid = fun b->Auction.validateBid b auction

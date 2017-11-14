@@ -1,8 +1,8 @@
 ﻿module Auctions.MapToRedis
+open Auctions.Domain
 
 open StackExchange.Redis
 open System
-open Domain
 
 let redisKey (str : string) = RedisKey.op_Implicit (str)
 let redisValueStr (str : string) = RedisValue.op_Implicit str

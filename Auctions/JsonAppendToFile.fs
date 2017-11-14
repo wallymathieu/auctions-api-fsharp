@@ -1,7 +1,7 @@
 ﻿namespace Auctions
+open Auctions.Domain
 
 open System.IO
-open Domain
 open System
 open Newtonsoft.Json
 
