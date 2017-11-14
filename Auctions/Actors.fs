@@ -69,26 +69,29 @@ type AuctionAgent(auction, state:S) =
   member this.HasEnded time = agent.PostAndAsyncReply(fun reply -> AgentSignals.HasEnded(time, reply))
 
 /// repository that takes commands and translate them to auctions and auction states
+/// assumption is that it's used in a single threaded sync manner
 type private Repository ()= 
-  let mutable auctions=Map.empty
-  member this.Auctions() = auctions 
-                           |> Map.toList
-                           |> List.map snd
+  let auctions=Dictionary<AuctionId,Auction*S>()
+
+  member this.Auctions() : (Auction*S) list = 
+    auctions.Values |> Seq.toList
 
   member this.handle = function 
     | AddAuction (time,a)->
-      if not (Map.containsKey a.id auctions) then
+      if not (auctions.ContainsKey a.id) then
         let empty =Auction.emptyState a
-        auctions<- Map.add a.id (a,empty) auctions
+        auctions.Add ( a.id, (a,empty) )
       else
         ()
     | PlaceBid (time,b)->
       maybe { 
-        let! (auction,state) = Map.tryFind b.auction auctions
+        let! (auction,state) = match auctions.TryGetValue b.auction with
+                               | true, value -> Some(value)
+                               | false, _ -> None
         match Auction.validateBid b auction with
         | Ok _ ->
-          let (next,res)= S.addBid b state
-          auctions <- Map.add auction.id (auction,next) auctions
+          let (next,_)= S.addBid b state
+          auctions.[auction.id]<- (auction,next)
         | Error _ -> ()
       } |> ignore
 
