@@ -208,6 +208,18 @@ module Auction=
 
 [<AutoOpen>]
 module State=
+  [<Interface>]
+  type IState=
+    /// increment state based on now
+    abstract Inc: DateTime -> IState
+    /// increment state and add bid
+    abstract AddBid: Bid -> IState*Result<unit ,Errors>
+    /// get bids for state (will return empty if in a state that does not disclose bids)
+    abstract GetBids: unit -> Bid list
+    /// try to get amount and winner, will return None if no winner 
+    abstract TryGetAmountAndWinner: unit -> (Amount * User) option
+    /// returns true if state has ended
+    abstract HasEnded: unit -> bool
 
   type TimedAscendingState =
      | AwaitingStart of start: DateTime * expiry: DateTime * opt:TimedAscendingOptions
@@ -267,6 +279,15 @@ module State=
       | AwaitingStart _ ->[]
     member state.hasEnded ()=match state with | HasEnded _ -> true | _ -> false
 
+    interface IState with
+      member s.Inc now =s.inc now :>IState
+      member s.AddBid bid =
+        let (state,res) =s.addBid bid
+        (state:>IState,res)
+      member s.GetBids () = s.getBids()
+      member s.TryGetAmountAndWinner () = s.tryGetAmountAndWinner ()
+      member s.HasEnded () = s.hasEnded()
+
   type SingleSealedBidState =
      | AcceptingBids of bids: Map<UserId, Bid> * expiry: DateTime * opt:SingleSealedBidOptions
      | DisclosingBids of bids: Bid list * expired: DateTime * opt:SingleSealedBidOptions
@@ -307,48 +328,29 @@ module State=
       | AcceptingBids _-> []
     member state.hasEnded ()=match state with | DisclosingBids _ -> true | _ -> false
 
-  let inline inc (now:DateTime, state:^state) = 
-        (^state : (member inc: DateTime -> ^state) state, now)
+    interface IState with
+      member s.Inc now =s.inc now :>IState
+      member s.AddBid bid =
+        let (state,res) =s.addBid bid
+        (state:>IState,res)
+      member s.GetBids () = s.getBids()
+      member s.TryGetAmountAndWinner () = s.tryGetAmountAndWinner ()
+      member s.HasEnded () = s.hasEnded()
 
-  let inline addBid (bid:Bid, state:^state) = 
-        (^state : (member addBid: Bid -> ^state* Result<unit ,Errors>) state, bid)
-
-  let inline getBids (state:^state) = 
-        (^state : (member getBids: unit -> Bid list) state)
-
-  let inline tryGetAmountAndWinner (state:^state) = 
-        (^state : (member tryGetAmountAndWinner: unit -> (Amount * User) option) state)
-
-  let inline hasEnded (state:^state) = 
-        (^state : (member hasEnded: unit -> bool) state)
-
-  type S=Choice<TimedAscendingState,SingleSealedBidState>
+  type S=IState
   [<RequireQualifiedAccess>]
   module Auction=
     let emptyState (a:Auction) : S= 
       match a.typ with
-      | SingleSealedBid opt ->  Choice2Of2( AcceptingBids(Map.empty, a.expiry, opt))
-      | TimedAscending opt -> Choice1Of2( AwaitingStart(a.startsAt,a.expiry, opt))
+      | SingleSealedBid opt -> AcceptingBids(Map.empty, a.expiry, opt) :>IState
+      | TimedAscending opt -> AwaitingStart(a.startsAt,a.expiry, opt) :>IState
 
   module S=
-    let map2 f1 f2: Choice<TimedAscendingState,SingleSealedBidState> -> Choice<'c, 'd> = function
-      | Choice1Of2 v -> Choice1Of2 (f1 v)
-      | Choice2Of2 v -> Choice2Of2 (f2 v)
-    /// split into fst and snd, where fst is still made a Choice
-    let splitFstJoinSnd =function
-      | Choice1Of2 (a,b)->(Choice1Of2 a),b
-      | Choice2Of2 (a,b)->(Choice2Of2 a),b
-    /// assume that both choices has the same type
-    let join =function
-      | Choice1Of2 (a)->a
-      | Choice2Of2 (a)->a
-
-    let inline inc (now:DateTime) (state:S) :S=map2 (fun s->inc (now,s)) (fun s->inc (now,s)) state
-    let inline addBid (bid:Bid) (state:S)=
-      map2 (fun s->addBid (bid,s)) (fun s->addBid (bid,s)) state |> splitFstJoinSnd
-    let inline getBids (state:S)=map2 getBids getBids state |> join
-    let inline tryGetAmountAndWinner (state:S)=map2 tryGetAmountAndWinner tryGetAmountAndWinner state |> join
-    let inline hasEnded (state:S)=map2 hasEnded hasEnded state |> join
+    let inline inc (now:DateTime) (state:S) :S= state.Inc now
+    let inline addBid (bid:Bid) (state:S)=state.AddBid bid
+    let inline getBids (state:S)=state.GetBids ()
+    let inline tryGetAmountAndWinner (state:S)=state.TryGetAmountAndWinner ()
+    let inline hasEnded (state:S)=state.HasEnded ()
 
 type Command = 
   | AddAuction of DateTime * Auction
