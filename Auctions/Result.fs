@@ -42,12 +42,12 @@ type AsyncResultBuilder() =
       let r = f q
       return! r
     }
-  member this.Return(x:'a) : AsyncResult<'a,'e> = async { return Ok x }
-  member this.Zero() : AsyncResult<unit,'e> = async { return Ok () }
-  member this.ReturnFrom(x : AsyncResult<'a,'e>) = x
-  member this.Delay(f: unit ->  AsyncResult<'a,'e>) = async { return! f () }
-  member this.Bind(x :AsyncResult<'a,'e>, f : 'a -> AsyncResult<'b,'e>) : AsyncResult<'b,'e> = bind f x
-  member this.Bind(x :Result<'a,'e>, f: 'a -> AsyncResult<'b,'e>): AsyncResult<'b,'e>  = resultAsyncBind f x 
+  member __.Return(x:'a) : AsyncResult<'a,'e> = async { return Ok x }
+  member __.Zero() : AsyncResult<unit,'e> = async { return Ok () }
+  member __.ReturnFrom(x : AsyncResult<'a,'e>) = x
+  member __.Delay(f: unit ->  AsyncResult<'a,'e>) = async { return! f () }
+  member __.Bind(x :AsyncResult<'a,'e>, f : 'a -> AsyncResult<'b,'e>) : AsyncResult<'b,'e> = bind f x
+  member __.Bind(x :Result<'a,'e>, f: 'a -> AsyncResult<'b,'e>): AsyncResult<'b,'e>  = resultAsyncBind f x 
 
 
 let asyncResult = AsyncResultBuilder()

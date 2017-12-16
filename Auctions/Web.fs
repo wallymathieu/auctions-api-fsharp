@@ -175,7 +175,7 @@ let webPart (agent : AuctionDelegator) =
       | UserLoggedOn user -> 
         POST >=> handleCommandAsync (JsonResult.toPostedPlaceBid id user))
   
-  choose [ path "/" >=> (Successful.OK "")
+  choose [ path "/" >=> (OK "")
            path Paths.Auction.overview >=> overview
            path Paths.Auction.register >=> register
            pathScan Paths.Auction.details details

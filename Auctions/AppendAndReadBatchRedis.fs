@@ -18,7 +18,7 @@ type AppendAndReadBatchRedis(connStr:string) =
   let commandsKey = redisKey "Commands"
   interface IAppendBatch with
     
-    member this.Batch commands = 
+    member __.Batch commands = 
       let batch = db.CreateBatch()
       let ids = new List<RedisValue>()
       for command in commands do
@@ -27,7 +27,7 @@ type AppendAndReadBatchRedis(connStr:string) =
       batch.SetAddAsync(commandsKey, ids |> Seq.toArray, CommandFlags.None) |> ignore
       batch.Execute()
     
-    member this.ReadAll() = 
+    member __.ReadAll() = 
       let commands = db.SetMembers(commandsKey, CommandFlags.None)
       commands
       |> Array.map( (db.HashGetAll<<valueToKey) >>mapFromHashEntries )

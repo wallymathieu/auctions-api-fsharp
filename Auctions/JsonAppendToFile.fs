@@ -15,7 +15,7 @@ type private ShortNameSerializationBinder(type' : Type) =
   
   interface Serialization.ISerializationBinder with
     
-    member this.BindToName(serializedType, assemblyName, typeName) = 
+    member __.BindToName(serializedType, assemblyName, typeName) = 
       if (type'.IsAssignableFrom(serializedType)) then 
         assemblyName <- null
         typeName <- serializedType.Name
@@ -25,14 +25,14 @@ type private ShortNameSerializationBinder(type' : Type) =
         typeName <- serializedType.FullName
         ()
     
-    member this.BindToType(assemblyName, typeName) = 
+    member __.BindToType(assemblyName, typeName) = 
       if (String.IsNullOrEmpty(assemblyName) && types.ContainsKey(typeName)) then types.[typeName]
       else Type.GetType(String.Format("{0}, {1}", typeName, assemblyName), true)
 
 
 type JsonAppendToFile(fileName) = 
-  let _binder = new ShortNameSerializationBinder(typeof<Command>)
-  let settings = new JsonSerializerSettings()
+  let _binder = ShortNameSerializationBinder(typeof<Command>)
+  let settings = JsonSerializerSettings()
   
   do
     if (not << File.Exists) fileName then File.WriteAllText(fileName, "")
@@ -44,14 +44,14 @@ type JsonAppendToFile(fileName) =
 
   interface IAppendBatch with
     
-    member this.Batch cs = 
+    member __.Batch cs = 
       use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
       use w = new StreamWriter(fs)
       let json = JsonConvert.SerializeObject( (cs |> List.toArray), settings)
       w.WriteLine json
       fs.Flush()
     
-    member this.ReadAll() = 
+    member __.ReadAll() = 
       use fs = File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.Read)
       use r = new StreamReader(fs)
       seq { 

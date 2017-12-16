@@ -241,7 +241,7 @@ module State=
         ongoing
       else
         HasEnded (bids, expiry, opt)
-    | HasEnded (bids,expired, opt) as ended ->
+    | HasEnded _ as ended ->
         ended
     member state.addBid (b:Bid) = // note that this is increment + mutate in one operation
       match state with
@@ -266,11 +266,11 @@ module State=
               ongoing, Error (MustPlaceBidOverHighestBid highestBid.amount)
         else
           HasEnded (bids, expiry, opt), Error (AuctionHasEnded b.auction)
-      | HasEnded (bids,expired, opt) as ended ->
+      | HasEnded _ as ended ->
           ended,Error (AuctionHasEnded b.auction)
     member state.tryGetAmountAndWinner () =
       match state with
-      | HasEnded (bid::rest,expired, opt) when opt.reservePrice<bid.amount -> Some (bid.amount, bid.user)
+      | HasEnded (bid::_ ,_ , opt) when opt.reservePrice<bid.amount -> Some (bid.amount, bid.user)
       | _ -> None
     member state.getBids()=
       match state with
@@ -309,22 +309,22 @@ module State=
         | false, false -> AcceptingBids (bids.Add (u,b), expiry, opt), Ok()
         | _, true -> acceptingBids, Error AlreadyPlacedBid 
         | true,_ -> 
-          let bids=bids|>Map.toList|>List.map snd
+          let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.getAmount
           DisclosingBids(bids,expiry, opt), Error (AuctionHasEnded b.auction)
       | DisclosingBids _ as disclosingBids-> 
         disclosingBids, Error (AuctionHasEnded b.auction)
     member state.tryGetAmountAndWinner () =
       match state with
-      | DisclosingBids (highestBid :: secondHighest :: _, expired, Vickrey) ->
+      | DisclosingBids (highestBid :: secondHighest :: _, _, Vickrey) ->
         Some (secondHighest.amount,highestBid.user)
-      | DisclosingBids (highestBid :: [], expired, Vickrey) ->
+      | DisclosingBids ([highestBid], _, Vickrey) ->
         Some (highestBid.amount,highestBid.user)
-      | DisclosingBids (highestBid :: _, expired, Blind) ->
+      | DisclosingBids (highestBid :: _, _, Blind) ->
         Some (highestBid.amount,highestBid.user)
       | _  -> None
     member state.getBids() =
       match state with
-      | DisclosingBids (bids,expired,t)->bids
+      | DisclosingBids (bids, _, _)->bids
       | AcceptingBids _-> []
     member state.hasEnded ()=match state with | DisclosingBids _ -> true | _ -> false
 

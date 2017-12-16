@@ -9,9 +9,9 @@ let redisValueStr (str : string) = RedisValue.op_Implicit str
 let redisValueInt64 (v : int64) = RedisValue.op_Implicit v
 let redisValueFloat (v : float) = RedisValue.op_Implicit v
 let valueToKey (v : RedisValue) : RedisKey = RedisKey.op_Implicit (v.ToString())
-let hashEntryStr key value = new HashEntry(redisValueStr key, redisValueStr value)
-let hashEntryInt64 key value = new HashEntry(redisValueStr key, redisValueInt64 value)
-let hashEntryFloat key value = new HashEntry(redisValueStr key, redisValueFloat value)
+let hashEntryStr key value = HashEntry(redisValueStr key, redisValueStr value)
+let hashEntryInt64 key value = HashEntry(redisValueStr key, redisValueInt64 value)
+let hashEntryFloat key value = HashEntry(redisValueStr key, redisValueFloat value)
 
 let mapToHashEntries command = 
   let withType t xs = hashEntryStr "Type" t :: xs
@@ -87,7 +87,7 @@ let mapFromHashEntries entries : Command =
     let user = 
       entries
       |> findEntryStr "User"
-      |> Domain.User.tryParse
+      |> User.tryParse
 
     if user.IsNone then failwith "missing user in auction data!"
 
@@ -118,7 +118,7 @@ let mapFromHashEntries entries : Command =
     let id = 
       entries
       |> findEntryStr "Id"
-      |> Domain.BidId.Parse
+      |> BidId.Parse
     
     let auction = entries |> findEntryInt64 "Auction"
     let amount = entries |> findEntryInt64 "AmountValue"
@@ -127,7 +127,7 @@ let mapFromHashEntries entries : Command =
     let user = 
       entries
       |> findEntryStr "User"
-      |> Domain.User.tryParse
+      |> User.tryParse
     
     let at = 
       entries

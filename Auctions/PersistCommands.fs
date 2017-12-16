@@ -12,7 +12,7 @@ type PersistCommands(appendBatches : (Command list -> unit) list) =
   let commands = new ConcurrentQueue<Command>()
   let signal = new EventWaitHandle(false, EventResetMode.AutoReset)
   
-  let AppendBatch() = 
+  let appendBatch() = 
     let receivedCommands = new List<Command>(10)
     let command =ref (Unchecked.defaultof<Command>)
     while (commands.TryDequeue(command)) do
@@ -21,13 +21,13 @@ type PersistCommands(appendBatches : (Command list -> unit) list) =
     for appendBatch in appendBatches do 
       appendBatch toAppend
   
-  member this.ThreadStart() = 
+  member __.ThreadStart() = 
     while (not !stop) do
       signal.WaitOne() |> ignore
-      AppendBatch()
+      appendBatch()
     // While the batch has been running, more commands might have been added
     // and stop might have been called
-    AppendBatch()
+    appendBatch()
   
   member this.Start() = 
     if (thread <> null) then failwith ("already started")
@@ -35,15 +35,15 @@ type PersistCommands(appendBatches : (Command list -> unit) list) =
       thread <- new Thread(this.ThreadStart)
       thread.Start()
   
-  member this.Started() = thread <> null
+  member __.Started() = thread <> null
   
-  member this.Stop() = 
+  member __.Stop() = 
     stop := true
     signal.Set() |> ignore
     if (thread <> null) then thread.Join()
     else ()
   
-  member this.Handle(command) = 
+  member __.Handle(command) = 
     // send the command to separate thread and persist it
     commands.Enqueue(command)
     signal.Set() |> ignore

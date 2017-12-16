@@ -50,8 +50,7 @@ let main argv =
       }
   let persist = PersistCommands (appenders |> Seq.map (fun a->a.Batch) |> List.ofSeq)
   let commands = appenders
-                 |> Seq.map (fun a->a.ReadAll())
-                 |> Seq.concat
+                 |> Seq.collect (fun a->a.ReadAll()) 
                  |> Seq.toList
 
   persist.Start()

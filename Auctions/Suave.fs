@@ -17,15 +17,15 @@ module Json=
 let JSON v : WebPart= 
   Json.stringify v
   |> OK
-  >=> Writers.setMimeType "application/json; charset=utf-8"
+  >=> setMimeType "application/json; charset=utf-8"
 
-let JSONorBAD_REQUEST (result:Result<_,_>) : WebPart=
+let ``JSONorBAD_REQUEST`` (result:Result<_,_>) : WebPart=
   match result with
   | Ok v -> JSON v
   | Error err -> 
     Json.stringify err
     |> BAD_REQUEST
-    >=> Writers.setMimeType "application/json; charset=utf-8"
+    >=> setMimeType "application/json; charset=utf-8"
 
 let private getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
 
