@@ -24,7 +24,7 @@ module ``Auction agent tests`` =
 
   let buyer = BuyerOrSeller("x2", "Buyer")
 
-  let emptyHandler= fun c-> ()
+  let emptyHandler= ignore
   let validBid = { id = BidId.NewGuid()
                    auction =1L
                    user=buyer
