@@ -32,3 +32,24 @@ let bid =
       user = buyer
       amount = sek 100L
       at = DateTime(2016, 1, 2) }
+
+let buyer1 = BuyerOrSeller("x2", "Buyer")
+let buyer2 = BuyerOrSeller("x3", "Buyer")
+
+let bid1 = { id = BidId.NewGuid()
+             auction =1L
+             user=buyer1
+             amount =Amount.parse "SEK10"
+             at = startsAt.AddHours(1.0)
+           } 
+let bid2 = { id = BidId.NewGuid()
+             auction =1L
+             user=buyer2
+             amount =Amount.parse "SEK12"
+             at = startsAt.AddHours(2.0)
+           } 
+
+let addBidsToState state=
+  state
+  |> S.addBid bid1 |> fst
+  |> S.addBid bid2 |> fst

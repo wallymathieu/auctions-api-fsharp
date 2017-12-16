@@ -1,21 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netcoreapp2.0</TargetFramework>
-    <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Auctions\Auctions.fsproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.3.*" />
-    <PackageReference Include="xunit" Version="2.2.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.2.0" />
-  </ItemGroup>
-  <ItemGroup>
     <Compile Include="TestsModule.fs" />
     <Compile Include="UserTests.fs" />
     <Content Include="TestData.xml" />
+    <Compile Include="AuctionStateSpecs.fs" />
+    <Compile Include="VickreyAuctionStateSpec.fs" />
+    <Compile Include="BlindAuctionStateSpec.fs" />
+    <Compile Include="EnglishAuctionStateSpec.fs" />
     <Compile Include="AuctionStateTests.fs" />
     <Compile Include="AuctionValidateBidTests.fs" />
     <Compile Include="ResultTests.fs" />
@@ -23,5 +20,11 @@
     <Compile Include="AuctionBidValidationTests.fs" />
     <Compile Include="ActorTests.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.3.*" />
+    <PackageReference Include="xunit" Version="2.2.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.2.0" />
   </ItemGroup>
 </Project>
