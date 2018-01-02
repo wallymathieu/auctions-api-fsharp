@@ -3,6 +3,7 @@ open Auctions.Domain
 
 open System
 open System.Collections.Generic
+open FSharpPlus
 
 type Agent<'T> = MailboxProcessor<'T>
 type AuctionEnded = (Amount * User) option
@@ -24,7 +25,7 @@ type AuctionAgent(auction, state:S) =
          let! msg = inbox.Receive()
          match msg with
          | AgentBid(bid, reply) -> 
-           reply.Reply(result { 
+           reply.Reply(monad { 
                          do! validateBid bid
                          let (next,res)=S.addBid bid state
                          state <- next
@@ -84,7 +85,7 @@ type private Repository ()=
       else
         ()
     | PlaceBid (_,b)->
-      maybe { 
+      monad { 
         let! (auction,state) = match auctions.TryGetValue b.auction with
                                | true, value -> Some(value)
                                | false, _ -> None
