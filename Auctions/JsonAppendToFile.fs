@@ -33,9 +33,10 @@ type private ShortNameSerializationBinder(type' : Type) =
 type JsonAppendToFile(fileName) = 
   let _binder = ShortNameSerializationBinder(typeof<Command>)
   let settings = JsonSerializerSettings()
+  let notNull= not << isNull
   
   do
-    if (not << File.Exists) fileName then File.WriteAllText(fileName, "")
+    if not <| File.Exists fileName then File.WriteAllText(fileName, "")
     else 
         ()
 
@@ -47,7 +48,7 @@ type JsonAppendToFile(fileName) =
     member __.Batch cs = 
       use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
       use w = new StreamWriter(fs)
-      let json = JsonConvert.SerializeObject( (cs |> List.toArray), settings)
+      let json = JsonConvert.SerializeObject(List.toArray cs, settings)
       w.WriteLine json
       fs.Flush()
     
@@ -59,9 +60,9 @@ type JsonAppendToFile(fileName) =
         
         let readLine() = 
           line := r.ReadLine()
-          !line
-        while (null <> readLine()) do
-          yield JsonConvert.DeserializeObject<Command array>(!line, settings)
+          line.Value
+        while (notNull <| readLine()) do
+          yield JsonConvert.DeserializeObject<Command array>(line.Value, settings)
       }
       |> Seq.concat
       |> Seq.toList

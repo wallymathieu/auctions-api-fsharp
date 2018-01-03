@@ -7,6 +7,7 @@ open System.Collections.Generic
 open System.Threading
 
 type PersistCommands(appendBatches : (Command list -> unit) list) = 
+  let notNull = not << isNull
   let mutable thread = null
   let stop = ref false
   let commands = new ConcurrentQueue<Command>()
@@ -22,7 +23,7 @@ type PersistCommands(appendBatches : (Command list -> unit) list) =
       appendBatch toAppend
   
   member __.ThreadStart() = 
-    while (not !stop) do
+    while (not stop.Value) do
       signal.WaitOne() |> ignore
       appendBatch()
     // While the batch has been running, more commands might have been added
@@ -30,17 +31,17 @@ type PersistCommands(appendBatches : (Command list -> unit) list) =
     appendBatch()
   
   member this.Start() = 
-    if (thread <> null) then failwith ("already started")
+    if (notNull thread) then failwith ("already started")
     else 
-      thread <- new Thread(this.ThreadStart)
+      thread <- Thread(this.ThreadStart)
       thread.Start()
   
-  member __.Started() = thread <> null
+  member __.Started() = notNull thread
   
   member __.Stop() = 
     stop := true
     signal.Set() |> ignore
-    if (thread <> null) then thread.Join()
+    if (notNull thread) then thread.Join()
     else ()
   
   member __.Handle(command) = 
