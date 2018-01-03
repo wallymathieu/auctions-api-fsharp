@@ -9,7 +9,6 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Result.fs" />
-    <Compile Include="Option.fs" />
     <Compile Include="Parse.fs" />
     <Compile Include="Suave.fs" />
     <Compile Include="Domain.fs" />
