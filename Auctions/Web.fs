@@ -134,15 +134,13 @@ let webPart (agent : AuctionDelegator) =
               return! JSON (r |>List.toArray) ctx
             }
 
-  let getAuctionResult id : Async<Result<AuctionAndBidsAndMaybeWinnerAndAmount,Errors>>=
-      let auctionAndBids = monad {
-                        let! auctionAndBids = agent.GetAuction id
-                        return match auctionAndBids with
-                                | Some v-> Ok v
-                                | None -> Error (UnknownAuction id)
-                      }
-      JsonResult.getAuctionResult <!> auctionAndBids
-    
+  let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
+      monad {
+        let! auctionAndBids = agent.GetAuction id
+        match auctionAndBids with
+        | Some v-> return Ok <| JsonResult.getAuctionResult v
+        | None -> return Error (UnknownAuction id)
+      }
 
   let details id  = GET >=> JSON(getAuctionResult id)
   
