@@ -77,7 +77,7 @@ type private Repository ()=
   member __.Auctions() : (Auction*S) list = 
     auctions.Values |> Seq.toList
 
-  member __.handle = function 
+  member __.Handle = function 
     | AddAuction (_,a)->
       if not (auctions.ContainsKey a.id) then
         let empty =Auction.emptyState a
@@ -85,16 +85,14 @@ type private Repository ()=
       else
         ()
     | PlaceBid (_,b)->
-      monad { 
-        let! (auction,state) = match auctions.TryGetValue b.auction with
-                               | true, value -> Some(value)
-                               | false, _ -> None
-        match Auction.validateBid b auction with
-        | Ok _ ->
-          let (next,_)= S.addBid b state
-          auctions.[auction.id]<- (auction,next)
-        | Error _ -> ()
-      } |> ignore
+        match auctions.TryGetValue b.auction with
+        | true, (auction,state) -> 
+          match Auction.validateBid b auction with
+          | Ok _ ->
+            let (next,_)= S.addBid b state
+            auctions.[auction.id]<- (auction,next)
+          | Error _ -> ()
+        | false, _ -> ()
 
 let createAgent auction bids = AuctionAgent (auction,bids)
 type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
@@ -114,7 +112,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
   let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
     let mutable agents = let _now =now()
                          let r = Repository()
-                         List.iter r.handle commands
+                         List.iter r.Handle commands
                          r.Auctions()
                          |> List.map (fun (auction,state)->
                                         let next =S.inc _now state
