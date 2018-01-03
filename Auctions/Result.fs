@@ -1,20 +1,15 @@
 ﻿[<AutoOpen>]
 module Auctions.Results
 
-module Result=
-  let ofOption onMissing = function
-    | Some x -> Ok x
-    | None   -> Error onMissing
-
 type ResultBuilder() = 
-  member this.Bind(x, f) = Result.bind f x
-  member this.ReturnFrom x = x
-  member this.Zero() = Result.Ok()
-  member this.Return(x) = Result.Ok(x)
+  member __.Bind(x, f) = Result.bind f x
+  member __.ReturnFrom x = x
+  member __.Zero() = Result.Ok()
+  member __.Return(x) = Result.Ok(x)
 
-  member this.Delay f= f()
+  member __.Delay f= f()
 
-let result = new ResultBuilder()
+let result = ResultBuilder()
 
 //from https://github.com/SuaveIO/suave/blob/master/src/Suave/WebPart.fs
 type AsyncResult<'a,'e> = Async<Result< 'a,'e>>
