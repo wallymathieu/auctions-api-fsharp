@@ -12,11 +12,6 @@ type ResultBuilder() =
   member this.Zero() = Result.Ok()
   member this.Return(x) = Result.Ok(x)
 
-  member this.Yield x= 
-    Ok x
-  member this.YieldFrom x= 
-    x
-
   member this.Delay f= f()
 
 let result = new ResultBuilder()

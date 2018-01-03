@@ -94,9 +94,9 @@ module JsonResult=
   let toPostedAuction user = 
       getBodyAsJSON<AddAuctionReq> 
         >> Result.map (fun a -> 
-        let currency= Currency.tryParse a.currency |> Option.getOrElse Currency.VAC
+        let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
         
-        let typ = Type.tryParse a.typ |> Option.getOrElse (TimedAscending { 
+        let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending { 
                                                                             reservePrice=Amount.zero currency 
                                                                             minRaise =Amount.zero currency
                                                                             timeFrame =TimeSpan.FromSeconds(0.0)
