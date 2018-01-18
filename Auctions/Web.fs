@@ -1,11 +1,6 @@
 ﻿module Auctions.Web
 open System
-open Suave
-open Suave.Filters
-open Suave.Operators
-open Suave.RequestErrors
-open Suave.Successful
-open Suave.Writers
+open Giraffe
 
 open Auctions.Domain
 open Auctions.Actors

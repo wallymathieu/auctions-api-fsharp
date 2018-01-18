@@ -10,7 +10,7 @@
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Result.fs" />
     <Compile Include="Parse.fs" />
-    <Compile Include="Suave.fs" />
+    <Compile Include="Giraffe.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="AppendBatch.fs" />
     <Compile Include="MapToRedis.fs" />
@@ -26,7 +26,7 @@
     <PackageReference Include="FSharp.Core" Version="4.2.*" />
     <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
     <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
-    <PackageReference Include="Suave" Version="2.2.*" />
+    <PackageReference Include="Giraffe" Version="0.1.0-beta-700" />
     <PackageReference Include="Saithe" Version="2.1.0" />
     <DotNetCliToolReference Include="Microsoft.DotNet.Watcher.Tools" Version="2.0.0" />
   </ItemGroup>
