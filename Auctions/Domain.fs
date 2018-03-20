@@ -4,7 +4,7 @@ open System
 open System.ComponentModel
 open Newtonsoft.Json
 open Saithe
-
+open FSharpPlus
 type Currency = 
   /// virtual acution currency
   |VAC=1001  
@@ -14,7 +14,7 @@ type Currency =
   |DKK=208
 
 module Currency=
-  let tryParse c : Currency option= Parse.toTryParse Currency.TryParse c
+  let tryParse c : Currency option= tryParse c
 
 type UserId = string
 
@@ -86,7 +86,7 @@ module Amount=
   let zero c= { currency=c ; value=0L}
 
 let (|Amount|_|) = Amount.tryParse
-let (|Int64|_|) = Parse.toTryParse Int64.TryParse
+let (|Int64|_|) = tryParse
 
 module Timed = 
   let atNow a = (DateTime.UtcNow, a)

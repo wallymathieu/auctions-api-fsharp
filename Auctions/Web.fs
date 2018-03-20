@@ -1,6 +1,12 @@
 ﻿module Auctions.Web
 open System
+open FSharpPlus
 open Giraffe
+
+open Microsoft.AspNetCore.Authentication
+open Microsoft.AspNetCore.Builder
+open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.Http
 
 open Auctions.Domain
 open Auctions.Actors
@@ -13,15 +19,12 @@ type Session =
   | NoSession
   | UserLoggedOn of User
 
-let authenticated f = 
-  context (fun x -> 
-    match x.request.header "x-fake-auth" with
-    | Choice1Of2 u -> 
-        User.tryParse u |> function | Some user->
-                                        f (UserLoggedOn(user))
-                                    | None ->f NoSession
-    | Choice2Of2 _ -> f NoSession)
-
+let authenticated f = fun (next:HttpFunc) (httpContext:HttpContext) -> 
+    (match httpContext.Request.Headers.TryGetValue "x-fake-auth" with
+    | (true, u) -> 
+        User.tryParse (u.ToString()) 
+        |> function | Some user-> f (UserLoggedOn(user)) | None ->f NoSession
+    | _ -> f NoSession) next httpContext
 
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -86,9 +89,11 @@ module JsonResult=
       winnerPrice = winnerPrice
     }
 
-  let toPostedAuction user = 
-      getBodyAsJSON<AddAuctionReq> 
-        >> Result.map (fun a -> 
+  let toPostedAuction user httpContext = 
+    task {
+       let! body = getBodyAsJSON<AddAuctionReq> httpContext
+        
+       let res = body |> Result.map (fun a -> 
         let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
         
         let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending { 
@@ -106,75 +111,79 @@ module JsonResult=
         }
         |> Timed.atNow
         |> AddAuction)
-        >> Result.mapError exnToInvalidUserData
+      return Result.mapError exnToInvalidUserData res
+    }
 
-  let toPostedPlaceBid id user = 
-    getBodyAsJSON<BidReq> 
-      >> Result.map (fun a -> 
-      let d = DateTime.UtcNow
-      (d, 
-       { user = user; id= BidId.NewGuid();
-         amount=a.amount;auction=id
-         at = d })
-      |> PlaceBid)
-      >> Result.mapError exnToInvalidUserData
+  let toPostedPlaceBid id user httpContext= 
+    task {
+      let! body = getBodyAsJSON<BidReq> httpContext
+      let res = body |> Result.map (fun a -> 
+        let d = DateTime.UtcNow
+        (d, 
+         { user = user; id= BidId.NewGuid();
+           amount=a.amount;auction=id
+           at = d })
+        |> PlaceBid)
+      return Result.mapError exnToInvalidUserData res
+    }
 
 let webPart (agent : AuctionDelegator) = 
 
   let overview = 
-    GET >=> fun (ctx) ->
-            async {
-              let! r = agent.GetAuctions()
-              return! JSON (r |>List.toArray) ctx
+    GET >=> fun (next:HttpFunc) ctx ->
+            task {
+              let! r = agent.GetAuctions() |> Async.StartAsTask
+              return! (json (r |>List.toArray)) next ctx
             }
 
   let getAuctionResult id=
-    asyncResult{
-      let! auctionAndBids = async{
-                        let! auctionAndBids = agent.GetAuction id
-                        return match auctionAndBids with
-                                | Some v-> Ok v
-                                | None -> Error (UnknownAuction id)
-                      }
-      return JsonResult.getAuctionResult auctionAndBids
+    monad {
+      let! auctionAndBids = agent.GetAuction id
+      match auctionAndBids with
+      | Some v-> return Ok <| JsonResult.getAuctionResult v
+      | None -> return Error (UnknownAuction id)
     }
 
-  let details id  = GET >=> JSON(getAuctionResult id)
+  let details id  = GET >=> json(getAuctionResult id)
 
   /// handle command and add result to repository
-  let handleCommandAsync (maybeC:Result<_,_>) = 
-    asyncResult{
-      let! c=maybeC
-      return agent.UserCommand c
+  let handleCommandAsync 
+    (maybeC:Result<Command,_>) :Async<Result<_,_>> = 
+    monad {
+      match agent.UserCommand <!> maybeC with 
+      | Ok asyncR-> 
+          let! result = asyncR
+          return result
+      | Error c'->return Error c'
     }
   /// turn handle command to webpart
-  let handleCommandAsync toCommand: WebPart = 
-    fun (ctx : HttpContext) ->
-      async {
-        let r = toCommand ctx
-        let! commandResult= handleCommandAsync r
-        return! JSONorBAD_REQUEST commandResult ctx
+  let handleCommandAsync toCommand = 
+    fun next ctx ->
+      monad {
+        let! r = toCommand ctx
+        let! commandResult= handleCommandAsync r |> Async.StartAsTask
+        return! (JSONorBAD_REQUEST commandResult) next ctx
       }
-
+  let unauthorized txt= setStatusCode 401 >=> text txt
   /// register auction
   let register = 
     authenticated (function 
-      | NoSession -> UNAUTHORIZED "Not logged in"
+      | NoSession -> unauthorized "Not logged in"
       | UserLoggedOn user -> 
         POST >=> handleCommandAsync (JsonResult.toPostedAuction user))
 
   /// place bid
   let placeBid (id : AuctionId) = 
     authenticated (function 
-      | NoSession -> UNAUTHORIZED "Not logged in"
+      | NoSession -> unauthorized "Not logged in"
       | UserLoggedOn user -> 
         POST >=> handleCommandAsync (JsonResult.toPostedPlaceBid id user))
   
-  choose [ path "/" >=> (OK "")
-           path Paths.Auction.overview >=> overview
-           path Paths.Auction.register >=> register
-           pathScan Paths.Auction.details details
-           pathScan Paths.Auction.placeBid placeBid ]
+  choose [ route "/" >=> (text "")
+           route Paths.Auction.overview >=> overview
+           route Paths.Auction.register >=> register
+           routef Paths.Auction.details details
+           routef Paths.Auction.placeBid placeBid ]
 
 //curl  -X POST -d '{ "id":"1","startsAt":"2017-01-01","endsAt":"2018-01-01","title":"First auction" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
 

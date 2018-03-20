@@ -1,4 +1,4 @@
-﻿open Suave
+﻿open Giraffe
 open System
 
 open Auctions.Web
@@ -7,7 +7,7 @@ open Auctions
 
 type CmdArgs = 
   { IP : System.Net.IPAddress
-    Port : Sockets.Port
+    //Port : Sockets.Port
     Redis : string option
     Json : string option
   }
@@ -15,13 +15,13 @@ type CmdArgs =
 let main argv = 
   // parse arguments
   let args = 
-    let (|Port|_|) = Parse.toTryParse System.UInt16.TryParse
-    let (|IPAddress|_|) = Parse.toTryParse System.Net.IPAddress.TryParse
+    //let (|Port|_|) = Parse.toTryParse System.UInt16.TryParse
+    //let (|IPAddress|_|) = Parse.toTryParse System.Net.IPAddress.TryParse
     
     //default bind to 127.0.0.1:8083
     let defaultArgs = 
       { IP = System.Net.IPAddress.Loopback
-        Port = 8083us
+        //Port = 8083us
         Redis = None
         Json = None
       }
@@ -29,8 +29,8 @@ let main argv =
     let rec parseArgs b args = 
       match args with
       | [] -> b
-      | "--ip" :: IPAddress ip :: xs -> parseArgs { b with IP = ip } xs
-      | "--port" :: Port p :: xs -> parseArgs { b with Port = p } xs
+      //| "--ip" :: IPAddress ip :: xs -> parseArgs { b with IP = ip } xs
+      //| "--port" :: Port p :: xs -> parseArgs { b with Port = p } xs
       | "--redis" :: conn :: xs -> parseArgs { b with Redis = Some conn } xs
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
       | invalidArgs -> 
