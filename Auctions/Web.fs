@@ -1,5 +1,6 @@
 ﻿module Auctions.Web
 open System
+open FSharpPlus
 open Suave
 open Suave.Filters
 open Suave.Operators
@@ -11,7 +12,7 @@ open Auctions.Domain
 open Auctions.Actors
 open Auctions
 open Newtonsoft.Json
-
+open FSharpPlus.Data
 (* Fake auth in order to simplify web testing *)
 
 type Session = 
@@ -122,7 +123,7 @@ module JsonResult=
          amount=a.amount;auction=id
          at = d })
       |> PlaceBid)
-      >> Result.mapError exnToInvalidUserData
+      >> Result.mapError exnToInvalidUserData 
 
 let webPart (agent : AuctionDelegator) = 
 
@@ -133,25 +134,27 @@ let webPart (agent : AuctionDelegator) =
               return! JSON (r |>List.toArray) ctx
             }
 
-  let getAuctionResult id=
-    asyncResult{
-      let! auctionAndBids = async{
-                        let! auctionAndBids = agent.GetAuction id
-                        return match auctionAndBids with
-                                | Some v-> Ok v
-                                | None -> Error (UnknownAuction id)
-                      }
-      return JsonResult.getAuctionResult auctionAndBids
-    }
+  let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
+      monad {
+        let! auctionAndBids = agent.GetAuction id
+        match auctionAndBids with
+        | Some v-> return Ok <| JsonResult.getAuctionResult v
+        | None -> return Error (UnknownAuction id)
+      }
 
   let details id  = GET >=> JSON(getAuctionResult id)
-
+  
   /// handle command and add result to repository
-  let handleCommandAsync (maybeC:Result<_,_>) = 
-    asyncResult{
-      let! c=maybeC
-      return agent.UserCommand c
+  let handleCommandAsync 
+    (maybeC:Result<Command,_>) :Async<Result<_,_>> = 
+    monad {
+      match agent.UserCommand <!> maybeC with 
+      | Ok asyncR-> 
+          let! result = asyncR
+          return result
+      | Error c'->return Error c'
     }
+
   /// turn handle command to webpart
   let handleCommandAsync toCommand: WebPart = 
     fun (ctx : HttpContext) ->

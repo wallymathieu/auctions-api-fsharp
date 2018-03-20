@@ -11,3 +11,5 @@ script:
 branches:
   only: 
     - master
+    - static_constraints
+

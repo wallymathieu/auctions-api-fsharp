@@ -4,7 +4,7 @@ open System
 open Auctions.Web
 open Auctions.Actors
 open Auctions
-
+open FSharpPlus.Operators
 type CmdArgs = 
   { IP : System.Net.IPAddress
     Port : Sockets.Port
@@ -15,8 +15,8 @@ type CmdArgs =
 let main argv = 
   // parse arguments
   let args = 
-    let (|Port|_|) = Parse.toTryParse System.UInt16.TryParse
-    let (|IPAddress|_|) = Parse.toTryParse System.Net.IPAddress.TryParse
+    let (|Port|_|) : _-> UInt16 option = tryParse
+    let (|IPAddress|_|) :_->System.Net.IPAddress option= tryParse
     
     //default bind to 127.0.0.1:8083
     let defaultArgs = 
