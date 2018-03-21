@@ -127,7 +127,7 @@ module JsonResult=
       return Result.mapError exnToInvalidUserData res
     }
 
-let webPart (agent : AuctionDelegator) = 
+let webApp (agent : AuctionDelegator) = 
 
   let overview = 
     GET >=> fun (next:HttpFunc) ctx ->

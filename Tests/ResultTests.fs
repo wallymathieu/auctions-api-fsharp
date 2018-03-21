@@ -3,22 +3,23 @@
 open Auctions
 open System
 open Xunit
+open FSharpPlus
 
 module ``Result tests`` = 
   let errorIfFalse v = if v then Ok () else Error ()
-  let func param sideEffect= result { 
+  let func param sideEffect= monad { 
                          do! errorIfFalse param
                          sideEffect()
                          return param
                        }
   let returnsOk ()=Ok ()
-  let func2 param sideEffect= result { 
+  let func2 param sideEffect= monad { 
                          do! returnsOk()
                          do! errorIfFalse param
                          sideEffect()
                          return param
                        }
-  let func3 param sideEffect= result { 
+  let func3 param sideEffect= monad { 
                          do! errorIfFalse param
                          do! returnsOk()
                          sideEffect()
