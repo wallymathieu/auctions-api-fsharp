@@ -10,7 +10,12 @@ type AuctionEnded = (Amount * User) option
 
 type AgentSignals = 
   | AgentBid of Bid * IVar<Result<unit, Errors>>
-  | AuctionEnded of DateTime
+  | HasAuctionEnded of DateTime
+with
+  override self.ToString() =
+    match self with
+    | AgentBid (bid,_)-> sprintf "AgentBid (auction: %i, amount: %O, at: %s, user: %O)" bid.auction bid.amount (bid.at.ToString("o")) bid.user
+    | HasAuctionEnded (at)-> sprintf "HasAuctionEnded? (at: %s)" (at.ToString("o"))
 
 type AuctionAgent(auction, state:S) =
   let inbox = Ch ()
@@ -20,7 +25,7 @@ type AuctionAgent(auction, state:S) =
 
   let agent = Job.foreverServer(job {
       let! msg = Ch.take inbox
-      printfn "agent %A is receiving %A" auction.id msg
+      printfn "agent %A is receiving %s" auction.id (msg.ToString())
       match msg with
       | AgentBid(bid, reply) -> 
         match validateBid bid with
@@ -31,11 +36,13 @@ type AuctionAgent(auction, state:S) =
               do! IVar.fill reply res 
               return next
             })
-        | Error err as self->do! IVar.fill reply self
-      | AuctionEnded(now) ->
+        | Error _ as self-> do! IVar.fill reply self
+      | HasAuctionEnded(now) ->
         do! state |> MVar.mutateJob(fun s-> job{
           let next = S.inc now s
           do! ended |> MVar.mutateFun (fun _ -> S.tryGetAmountAndWinner next)
+          let! e = ended |> MVar.read
+          printfn "agent %A is potentially ending auction? %b" auction.id (Option.isSome e)
           return next
         })
   })
@@ -50,7 +57,7 @@ type AuctionAgent(auction, state:S) =
     return S.getBids s
   }
   member __.AuctionEnded time : Job<AuctionEnded>= job {
-    do! Ch.send inbox (AuctionEnded(time))
+    do! Ch.send inbox (HasAuctionEnded(time))
     return! MVar.read ended
   }
   member __.HasEnded time : Job<bool>= job {
@@ -110,8 +117,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
   let agents : MVar<Map<AuctionId,Auction*Choice<AuctionAgent,AuctionEnded*Bid list>>> = MVar()
 
   /// Note, will mutate agents map
-  let ``tryFindTuple_mut`` auctionId : Job<(Auction*Choice<AuctionAgent,AuctionEnded*Bid list>) option> =
-    let now = now()
+  let ``tryFindTuple_mut`` auctionId now: Job<(Auction*Choice<AuctionAgent,AuctionEnded*Bid list>) option> =
     let res = IVar()
     job {
       do! agents|> MVar.mutateJob(fun a-> job {
@@ -138,9 +144,9 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
     }
 
   /// Note, will mutate agents map
-  let ``tryFindAgent_mut`` auctionId :Job<Result<AuctionAgent, Errors>>=
+  let ``tryFindAgent_mut`` auctionId now :Job<Result<AuctionAgent, Errors>>=
     job{
-      let! agent= tryFindTuple_mut auctionId
+      let! agent= tryFindTuple_mut auctionId now
       match agent with
       | Some (_, Choice1Of2 auctionAgent) ->
         return Ok auctionAgent
@@ -161,10 +167,10 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
           else do! IVar.fill reply (Error (AuctionHasEnded auction.id))
         | PlaceBid(at, bid) -> 
           let auctionId = Command.getAuction cmd
-          let! maybeAgent = tryFindAgent_mut auctionId
+          let! maybeAgent = tryFindAgent_mut auctionId now
           match maybeAgent with
           | Ok auctionAgent ->
-            let! m' = auctionAgent.AgentBid bid 
+            let! m' = auctionAgent.AgentBid bid
             do! IVar.fill reply (m' |> Result.map (fun () -> BidAccepted(at, bid)))
           | Error err -> 
             do! IVar.fill reply (Error err)
@@ -193,8 +199,8 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
 
 
 
-  let getAuction auctionId (reply:IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>)= job {
-    let! t= tryFindTuple_mut auctionId
+  let getAuction auctionId now (reply:IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>)= job {
+    let! t= tryFindTuple_mut auctionId now
     match t with
     | None  -> do! IVar.fill reply None 
     | Some (auction, Choice1Of2 agent) -> 
@@ -205,16 +211,17 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
   }
   let agent = Job.foreverServer(job {
     let! msg = Ch.take inbox
-    printfn "delegator agent is receiving %A" msg
-    let now = now()
+    let _now :DateTime= now() // needed to keep ionide happy
+    let ts = _now.ToString("o")
+    printfn "delegator agent is receiving %A %s" msg ts
     match msg with
       | UserCommand(cmd, reply) -> 
         do persistCommand cmd
-        do! userCommand cmd now reply
+        do! userCommand cmd _now reply
       | GetAuction (auctionId,reply) ->
-        do! getAuction auctionId reply
+        do! getAuction auctionId _now reply
       | WakeUp -> 
-        do! wakeUp now
+        do! wakeUp _now
   })
   member __.UserCommand cmd =job{
     let reply = IVar()

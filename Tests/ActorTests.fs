@@ -6,6 +6,7 @@ open Auctions.Actors
 open Hopac
 open System
 open Xunit
+open System.Globalization
 
 module ``Auction agent tests`` = 
   let seller = BuyerOrSeller("x1", "Seller")
@@ -44,7 +45,9 @@ module ``Auction agent tests`` =
       Assert.Equal(Ok (BidAccepted (t, validBid)), res)
       t <- auction.expiry.AddDays(1.5)
       do! d.WakeUp()
-      let! maybeAuctionAndBids =  d.GetAuction auction.id 
+      // ensure that wake up call goes through
+      do! timeOut (TimeSpan.FromSeconds 0.1)
+      let! maybeAuctionAndBids = d.GetAuction auction.id 
       //printfn "++++++++++++++++++++++++\n%A\n++++++++++++++++++++++++" maybeAuctionAndBids
       Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
     }
