@@ -18,8 +18,9 @@ type AuctionAgent(auction, state:S) =
   let state = MVar state
   let ended = MVar None
 
-  let agent = Job.foreverServer(job { 
+  let agent = Job.foreverServer(job {
       let! msg = Ch.take inbox
+      printfn "agent %A is receiving %A" auction.id msg
       match msg with
       | AgentBid(bid, reply) -> 
         match validateBid bid with
@@ -100,7 +101,7 @@ type DelegatorSignals =
 
 type AuctionDelegator(commands:Command list, persistCommand, now) = 
   let inbox = Ch ()
-  let agents : MVar<Map<AuctionId,Auction*Choice<AuctionAgent,AuctionEnded*Bid list>>> = 
+  let initialAgents = 
         let _now =now()
         let r = Repository()
         List.iter r.Handle commands
@@ -113,6 +114,8 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
                     else auction,Choice2Of2 (S.tryGetAmountAndWinner next, S.getBids next)
                   )
         |> Map
+  let agents : MVar<Map<AuctionId,Auction*Choice<AuctionAgent,AuctionEnded*Bid list>>> = 
+        initialAgents
         |> MVar
 
 
@@ -162,7 +165,9 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
         match cmd with
         | AddAuction(at, auction) -> 
           if auction.startsAt > now then
-            do! agents|> MVar.mutateFun(fun a-> a.Add(auction.id, (auction ,Choice1Of2 (createAgent auction (Auction.emptyState auction)))))
+            let agent = createAgent auction (Auction.emptyState auction)
+            do! agent.Job
+            do! agents|> MVar.mutateFun(fun a-> a.Add(auction.id, (auction ,Choice1Of2 (agent))))
             do! IVar.fill reply (Ok (AuctionAdded(at, auction)))
           else do! IVar.fill reply (Error (AuctionHasEnded auction.id))
         | PlaceBid(at, bid) -> 
@@ -211,6 +216,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
   }
   let agent = Job.foreverServer(job {
     let! msg = Ch.take inbox
+    printfn "delegator agent is receiving %A" msg
     let now = now()
     match msg with
       | UserCommand(cmd, reply) -> 
@@ -240,6 +246,16 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
     do! Ch.send inbox (GetAuction(auctionId,reply))
     return! IVar.read reply
   }
-  member __.Job = agent
+  member __.InitialJobs =
+     agent :: (
+             initialAgents
+             |> Map.toList
+             |> List.map (snd>>snd)
+             |> List.choose (function 
+                  |Choice1Of2 a->Some (a.Job)
+                  |Choice2Of2 _ ->None
+             ))
+             
+   
 
 let createAgentDelegator r = AuctionDelegator r
