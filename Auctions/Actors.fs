@@ -34,6 +34,7 @@ type AuctionAgent(auction, state:S) =
             job {
               let (next,res)=S.addBid bid s
               do! IVar.fill reply res 
+              do! ended |> MVar.mutateFun (fun _ -> S.tryGetAmountAndWinner next)
               return next
             })
         | Error _ as self-> do! IVar.fill reply self
@@ -123,21 +124,18 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
       do! agents|> MVar.mutateJob(fun a-> job {
             match a |> Map.tryFind auctionId with
             | Some (auction, Choice1Of2 auctionAgent) as v -> 
-              let! hasEnded = auctionAgent.AuctionEnded(now)
-              match hasEnded with
-              | Some ended ->
+              let! hasEnded' = auctionAgent.AuctionEnded(now)
+              match hasEnded' with
+              | Some _ as hasEnded->
                 let! bids = auctionAgent.GetBids()
                 let value =(auction,Choice2Of2 (hasEnded,bids))
                 do! IVar.fill res (Some value)
-                return (a.Add(auction.id, value))
+                return Map.add auction.id value a
               | None ->
                 do! IVar.fill res v
                 return a
-            | Some v ->
-              do! IVar.fill res (Some v)
-              return a
-            | None -> 
-              do! IVar.fill res None
+            | _ as v ->
+              do! IVar.fill res v
               return a
           })
       return! IVar.read res 
@@ -196,8 +194,6 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
                                   |> Job.seqCollect
                       return Map.ofSeq next
     })
-
-
 
   let getAuction auctionId now (reply:IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>)= job {
     let! t= tryFindTuple_mut auctionId now
