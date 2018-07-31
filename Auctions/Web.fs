@@ -13,6 +13,7 @@ open Auctions.Actors
 open Auctions
 open Newtonsoft.Json
 open FSharpPlus.Data
+open Hopac
 (* Fake auth in order to simplify web testing *)
 
 type Session = 
@@ -130,13 +131,13 @@ let webPart (agent : AuctionDelegator) =
   let overview = 
     GET >=> fun (ctx) ->
             async {
-              let! r = agent.GetAuctions()
+              let! r = agent.GetAuctions() |> Job.toAsync
               return! JSON (r |>List.toArray) ctx
             }
 
   let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
       monad {
-        let! auctionAndBids = agent.GetAuction id
+        let! auctionAndBids = agent.GetAuction id |> Job.toAsync
         match auctionAndBids with
         | Some v-> return Ok <| JsonResult.getAuctionResult v
         | None -> return Error (UnknownAuction id)
@@ -150,7 +151,7 @@ let webPart (agent : AuctionDelegator) =
     monad {
       match agent.UserCommand <!> maybeC with 
       | Ok asyncR-> 
-          let! result = asyncR
+          let! result = asyncR |> Job.toAsync
           return result
       | Error c'->return Error c'
     }

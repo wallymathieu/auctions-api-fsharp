@@ -11,8 +11,6 @@ type AuctionEnded = (Amount * User) option
 type AgentSignals = 
   | AgentBid of Bid * IVar<Result<unit, Errors>>
   | AuctionEnded of DateTime
-  //| HasEnded of DateTime * AsyncReplyChannel<Boolean>
-  //| CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded>
 
 type AuctionAgent(auction, state:S) =
   let inbox = Ch ()
@@ -20,19 +18,21 @@ type AuctionAgent(auction, state:S) =
   let state = MVar state
   let ended = MVar None
 
-  let agent = Job.foreverServer(monad { 
+  let agent = Job.foreverServer(job { 
       let! msg = Ch.take inbox
       match msg with
       | AgentBid(bid, reply) -> 
-        do! validateBid bid
-        do! state |> MVar.mutateJob(fun s-> 
-          monad {
-            let (next,res)=S.addBid bid s
-            do! IVar.fill reply res 
-            return next
-          })
+        match validateBid bid with
+        | Ok _ ->
+          do! state |> MVar.mutateJob(fun s-> 
+            job {
+              let (next,res)=S.addBid bid s
+              do! IVar.fill reply res 
+              return next
+            })
+        | Error err as self->do! IVar.fill reply self
       | AuctionEnded(now) ->
-        do! state |> MVar.mutateJob(fun s-> monad{
+        do! state |> MVar.mutateJob(fun s-> job{
           let next = S.inc now s
           do! ended |> MVar.mutateFun (fun _ -> S.tryGetAmountAndWinner next)
           return next
@@ -58,8 +58,6 @@ type AuctionAgent(auction, state:S) =
   }
   member __.Job = agent
   
-  //member __.Collect time = agent.PostAndAsyncReply(fun reply -> CollectAgent(time, reply))
-  //member __.HasEnded time = agent.PostAndAsyncReply(fun reply -> AgentSignals.HasEnded(time, reply))
 
 /// repository that takes commands and translate them to auctions and auction states
 /// assumption is that it's used in a single threaded sync manner
@@ -90,16 +88,13 @@ let createAgent auction bids = AuctionAgent (auction,bids)
 type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
 type DelegatorSignals = 
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
-  | UserCommand of Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>
-  | GetAuction of AuctionId *AsyncReplyChannel<AuctionAndBidsAndMaybeWinnerAndAmount option>
-  | GetAuctions of AsyncReplyChannel<Auction list>
+  | UserCommand of Command * IVar<Result<CommandSuccess, Errors>>
+  | GetAuction of AuctionId * IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>
 
   /// ping delegator to make sure that time based logic can run (i.e. CRON dependent auction logic)
   /// this is needed due to the fact that you have auction end time 
   /// (you expect something to happen roughly then, and not a few hours later)
-  | WakeUp of AsyncReplyChannel<unit>
-  /// Do we need to do anything if we have a handled shutdown of the delegator?
-  | CollectDelegator
+  | WakeUp
   
 //type Agent<'T> = MailboxProcessor<'T>
 
@@ -126,14 +121,15 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
     let now = now()
     let res = IVar()
     job {
-      do! agents|> MVar.mutateJob(fun a-> monad {
+      do! agents|> MVar.mutateJob(fun a-> job {
             match a |> Map.tryFind auctionId with
             | Some (auction, Choice1Of2 auctionAgent) as v -> 
               let! hasEnded = auctionAgent.AuctionEnded(now)
               match hasEnded with
               | Some ended ->
                 let! bids = auctionAgent.GetBids()
-                let value =(auction,Choice2Of2 (ended,bids))
+                let value =(auction,Choice2Of2 (hasEnded,bids))
+                do! IVar.fill res (Some value)
                 return (a.Add(auction.id, value))
               | None ->
                 do! IVar.fill res v
@@ -180,74 +176,70 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
             do! IVar.fill reply (Error err)
       }
 
-  let wakeUp now= 
-    let hasEnded id=function
-                  | Choice1Of2 (agent:AuctionAgent)-> 
-                    job{
-                      let! ended=agent.HasEnded(now)
-                      return if ended then Some (id,agent) else None
-                    }
-                  | _-> 
-                    job { return None }
-    let hasEnded = agents 
-                        |> Map.toSeq
-                        |> Seq.map (fun (id, (_, c))-> hasEnded id c)
-                        |> Job.seqCollect
-
-
-    let endAgent id (agent:AuctionAgent)= 
-        monad{
-          let (auction,_) = Map.find id agents
-          let! bids= agent.GetBids()
-          let! endedAuction = agent.Collect now
-          do agents <- agents.Add (auction.id,(auction,Choice2Of2 (endedAuction,bids)))
-        }
-    monad {
-      let! endedAgents =hasEnded
-      for (id,agent) in endedAgents |> Array.choose id  do 
-          do! endAgent id agent
-    }
+  let wakeUp now=
+    agents |> MVar.mutateJob(fun a->job{
+                      let! next = a 
+                                  |> Map.toSeq
+                                  |> Seq.map (fun (id, (auction, c2) as self)->job{ 
+                                    match c2 with
+                                    | Choice1Of2 (agent:AuctionAgent)->
+                                      let! endedAuction=agent.AuctionEnded(now)
+                                      match endedAuction with
+                                      | Some _ ->
+                                        let! bids= agent.GetBids()
+                                        return (id,(auction,Choice2Of2 (endedAuction,bids)))
+                                      | None ->
+                                        return self
+                                    | _ ->
+                                      return self
+                                  })
+                                  |> Job.seqCollect
+                      return Map.ofSeq next
+    })
 
 
 
-  let getAuction auctionId (reply:AsyncReplyChannel<AuctionAndBidsAndMaybeWinnerAndAmount option>)= job {
+  let getAuction auctionId (reply:IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>)= job {
     let! t= tryFindTuple_mut auctionId
     match t with
-    | None  ->  reply.Reply None 
+    | None  -> do! IVar.fill reply None 
     | Some (auction, Choice1Of2 agent) -> 
       let! bids= agent.GetBids()
-      reply.Reply (Some(auction, bids, None))
+      do! IVar.fill reply (Some(auction, bids, None))
     | Some (auction, Choice2Of2 (winnerAndAmount,bids)) -> 
-      reply.Reply (Some(auction, bids, winnerAndAmount))
+      do! IVar.fill reply (Some(auction, bids, winnerAndAmount))
   }
-  let agent = Job.foreverServer(monad {
-    let! msg = inbox.Receive()
+  let agent = Job.foreverServer(job {
+    let! msg = Ch.take inbox
     let now = now()
     match msg with
       | UserCommand(cmd, reply) -> 
         do persistCommand cmd
         do! userCommand cmd now reply
-        return! messageLoop()
       | GetAuction (auctionId,reply) ->
         do! getAuction auctionId reply
-        return! messageLoop()
-      | GetAuctions (reply) ->
-        let auctions =agents 
-                      |> Map.toList
-                      |> List.map (snd>>fst)
-        reply.Reply auctions
-        return! messageLoop()
-      | WakeUp reply -> 
+      | WakeUp -> 
         do! wakeUp now
-        do reply.Reply()
-        return! messageLoop()
-      | CollectDelegator -> 
-        do! collect now
   })
-  member __.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
-  member __.WakeUp () = agent.PostAndAsyncReply WakeUp
-  member __.Collect () = agent.Post CollectDelegator
-  member __.GetAuctions ()= agent.PostAndAsyncReply(fun reply -> GetAuctions(reply))
-  member __.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
+  member __.UserCommand cmd =job{
+    let reply = IVar()
+    do! Ch.send inbox (UserCommand(cmd, reply))
+    return! IVar.read reply
+  }
+  member __.WakeUp () = job{
+    do! Ch.send inbox WakeUp
+  } 
+  member __.GetAuctions ()= job{
+    let! a = MVar.read agents 
+    return a
+           |> Map.toList
+           |> List.map (snd>>fst)
+  }
+  member __.GetAuction auctionId= job{
+    let reply = IVar()
+    do! Ch.send inbox (GetAuction(auctionId,reply))
+    return! IVar.read reply
+  }
+  member __.Job = agent
 
 let createAgentDelegator r = AuctionDelegator r
