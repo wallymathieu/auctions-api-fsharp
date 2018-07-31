@@ -85,7 +85,12 @@ type private Repository ()=
           | Error _ -> ()
         | false, _ -> ()
 
-let createAgent auction bids = AuctionAgent (auction,bids)
+module AuctionAgent=
+  let create auction bids = job{
+    let a = AuctionAgent (auction,bids)
+    do! a.Job
+    return a
+  }
 type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
 type DelegatorSignals = 
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
@@ -101,23 +106,8 @@ type DelegatorSignals =
 
 type AuctionDelegator(commands:Command list, persistCommand, now) = 
   let inbox = Ch ()
-  let initialAgents = 
-        let _now =now()
-        let r = Repository()
-        List.iter r.Handle commands
-        r.Auctions()
-        |> List.map (fun (auction,state)->
-                    let next =S.inc _now state
-                    auction.id, 
-                    if not (S.hasEnded next)
-                    then auction,Choice1Of2 (createAgent auction next)
-                    else auction,Choice2Of2 (S.tryGetAmountAndWinner next, S.getBids next)
-                  )
-        |> Map
-  let agents : MVar<Map<AuctionId,Auction*Choice<AuctionAgent,AuctionEnded*Bid list>>> = 
-        initialAgents
-        |> MVar
-
+        
+  let agents : MVar<Map<AuctionId,Auction*Choice<AuctionAgent,AuctionEnded*Bid list>>> = MVar()
 
   /// Note, will mutate agents map
   let ``tryFindTuple_mut`` auctionId : Job<(Auction*Choice<AuctionAgent,AuctionEnded*Bid list>) option> =
@@ -165,8 +155,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
         match cmd with
         | AddAuction(at, auction) -> 
           if auction.startsAt > now then
-            let agent = createAgent auction (Auction.emptyState auction)
-            do! agent.Job
+            let! agent = AuctionAgent.create auction (Auction.emptyState auction)
             do! agents|> MVar.mutateFun(fun a-> a.Add(auction.id, (auction ,Choice1Of2 (agent))))
             do! IVar.fill reply (Ok (AuctionAdded(at, auction)))
           else do! IVar.fill reply (Error (AuctionHasEnded auction.id))
@@ -246,16 +235,29 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
     do! Ch.send inbox (GetAuction(auctionId,reply))
     return! IVar.read reply
   }
-  member __.InitialJobs =
-     agent :: (
-             initialAgents
-             |> Map.toList
-             |> List.map (snd>>snd)
-             |> List.choose (function 
-                  |Choice1Of2 a->Some (a.Job)
-                  |Choice2Of2 _ ->None
-             ))
-             
-   
-
-let createAgentDelegator r = AuctionDelegator r
+  member __.Job = 
+    let initialAgents = 
+      let _now =now()
+      let r = Repository()
+      List.iter r.Handle commands
+      r.Auctions()
+      |> List.map (fun (auction,state)->job{
+        let next =S.inc _now state
+        if not (S.hasEnded next)
+        then
+          let! agent = AuctionAgent.create auction next
+          return auction.id, (auction, Choice1Of2 (agent))
+        else return auction.id, (auction, Choice2Of2 (S.tryGetAmountAndWinner next, S.getBids next))
+      })
+    job{
+      let! i = Job.seqCollect initialAgents
+      do! MVar.fill agents (Map <| List.ofSeq i)
+      do! agent
+    }
+      
+module AuctionDelegator=
+  let create r = job{
+    let d=AuctionDelegator r
+    do! d.Job
+    return d
+  }

@@ -126,18 +126,24 @@ module JsonResult=
       |> PlaceBid)
       >> Result.mapError exnToInvalidUserData 
 
-let webPart (agent : AuctionDelegator) = 
+let webPart (agent : Job<AuctionDelegator>) = 
 
   let overview = 
     GET >=> fun (ctx) ->
             async {
-              let! r = agent.GetAuctions() |> Job.toAsync
+              let! r =Job.toAsync <| job{
+                let! a = agent
+                return! a.GetAuctions()
+              }
               return! JSON (r |>List.toArray) ctx
             }
 
   let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
       monad {
-        let! auctionAndBids = agent.GetAuction id |> Job.toAsync
+        let! auctionAndBids = Job.toAsync <| job{
+          let! a = agent
+          return! a.GetAuction id
+        }
         match auctionAndBids with
         | Some v-> return Ok <| JsonResult.getAuctionResult v
         | None -> return Error (UnknownAuction id)
@@ -149,9 +155,12 @@ let webPart (agent : AuctionDelegator) =
   let handleCommandAsync 
     (maybeC:Result<Command,_>) :Async<Result<_,_>> = 
     monad {
-      match agent.UserCommand <!> maybeC with 
+      match (fun c->Job.toAsync <| job{
+          let! a = agent
+          return! a.UserCommand c
+        }) <!> maybeC with
       | Ok asyncR-> 
-          let! result = asyncR |> Job.toAsync
+          let! result = asyncR
           return result
       | Error c'->return Error c'
     }

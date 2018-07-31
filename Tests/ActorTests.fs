@@ -34,26 +34,18 @@ module ``Auction agent tests`` =
   [<Fact>]
   let ``create auction with bid, and wait for the end of the auction``() = 
     let j = job{
-      printfn "!!!!!!! 1"
       let mutable t = DateTime(2008,11,24)
       let time () = t
-      let d = createAgentDelegator ([], emptyHandler, time)
-      printfn "!!!!!!! 2"
-      do! Job.conIgnore d.InitialJobs
-      printfn "!!!!!!! 3"
+      let! d =  AuctionDelegator.create ([], emptyHandler, time)
       let! res= d.UserCommand (AddAuction (t,auction)) 
-      printfn "!!!!!!! 4"
       Assert.Equal(Ok (AuctionAdded (t, auction)), res)
       t <- t.AddDays(0.5)
       let! res= d.UserCommand (PlaceBid (t,validBid)) 
       Assert.Equal(Ok (BidAccepted (t, validBid)), res)
       t <- auction.expiry.AddDays(1.5)
-      printfn "!!!!!!! 5"
-      //Async.RunSynchronously(d.WakeUp())
+      do! d.WakeUp()
       let! maybeAuctionAndBids =  d.GetAuction auction.id 
       //printfn "++++++++++++++++++++++++\n%A\n++++++++++++++++++++++++" maybeAuctionAndBids
       Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
-      printfn "!!!!!!! 6"
     }
-    printfn "!!!!!!! 7"
-    Async.RunSynchronously(j|> Job.toAsync,1000) 
+    Async.RunSynchronously(j|> Job.toAsync)
