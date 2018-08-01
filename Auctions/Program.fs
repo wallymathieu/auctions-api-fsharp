@@ -54,7 +54,7 @@ let main argv =
                  |> Seq.toList
 
   persist.Start()
-  let agent = createAgentDelegator(commands, persist.Handle, fun ()->DateTime.UtcNow)
+  let agent = AuctionDelegator.create(commands, persist.Handle, fun ()->DateTime.UtcNow)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart agent)
   0
