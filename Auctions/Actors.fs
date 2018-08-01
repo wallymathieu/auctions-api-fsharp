@@ -21,8 +21,6 @@ type AuctionAgent(auction, state:S) =
   let inbox = Ch ()
   let validateBid = fun b->Auction.validateBid b auction
   let state = MVar state
-  let ended = MVar None
-
   let agent = Job.foreverServer(job {
       let! msg = Ch.take inbox
       match msg with
@@ -32,7 +30,6 @@ type AuctionAgent(auction, state:S) =
           do! state |> MVar.mutateJob(fun s-> 
             job {
               let (next,res)=S.addBid bid s
-              do! ended |> MVar.mutateFun (fun _ -> S.tryGetAmountAndWinner next)
               do! IVar.fill reply res 
               return next
             })
@@ -40,7 +37,6 @@ type AuctionAgent(auction, state:S) =
       | HasAuctionEnded now ->
         do! state |> MVar.mutateJob(fun s-> job{
           let next = S.inc now s
-          do! ended |> MVar.mutateFun (fun _ -> S.tryGetAmountAndWinner next)
           return next
         })
   })
@@ -56,7 +52,8 @@ type AuctionAgent(auction, state:S) =
   }
   member __.AuctionEnded time : Job<AuctionEnded>= job {
     do! Ch.send inbox (HasAuctionEnded time)
-    return! MVar.read ended
+    let! s = MVar.read state
+    return S.tryGetAmountAndWinner s
   }
   member __.HasEnded time : Job<bool>= job {
     let! ended = __.AuctionEnded time
