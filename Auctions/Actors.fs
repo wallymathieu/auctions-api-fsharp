@@ -11,8 +11,7 @@ type AuctionEnded = (Amount * User) option
 type AgentSignals = 
   | AgentBid of Bid * AsyncReplyChannel<Result<unit, Errors>>
   | GetBids of AsyncReplyChannel<Bid list>
-  | AuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded>
-  | HasEnded of DateTime * AsyncReplyChannel<Boolean>
+  | HasAuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded>
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded>
 
 type AuctionAgent(auction, state:S) =
@@ -36,7 +35,7 @@ type AuctionAgent(auction, state:S) =
            let bids = S.getBids state
            reply.Reply bids
            return! messageLoop()
-         | AuctionEnded(now, reply) -> 
+         | HasAuctionEnded(now, reply) -> 
            (*
             When the agent receives this signal 
             - it can start replying with only bid rejected response
@@ -55,19 +54,18 @@ type AuctionAgent(auction, state:S) =
            state <- S.inc now state
            reply.Reply(S.tryGetAmountAndWinner state)
            return ()
-         | HasEnded (now,reply)->
-           state <- S.inc now state
-           reply.Reply(S.hasEnded state)
-           return! messageLoop()
        }
      
      messageLoop()))
 
   member __.AgentBid bid = agent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
   member __.GetBids () = agent.PostAndAsyncReply(fun reply -> GetBids(reply))
-  member __.AuctionEnded time = agent.PostAndAsyncReply(fun reply -> AuctionEnded(time, reply))
+  member __.AuctionEnded time = agent.PostAndAsyncReply(fun reply -> HasAuctionEnded(time, reply))
   member __.Collect time = agent.PostAndAsyncReply(fun reply -> CollectAgent(time, reply))
-  member __.HasEnded time = agent.PostAndAsyncReply(fun reply -> AgentSignals.HasEnded(time, reply))
+  member __.HasEnded time = async{ 
+    let! res=__.AuctionEnded time
+    return Option.isSome res 
+  }
 
 /// repository that takes commands and translate them to auctions and auction states
 /// assumption is that it's used in a single threaded sync manner
@@ -93,8 +91,9 @@ type private Repository ()=
             auctions.[auction.id]<- (auction,next)
           | Error _ -> ()
         | false, _ -> ()
+module AuctionAgent=
+  let create auction state = AuctionAgent (auction, state)
 
-let createAgent auction bids = AuctionAgent (auction,bids)
 type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
 type DelegatorSignals = 
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
@@ -106,8 +105,17 @@ type DelegatorSignals =
   /// this is needed due to the fact that you have auction end time 
   /// (you expect something to happen roughly then, and not a few hours later)
   | WakeUp of AsyncReplyChannel<unit>
-  /// Do we need to do anything if we have a handled shutdown of the delegator?
-  | CollectDelegator
+module AuctionDState=
+  type Running=
+    | Ongoing of AuctionAgent 
+    | Ended of AuctionEnded*Bid list
+  type T = Auction * Running
+  let (|IsOngoing|HasEnded|) state =
+     match state with
+     | _, Ongoing agent -> IsOngoing(agent)
+     | _, _ -> HasEnded()
+  let started auction agent :T= (auction ,Ongoing agent)
+  let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
 type AuctionDelegator(commands:Command list, persistCommand, now) = 
   let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
     let mutable agents = let _now =now()
@@ -118,56 +126,30 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
                                         let next =S.inc _now state
                                         auction.id, 
                                         if not (S.hasEnded next)
-                                        then auction,Choice1Of2 (createAgent auction next)
-                                        else auction,Choice2Of2 (S.tryGetAmountAndWinner next, S.getBids next)
+                                        then AuctionDState.started auction (AuctionAgent.create auction next)
+                                        else AuctionDState.ended auction (S.tryGetAmountAndWinner next) (S.getBids next)
                                       )
                          |> Map
-
-    /// Note, will mutate agents map
-    let ``tryFindTuple_mut`` auctionId=
-      let now = now()
-      async{
-      match agents |> Map.tryFind auctionId with
-      | Some (auction, Choice1Of2 auctionAgent) as v -> 
-        let! hasEnded = auctionAgent.HasEnded(now)
-        if hasEnded then
-          let! bids = auctionAgent.GetBids()
-          let! ended= auctionAgent.Collect now
-          let value =(auction,Choice2Of2 (ended,bids))
-          agents <- agents.Add(auction.id, value)
-          return Some value
-        else
-          return v
-      | Some v ->
-        return Some v 
-      | None -> 
-        return None
-      }
-
-    /// Note, will mutate agents map
-    let ``tryFindAgent_mut`` auctionId=
-      async{
-      let! agent= tryFindTuple_mut auctionId
-      match agent with
-      | Some (_, Choice1Of2 auctionAgent) ->
-        return Ok auctionAgent
-      | Some (_, Choice2Of2 _) -> 
-        return Error (AuctionHasEnded auctionId)
-      | None -> 
-        return Error (AuctionNotFound auctionId)
-      }
 
     let userCommand cmd now (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
        async{
          match cmd with
          | AddAuction(at, auction) -> 
-           if auction.startsAt > now then
-             agents <- agents.Add(auction.id, (auction ,Choice1Of2 (createAgent auction (Auction.emptyState auction))))
-             reply.Reply(Ok (AuctionAdded(at, auction)))
-           else reply.Reply(Error (AuctionHasEnded auction.id))
+            if auction.startsAt > now then
+              let agent = AuctionAgent.create auction (Auction.emptyState auction)
+              agents <- Map.add auction.id (AuctionDState.started auction agent) agents
+              reply.Reply(Ok (AuctionAdded(at, auction)))
+            else 
+              reply.Reply(Error (AuctionHasEnded auction.id))
          | PlaceBid(at, bid) -> 
            let auctionId = Command.getAuction cmd
-           let! maybeAgent = tryFindAgent_mut auctionId
+           let maybeAgent=match Map.tryFind auctionId agents with
+                          | Some (AuctionDState.IsOngoing agent) ->
+                            Ok agent
+                          | Some AuctionDState.HasEnded -> 
+                            Error (AuctionHasEnded auctionId)
+                          | None -> 
+                            Error (AuctionNotFound auctionId)
            match maybeAgent with
            | Ok auctionAgent -> 
               let! m = auctionAgent.AgentBid bid
@@ -177,51 +159,36 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
        }
 
     let wakeUp now= 
-      let hasEnded id=function
-                    | Choice1Of2 (agent:AuctionAgent)-> 
-                      async{
-                        let! ended=agent.HasEnded(now)
-                        return if ended then Some (id,agent) else None
-                      }
-                    | _-> async {return None}
-      let hasEnded = agents 
-                          |> Map.toSeq
-                          |> Seq.map (fun (id, (_, c))-> hasEnded id c)
-                          |> Async.Parallel
-
-
-      let endAgent id (agent:AuctionAgent)= 
-          async{
-            let (auction,_) = Map.find id agents
-            let! bids= agent.GetBids()
-            let! endedAuction = agent.Collect now
-            do agents <- agents.Add (auction.id,(auction,Choice2Of2 (endedAuction,bids)))
-          }
       async {
-        let! endedAgents =hasEnded
-        for (id,agent) in endedAgents |> Array.choose id  do 
-            do! endAgent id agent
+        let! next =agents
+                    |> Map.toSeq
+                    |> Seq.map (fun (id, (auction, r) as self)->async{ 
+                      match r with
+                      | AuctionDState.Ongoing agent->
+                        let! endedAuction=agent.AuctionEnded now
+                        match endedAuction with
+                        | Some _ ->
+                          let! bids= agent.GetBids()
+                          do! Async.Ignore (agent.Collect now)
+                          return (id,(AuctionDState.ended auction endedAuction bids))
+                        | None ->
+                          return self
+                      | _ ->
+                        return self
+                    })
+                    |> Async.Parallel
+        agents<-Map next  
       }
 
-    let collect now = 
-       async{
-         for kv in agents do 
-           let (a,c)= kv.Value
-           match c with 
-           |Choice1Of2 agent->
-              do! Async.Ignore (agent.Collect now)
-           |Choice2Of2 _ -> ()
-       }
-
-    let getAuction auctionId (reply:AsyncReplyChannel<AuctionAndBidsAndMaybeWinnerAndAmount option>)=
+    let getAuction auctionId now (reply:AsyncReplyChannel<AuctionAndBidsAndMaybeWinnerAndAmount option>)=
       async {
-      let! t= tryFindTuple_mut auctionId
-      match t with
+      match Map.tryFind auctionId agents with
       | None  ->  reply.Reply None 
-      | Some (auction, Choice1Of2 agent) -> 
+      | Some (auction, AuctionDState.Ongoing agent) -> 
+        let! endedAuction=agent.AuctionEnded now
         let! bids= agent.GetBids()
-        reply.Reply (Some(auction, bids, None))
-      | Some (auction, Choice2Of2 (winnerAndAmount,bids)) -> 
+        reply.Reply (Some(auction, bids, endedAuction))
+      | Some (auction, AuctionDState.Ended (winnerAndAmount,bids)) -> 
         reply.Reply (Some(auction, bids, winnerAndAmount))
       }
     let rec messageLoop() = 
@@ -234,7 +201,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
            do! userCommand cmd now reply
            return! messageLoop()
          | GetAuction (auctionId,reply) ->
-           do! getAuction auctionId reply
+           do! getAuction auctionId now reply
            return! messageLoop()
          | GetAuctions (reply) ->
            let auctions =agents 
@@ -246,14 +213,11 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
            do! wakeUp now
            do reply.Reply()
            return! messageLoop()
-         | CollectDelegator -> 
-           do! collect now
       }
     messageLoop())
   member __.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
   member __.WakeUp () = agent.PostAndAsyncReply WakeUp
-  member __.Collect () = agent.Post CollectDelegator
   member __.GetAuctions ()= agent.PostAndAsyncReply(fun reply -> GetAuctions(reply))
   member __.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
-
-let createAgentDelegator r = AuctionDelegator r
+module AuctionDelegator=
+  let create r = AuctionDelegator r
