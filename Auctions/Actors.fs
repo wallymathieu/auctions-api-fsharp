@@ -109,50 +109,23 @@ type DelegatorSignals =
   /// this is needed due to the fact that you have auction end time 
   /// (you expect something to happen roughly then, and not a few hours later)
   | WakeUp
-  
-//type Agent<'T> = MailboxProcessor<'T>
+
+module AuctionDState=
+  type Running=
+    | Ongoing of AuctionAgent 
+    | Ended of AuctionEnded*Bid list
+  type T = Auction * Running
+  let (|IsOngoing|HasEnded|) state =
+     match state with
+     | _, Ongoing agent -> IsOngoing(agent)
+     | _, _ -> HasEnded()
+  let started auction agent :T= (auction ,Ongoing agent)
+  let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
 
 type AuctionDelegator(commands:Command list, persistCommand, now) = 
   let inbox = Ch ()
         
-  let agents : MVar<Map<AuctionId,Auction*Choice<AuctionAgent,AuctionEnded*Bid list>>> = MVar()
-
-  /// Note, will mutate agents map
-  let ``tryFindTuple_mut`` auctionId now: Job<(Auction*Choice<AuctionAgent,AuctionEnded*Bid list>) option> =
-    let res = IVar()
-    job {
-      do! agents|> MVar.mutateJob(fun a-> job {
-            match a |> Map.tryFind auctionId with
-            | Some (auction, Choice1Of2 auctionAgent) as v -> 
-              let! hasEnded' = auctionAgent.AuctionEnded(now)
-              match hasEnded' with
-              | Some _ as hasEnded->
-                let! bids = auctionAgent.GetBids()
-                let value =(auction,Choice2Of2 (hasEnded,bids))
-                do! IVar.fill res (Some value)
-                return Map.add auction.id value a
-              | None ->
-                do! IVar.fill res v
-                return a
-            | _ as v ->
-              do! IVar.fill res v
-              return a
-          })
-      return! IVar.read res 
-    }
-
-  /// Note, will mutate agents map
-  let ``tryFindAgent_mut`` auctionId now :Job<Result<AuctionAgent, Errors>>=
-    job{
-      let! agent= tryFindTuple_mut auctionId now
-      match agent with
-      | Some (_, Choice1Of2 auctionAgent) ->
-        return Ok auctionAgent
-      | Some (_, Choice2Of2 _) -> 
-        return Error (AuctionHasEnded auctionId)
-      | None -> 
-        return Error (AuctionNotFound auctionId)
-    }
+  let agents : MVar<Map<AuctionId,AuctionDState.T>> = MVar()
 
   let userCommand cmd now (reply:IVar<Result<CommandSuccess, Errors>>) : Job<_>=
       job{
@@ -160,49 +133,59 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
         | AddAuction(at, auction) -> 
           if auction.startsAt > now then
             let! agent = AuctionAgent.create auction (Auction.emptyState auction)
-            do! agents|> MVar.mutateFun(fun a-> a.Add(auction.id, (auction ,Choice1Of2 (agent))))
+            do! agents|> MVar.mutateFun(Map.add auction.id (AuctionDState.started auction agent))
             do! IVar.fill reply (Ok (AuctionAdded(at, auction)))
           else do! IVar.fill reply (Error (AuctionHasEnded auction.id))
         | PlaceBid(at, bid) -> 
           let auctionId = Command.getAuction cmd
-          let! maybeAgent = tryFindAgent_mut auctionId now
+          let! a= MVar.read agents
+          let maybeAgent=match  a |> Map.tryFind auctionId with
+                          | Some (AuctionDState.IsOngoing agent) ->
+                            Ok agent
+                          | Some AuctionDState.HasEnded -> 
+                            Error (AuctionHasEnded auctionId)
+                          | None -> 
+                            Error (AuctionNotFound auctionId)
           match maybeAgent with
-          | Ok auctionAgent ->
-            let! m' = auctionAgent.AgentBid bid
-            do! IVar.fill reply (m' |> Result.map (fun () -> BidAccepted(at, bid)))
+          | Ok agent ->
+            let! m' = agent.AgentBid bid
+            do! IVar.fill reply (m' |> Result.map (fun _ -> BidAccepted(at, bid)))
           | Error err -> 
             do! IVar.fill reply (Error err)
       }
 
   let wakeUp now=
-    agents |> MVar.mutateJob(fun a->job{
-                      let! next = a 
-                                  |> Map.toSeq
-                                  |> Seq.map (fun (id, (auction, c2) as self)->job{ 
-                                    match c2 with
-                                    | Choice1Of2 (agent:AuctionAgent)->
-                                      let! endedAuction=agent.AuctionEnded(now)
-                                      match endedAuction with
-                                      | Some _ ->
-                                        let! bids= agent.GetBids()
-                                        return (id,(auction,Choice2Of2 (endedAuction,bids)))
-                                      | None ->
-                                        return self
-                                    | _ ->
-                                      return self
-                                  })
-                                  |> Job.seqCollect
-                      return Map.ofSeq next
+    agents |> 
+      MVar.mutateJob(fun a->job{
+        let! next = a 
+                    |> Map.toSeq
+                    |> Seq.map (fun (id, (auction, c2) as self)->job{ 
+                      match c2 with
+                      | AuctionDState.Ongoing agent->
+                        let! endedAuction=agent.AuctionEnded now
+                        match endedAuction with
+                        | Some _ ->
+                          let! bids= agent.GetBids()
+                          return (id,(AuctionDState.ended auction endedAuction bids))
+                        | None ->
+                          return self
+                      | _ ->
+                        return self
+                    })
+                    |> Job.seqCollect
+        return Map.ofSeq next
     })
 
   let getAuction auctionId now (reply:IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>)= job {
-    let! t= tryFindTuple_mut auctionId now
-    match t with
+    let! a= MVar.read agents
+    let state= a |> Map.tryFind auctionId
+    match state with
     | None  -> do! IVar.fill reply None 
-    | Some (auction, Choice1Of2 agent) -> 
+    | Some (auction, AuctionDState.Ongoing agent) -> 
+      let! endedAuction=agent.AuctionEnded now
       let! bids= agent.GetBids()
-      do! IVar.fill reply (Some(auction, bids, None))
-    | Some (auction, Choice2Of2 (winnerAndAmount,bids)) -> 
+      do! IVar.fill reply (Some(auction, bids, endedAuction))
+    | Some (auction, AuctionDState.Ended (winnerAndAmount, bids) ) -> 
       do! IVar.fill reply (Some(auction, bids, winnerAndAmount))
   }
   let agent = Job.foreverServer(job {
@@ -249,8 +232,8 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
         if not (S.hasEnded next)
         then
           let! agent = AuctionAgent.create auction next
-          return auction.id, (auction, Choice1Of2 (agent))
-        else return auction.id, (auction, Choice2Of2 (S.tryGetAmountAndWinner next, S.getBids next))
+          return auction.id, (AuctionDState.started auction agent)
+        else return auction.id, (AuctionDState.ended auction (S.tryGetAmountAndWinner next) (S.getBids next))
       })
     job{
       let! i = Job.seqCollect initialAgents
