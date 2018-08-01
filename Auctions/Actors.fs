@@ -25,7 +25,6 @@ type AuctionAgent(auction, state:S) =
 
   let agent = Job.foreverServer(job {
       let! msg = Ch.take inbox
-      printfn "agent %A is receiving %s" auction.id (msg.ToString())
       match msg with
       | AgentBid(bid, reply) -> 
         match validateBid bid with
@@ -33,17 +32,15 @@ type AuctionAgent(auction, state:S) =
           do! state |> MVar.mutateJob(fun s-> 
             job {
               let (next,res)=S.addBid bid s
-              do! IVar.fill reply res 
               do! ended |> MVar.mutateFun (fun _ -> S.tryGetAmountAndWinner next)
+              do! IVar.fill reply res 
               return next
             })
         | Error _ as self-> do! IVar.fill reply self
-      | HasAuctionEnded(now) ->
+      | HasAuctionEnded now ->
         do! state |> MVar.mutateJob(fun s-> job{
           let next = S.inc now s
           do! ended |> MVar.mutateFun (fun _ -> S.tryGetAmountAndWinner next)
-          let! e = ended |> MVar.read
-          printfn "agent %A is potentially ending auction? %b" auction.id (Option.isSome e)
           return next
         })
   })
@@ -58,7 +55,7 @@ type AuctionAgent(auction, state:S) =
     return S.getBids s
   }
   member __.AuctionEnded time : Job<AuctionEnded>= job {
-    do! Ch.send inbox (HasAuctionEnded(time))
+    do! Ch.send inbox (HasAuctionEnded time)
     return! MVar.read ended
   }
   member __.HasEnded time : Job<bool>= job {
@@ -94,8 +91,8 @@ type private Repository ()=
         | false, _ -> ()
 
 module AuctionAgent=
-  let create auction bids = job{
-    let a = AuctionAgent (auction,bids)
+  let create auction state = job{
+    let a = AuctionAgent (auction,state)
     do! a.Job
     return a
   }
@@ -190,9 +187,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
   }
   let agent = Job.foreverServer(job {
     let! msg = Ch.take inbox
-    let _now :DateTime= now() // needed to keep ionide happy
-    let ts = _now.ToString("o")
-    printfn "delegator agent is receiving %A %s" msg ts
+    let _now = now()
     match msg with
       | UserCommand(cmd, reply) -> 
         do persistCommand cmd
