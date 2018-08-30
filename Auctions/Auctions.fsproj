@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.0</TargetFramework>
@@ -21,11 +21,12 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Fleece.FSharpData" Version="0.6.0" />
     <PackageReference Include="FSharp.Core" Version="4.3.*" />
+    <PackageReference Include="FSharp.Data.GraphQL.Server" Version="0.0.6-beta" />
+    <PackageReference Include="FSharp.Data.GraphQL.Server.Middlewares" Version="0.0.6-beta" />
     <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
     <PackageReference Include="Suave" Version="2.2.*" />
-    <PackageReference Include="Saithe" Version="2.1.0" />
     <DotNetCliToolReference Include="Microsoft.DotNet.Watcher.Tools" Version="2.0.0" />
     <PackageReference Include="FSharpPlus" Version="1.0.0" />
   </ItemGroup>

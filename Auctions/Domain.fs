@@ -2,10 +2,18 @@
 
 open System
 open System.ComponentModel
-open Newtonsoft.Json
-open Saithe
+
+open FSharp.Data
+open Fleece
+open Fleece.FSharpData
+open Fleece.FSharpData.Operators
+
 open FSharpPlus
+open FSharpPlus.Data
 open FSharpPlus.Operators
+
+module Result=
+  let ofOption error option = match option with | Some v -> Ok v | None -> Error error
 
 type Currency = 
   /// virtual acution currency
@@ -20,8 +28,6 @@ module Currency=
 
 type UserId = string
 
-[<TypeConverter(typeof<ParseTypeConverter<User>>)>]
-[<JsonConverter(typeof<ParseTypeJsonConverter<User>>)>]
 type User = 
   | BuyerOrSeller of id : UserId * name : string
   | Support of id : UserId
@@ -50,15 +56,16 @@ type User =
     match User.tryParse user with
     | Some user->user
     | None -> raise (FormatException "InvalidUser")
-    
+
+  static member OfJson json = User.tryParse <!> ofJson json |> Result.bind (Result.ofOption "Invalid user")
+  static member ToJson (x: User) = toJson (x.ToString())
+ 
 
 type BidId = Guid
 
 type AuctionId = int64
 let (|Currency|_|) = Currency.tryParse
 
-[<TypeConverter(typeof<ParseTypeConverter<Amount>>)>]
-[<JsonConverter(typeof<ParseTypeJsonConverter<Amount>>)>]
 type Amount = 
   { value : int64
     currency : Currency }
@@ -84,6 +91,9 @@ type Amount =
   static member (-) (a1 : Amount, a2 : Amount) = 
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
+  static member OfJson json = Amount.tryParse <!> ofJson json |> Result.bind (Result.ofOption "Invalid amount")
+  static member ToJson (x: Amount) = toJson (x.ToString())
+
 module Amount=
   let zero c= { currency=c ; value=0L}
 
@@ -119,8 +129,6 @@ module Auctions=
     /// rather than his or her own
     |Vickrey
 
-  [<TypeConverter(typeof<ParseTypeConverter<Type>>)>]
-  [<JsonConverter(typeof<ParseTypeJsonConverter<Type>>)>]
   type Type=
      /// also known as an open ascending price auction
      /// The auction ends when no participant is willing to bid further
@@ -158,6 +166,8 @@ module Auctions=
       match Type.tryParse typ with
       | Some t->t
       | None -> raise (FormatException "Invalid Type")
+    static member OfJson json = Type.tryParse <!> ofJson json |> Result.bind (Result.ofOption "Invalid auction type")
+    static member ToJson (x:Type) = toJson (x.ToString())
 
 type Auction = 
   { id : AuctionId
@@ -169,6 +179,25 @@ type Auction =
     typ : Type
     currency:Currency
   }
+with
+  static member OfJson json =
+    let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
+    match json with
+    | JObject o -> 
+      let c = Currency.tryParse <!> (o .@ "currency")  |> Result.bind (Result.ofOption "Invalid currency")
+      create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title") <*> (o .@ "expiry") <*> (o .@ "user") <*> (o .@ "type") <*> c
+    | x -> Error (sprintf "Expected Auction, found %A" x)
+  static member ToJson (x: Auction) =
+    jobj [ 
+      "id" .= x.id
+      "startsAt" .= x.startsAt
+      "title" .= x.title
+      "expiry" .= x.expiry
+      "user" .= x.user
+      "type" .= x.typ
+      "currency" .= (Enum.GetName (typeof<Currency>, x.currency))
+    ]
+
 
 type Bid = 
   { id : BidId
@@ -177,6 +206,22 @@ type Bid =
     amount : Amount
     at : DateTime
   }
+with
+  static member OfJson json =
+    let create id auction user amount at= { id =id; auction =auction; user = user; amount=amount; at=at }
+    match json with
+    | JObject o -> 
+      create <!> (o .@ "id") <*> (o .@ "auction") <*> (o .@ "user") <*> (o .@ "amount") <*> (o .@ "at")
+    | x -> Error (sprintf "Expected Auction, found %A" x)
+  static member ToJson (x: Bid) =
+    jobj [ 
+      "id" .= x.id
+      "auction" .= x.auction
+      "user" .= x.user
+      "amount" .= x.amount
+      "at" .= x.at
+    ]
+
 module Bid=
   let getId (bid : Bid) = bid.id
   let getAmount (bid : Bid) = bid.amount
@@ -360,8 +405,27 @@ type Command =
     match command with
     | AddAuction(_,auction) -> auction.id
     | PlaceBid(_,bid) -> bid.auction
-
+  static member OfJson json =
+    let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
+    match json with
+    | JObject o -> monad {
+        let! t = o .@ "$type"
+        match t with
+        | "AddAuction" -> 
+          let create d a = AddAuction (d,a)
+          return! (create <!> (o .@ "at") <*> (o .@ "auction"))
+        | "PlaceBid" ->
+          let create d b = PlaceBid (d,b)
+          return! (create <!> (o .@ "at") <*> (o .@ "bid"))
+        | x -> return! (Error (sprintf "Expected known $type, found %A" x))
+      }
+    | x -> Error (sprintf "Expected Auction, found %A" x)
+  static member ToJson (x: Command) =
+    match x with
+    | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]
+    | PlaceBid (d,b)-> jobj [ "$type" .= "PlaceBid"; "at" .= d; "bid" .= b]
 type CommandSuccess = 
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
 
+  

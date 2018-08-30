@@ -1,17 +1,16 @@
 ﻿module Auctions.Web
 open System
 open FSharpPlus
-open Suave
-open Suave.Filters
-open Suave.Operators
-open Suave.RequestErrors
-open Suave.Successful
-open Suave.Writers
+open Auctions.Suave
+
+open Fleece
+open Fleece.FSharpData
+open Fleece.FSharpData.Operators
+open FSharp.Data
 
 open Auctions.Domain
 open Auctions.Actors
 open Auctions
-open Newtonsoft.Json
 open FSharpPlus.Data
 (* Fake auth in order to simplify web testing *)
 
@@ -45,19 +44,26 @@ module Paths =
 (* Json API *)
 
 type BidReq = {amount : Amount}
+ with 
+ static member OfJson json :ParseResult<BidReq>= failwith "!"
 type AddAuctionReq = {
   id : AuctionId
   startsAt : DateTime
   title : string
   endsAt : DateTime
   currency : string
-  [<JsonProperty("type")>]
+  //[<JsonProperty("type")>]
   typ:string
 }
+ with 
+ static member OfJson json :ParseResult<AddAuctionReq>= failwith "!"
+
 type BidJsonResult = { 
   amount:Amount
   bidder:string
 }
+ with 
+ static member ToJson (x: BidJsonResult) :JsonValue = failwith "!"
 type AuctionJsonResult = {
   id : AuctionId
   startsAt : DateTime
@@ -68,6 +74,9 @@ type AuctionJsonResult = {
   winner : string
   winnerPrice : string
 }
+ with 
+ static member ToJson (x: AuctionJsonResult) :JsonValue = failwith "!"
+
 module JsonResult=
   let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
 
@@ -112,7 +121,6 @@ module JsonResult=
         }
         |> Timed.atNow
         |> AddAuction)
-        >> Result.mapError exnToInvalidUserData
 
   let toPostedPlaceBid id user = 
     getBodyAsJSON<BidReq> 
@@ -123,7 +131,6 @@ module JsonResult=
          amount=a.amount;auction=id
          at = d })
       |> PlaceBid)
-      >> Result.mapError exnToInvalidUserData 
 
 let webPart (agent : AuctionDelegator) = 
 
