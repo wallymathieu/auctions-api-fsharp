@@ -115,13 +115,12 @@ module JsonResult=
   let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
 
   let getAuctionResult (auction,bids,maybeAmountAndWinner) =
-    let now =DateTime.UtcNow
     let discloseBidders =Auction.biddersAreOpen auction
     let mapBid (b:Bid) :BidJsonResult = { 
       amount=b.amount
       bidder= if discloseBidders 
-              then b.user.ToString() 
-              else b.user.GetHashCode().ToString() // here you might want bidder number
+              then string b.user
+              else string <| b.user.GetHashCode() // here you might want bidder number
     }
 
     let (winner,winnerPrice) = 

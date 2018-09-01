@@ -92,7 +92,7 @@ type Amount =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
   static member OfJson json = Amount.tryParse <!> ofJson json >>= (Result.ofOption "Invalid amount")
-  static member ToJson (x: Amount) = toJson (x.ToString())
+  static member ToJson (x: Amount) = toJson (string x)
 
 module Amount=
   let zero c= { currency=c ; value=0L}
