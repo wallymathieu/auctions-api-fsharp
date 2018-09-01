@@ -180,6 +180,7 @@ type Auction =
     currency:Currency
   }
 with
+
   static member OfJson json =
     let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
     match json with
@@ -207,20 +208,14 @@ type Bid =
     at : DateTime
   }
 with
-  static member OfJson json =
-    let create id auction user amount at= { id =id; auction =auction; user = user; amount=amount; at=at }
-    match json with
-    | JObject o -> 
-      create <!> (o .@ "id") <*> (o .@ "auction") <*> (o .@ "user") <*> (o .@ "amount") <*> (o .@ "at")
-    | x -> Error (sprintf "Expected Auction, found %A" x)
-  static member ToJson (x: Bid) =
-    jobj [ 
-      "id" .= x.id
-      "auction" .= x.auction
-      "user" .= x.user
-      "amount" .= x.amount
-      "at" .= x.at
-    ]
+  static member JsonObjCodec =
+    fun id auction user amount at-> { id =id; auction =auction; user = user; amount=amount; at=at }
+    |> mapping
+    |> jfield "id"      (fun x -> x.id)
+    |> jfield "auction" (fun x -> x.auction)
+    |> jfield "user"    (fun x -> x.user)
+    |> jfield "amount"  (fun x -> x.amount)
+    |> jfield "at"      (fun x -> x.at)
 
 module Bid=
   let getId (bid : Bid) = bid.id
