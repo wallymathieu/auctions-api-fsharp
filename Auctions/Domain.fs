@@ -58,7 +58,7 @@ type User =
     | None -> raise (FormatException "InvalidUser")
 
   static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption "Invalid user")
-  static member ToJson (x: User) = toJson (x.ToString())
+  static member ToJson (x: User) = toJson (string x)
  
 
 type BidId = Guid
@@ -70,7 +70,7 @@ type Amount =
   { value : int64
     currency : Currency }
   override this.ToString() = 
-    sprintf "%s%i" (this.currency.ToString()) this.value
+    sprintf "%s%i" (Currency.toString this.currency) this.value
 
   static member tryParse amount = 
     let userRegex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
@@ -144,7 +144,7 @@ module Auctions=
     override this.ToString() = 
       match this with
       | TimedAscending english -> sprintf "English|%s|%s|%d" 
-                                    (english.reservePrice.ToString()) (english.minRaise.ToString()) english.timeFrame.Ticks
+                                    (string english.reservePrice) (string english.minRaise) english.timeFrame.Ticks
       | SingleSealedBid Blind -> sprintf "Blind"
       | SingleSealedBid Vickrey -> sprintf "Vickrey"
     static member tryParse typ =
@@ -167,7 +167,7 @@ module Auctions=
       | Some t->t
       | None -> raise (FormatException "Invalid Type")
     static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption "Invalid auction type")
-    static member ToJson (x:Type) = toJson (x.ToString())
+    static member ToJson (x:Type) = toJson (string x)
 
 type Auction = 
   { id : AuctionId
