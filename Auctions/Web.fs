@@ -199,9 +199,11 @@ let webPart (agent : AuctionDelegator) =
     (maybeC:_->Result<Command,_>) :WebPart = 
     fun ctx -> monad {
       let userCommand = agent.UserCommand >> map (Result.mapError DomainError)
-      match userCommand <!> (maybeC ctx) with 
-      | Ok asyncR-> // NOTE: Is this really the way?
-          return! monad { match! lift asyncR with | Ok v->return! Json.OK v ctx | Error e-> return! Json.BAD_REQUEST e ctx}
+      match userCommand <!> (maybeC ctx) with
+      | Ok asyncR->
+          match! lift asyncR with
+          | Ok v->return! Json.OK v ctx
+          | Error e-> return! Json.BAD_REQUEST e ctx
       | Error c'->return! Json.BAD_REQUEST c' ctx
     }
 
