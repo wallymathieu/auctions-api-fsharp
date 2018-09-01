@@ -21,8 +21,10 @@ type WebErrors=
   | DomainError of Errors
   | ParseError of string
 with 
- static member ToJson a :JsonValue= failwith "!"
-
+  static member ToJson (x: WebErrors) =
+    match x with
+    | DomainError err-> toJson err
+    | ParseError err-> JString( sprintf "Could not parse json %s" err)
 type Session = 
   | NoSession
   | UserLoggedOn of User
@@ -54,26 +56,38 @@ module Paths =
 (* Json API *)
 
 type BidReq = {amount : Amount}
- with 
- static member OfJson json :ParseResult<BidReq>= failwith "!"
+with 
+  static member OfJson json:ParseResult<BidReq> =
+    let create a = {amount =a}
+    match json with
+    | JObject o -> create <!> (o .@ "amount")
+    | x -> Error (sprintf "Expected bid, found %A" x)
+
 type AddAuctionReq = {
   id : AuctionId
   startsAt : DateTime
   title : string
   endsAt : DateTime
   currency : string
-  //[<JsonProperty("type")>]
   typ:string
 }
- with 
- static member OfJson json :ParseResult<AddAuctionReq>= failwith "!"
+with 
+  static member OfJson json:ParseResult<AddAuctionReq> =
+    let create id startsAt title endsAt currency typ= {id =id;startsAt=startsAt;title=title; endsAt=endsAt;currency=currency; typ=typ}
+    match json with
+    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")<*> (o .@ "currency")<*> (o .@ "type")
+    | x -> Error (sprintf "Expected bid, found %A" x)
 
 type BidJsonResult = { 
   amount:Amount
   bidder:string
 }
- with 
- static member ToJson (x: BidJsonResult) :JsonValue = failwith "!"
+with 
+  static member ToJson (x: BidJsonResult) :JsonValue =
+    jobj [ 
+      "amount" .= x.amount
+      "bidder" .= x.bidder
+    ]
 type AuctionJsonResult = {
   id : AuctionId
   startsAt : DateTime
@@ -85,7 +99,17 @@ type AuctionJsonResult = {
   winnerPrice : string
 }
  with 
- static member ToJson (x: AuctionJsonResult) :JsonValue = failwith "!"
+  static member ToJson (x: AuctionJsonResult) :JsonValue =
+    jobj [ 
+      "id" .= x.id
+      "startsAt" .= x.startsAt
+      "title" .= x.title
+      "expiry" .= x.expiry
+      "currency" .= Currency.toString x.currency
+      "bids" .= x.bids
+      "winner" .= x.winner
+      "winnerPrice" .= x.winnerPrice
+    ]
 
 module JsonResult=
   let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
@@ -112,7 +136,7 @@ module JsonResult=
     }
 
   let toPostedAuction user = 
-      getBodyAsJSON 
+      Json.getBody 
         >> Result.map (fun (a:AddAuctionReq) -> 
         let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
         
@@ -135,7 +159,7 @@ module JsonResult=
 
 
   let toPostedPlaceBid id user = 
-    getBodyAsJSON 
+    Json.getBody 
       >> Result.map (fun (a:BidReq) -> 
       let d = DateTime.UtcNow
       (d, 
@@ -151,7 +175,7 @@ let webPart (agent : AuctionDelegator) =
     GET >=> fun (ctx) ->
             monad {
               let! auctionList =lift ( agent.GetAuctions())
-              return! OK_JSON auctionList ctx
+              return! Json.OK auctionList ctx
             }
 
   let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
@@ -166,7 +190,7 @@ let webPart (agent : AuctionDelegator) =
       let! auctionAndBids = lift (agent.GetAuction id)
       return! 
          match auctionAndBids with
-         | Some v-> OK_JSON (JsonResult.getAuctionResult v) ctx
+         | Some v-> Json.OK (JsonResult.getAuctionResult v) ctx
          | None -> NOT_FOUND (sprintf "Could not find auction with id %o" id) ctx
   })
 
@@ -176,10 +200,9 @@ let webPart (agent : AuctionDelegator) =
     fun ctx -> monad {
       let userCommand = agent.UserCommand >> map (Result.mapError DomainError)
       match userCommand <!> (maybeC ctx) with 
-      (* | Ok asyncR-> TODO:!!!
-          let! r = asyncR
-          return! JSONorBAD_REQUEST r ctx *)
-      | Error c'->return! BAD_REQUEST_JSON c' ctx
+      | Ok asyncR-> // NOTE: Is this really the way?
+          return! monad { match! lift asyncR with | Ok v->return! Json.OK v ctx | Error e-> return! Json.BAD_REQUEST e ctx}
+      | Error c'->return! Json.BAD_REQUEST c' ctx
     }
 
   /// register auction

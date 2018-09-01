@@ -14,6 +14,7 @@ module SuaveTask=
 
 
 type WebPart'<'a> = 'a -> OptionT<Async<'a option>>
+//SuaveWebPart : Suave.Http.HttpContext -> Async<Suave.Http.HttpContext option>
 type WebPart = Suave.Http.HttpContext -> OptionT<Async<Suave.Http.HttpContext option>>
 module WebPart=
   let choose (options : WebPart'<'a> list) =fun x -> choice (List.map ( (|>) x) options)
@@ -38,8 +39,8 @@ module Filters=
   let pathStarts s      :WebPart= OptionT << (F.pathStarts s)
   let isSecure          :WebPart= OptionT << F.isSecure
   let pathRegex s       :WebPart= OptionT << (F.pathRegex s)
-  let pathScan (pf : PrintfFormat<_,_,_,_,'t>) (h : 't ->  WebPart) : WebPart =failwith "!"
-    //(F.pathScan) pf (fun t->h t)
+  let pathScan (pf : PrintfFormat<_,_,_,_,'t>) (h : 't ->  WebPart) : WebPart =
+    OptionT<< (F.pathScan pf (fun t ctx->OptionT.run ((h t) ctx))) // looks kind of weird, but perhaps OK
   
 module RequestErrors=
   module RE = Suave.RequestErrors
@@ -70,24 +71,25 @@ module Writers=
   let setHeader k v = OptionT << W.setHeader k v
   let setHeaderValue k v = OptionT << W.setHeaderValue k v
   let setMimeType t = OptionT << W.setMimeType t
-open FSharp.Data
 
-open Successful
-open RequestErrors
-open Writers
-let inline OK_JSON v : WebPart= 
-  OK ((toJson v).ToString())
-  >=> setMimeType "application/json; charset=utf-8"
-let inline BAD_REQUEST_JSON v : WebPart= 
-  BAD_REQUEST ((toJson v).ToString())
-  >=> setMimeType "application/json; charset=utf-8"
+module Json=
+  open FSharp.Data
+  open Successful
+  open RequestErrors
+  open Writers
+  let inline OK v : WebPart= 
+    OK ((toJson v).ToString())
+    >=> setMimeType "application/json; charset=utf-8"
+  let inline BAD_REQUEST v : WebPart= 
+    BAD_REQUEST ((toJson v).ToString())
+    >=> setMimeType "application/json; charset=utf-8"
 
-let inline ``JSONorBAD_REQUEST`` (result) : WebPart=
-  match result with
-  | Ok v -> OK_JSON v
-  | Error err -> BAD_REQUEST_JSON err
+  let inline ``OK_or_BAD_REQUEST`` (result) : WebPart=
+    match result with
+    | Ok v -> OK v
+    | Error err -> BAD_REQUEST err
 
-let inline getBodyAsJSON (ctx : Suave.Http.HttpContext)= 
-  let getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
-  let str = ctx.request.rawForm |> getStringFromBytes
-  ofJson (JsonValue.Parse str)
+  let inline getBody (ctx : Suave.Http.HttpContext)= 
+    let getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
+    let str = ctx.request.rawForm |> getStringFromBytes
+    ofJson (JsonValue.Parse str)

@@ -25,7 +25,7 @@ type Currency =
 
 module Currency=
   let tryParse c : Currency option= tryParse c
-
+  let toString (x:Currency) = Enum.GetName (typeof<Currency>, x)
 type UserId = string
 
 type User = 
@@ -195,7 +195,7 @@ with
       "expiry" .= x.expiry
       "user" .= x.user
       "type" .= x.typ
-      "currency" .= (Enum.GetName (typeof<Currency>, x.currency))
+      "currency" .= (Currency.toString x.currency)
     ]
 
 
@@ -240,6 +240,20 @@ type Errors =
   | InvalidUserData of string
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
+  static member ToJson (x: Errors) =
+    match x with
+    | UnknownAuction a-> jobj [ "type".="UnknownAuction"; "auctionId" .= a] //NOTE: Duplicate
+    | UnknownBid b-> jobj [ "type".="UnknownBid"; "bidId" .= b]
+    | BidAlreadyExists b-> jobj [ "type".="BidAlreadyExists"; "bidId" .= b]
+    | AuctionAlreadyExists a-> jobj [ "type".="AuctionAlreadyExists"; "auctionId" .= a]
+    | AuctionHasEnded a-> jobj [ "type".="AuctionHasEnded"; "auctionId" .= a]
+    | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
+    | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
+    | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= u; "auctionId" .=a]
+    | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .=Currency.toString c]
+    | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= u]
+    | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
+    | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
 
 [<RequireQualifiedAccess>]
 module Auction=
@@ -306,7 +320,7 @@ module State=
           if b.at<expiry then
             match bids with
             | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt):>IState,Ok()
-            | highestBid::xs -> 
+            | highestBid::_ -> 
               // you cannot bid lower than the "current bid"
               if b.amount > (highestBid.amount + opt.minRaise)
               then
@@ -427,5 +441,9 @@ type Command =
 type CommandSuccess = 
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
+  static member ToJson (x: CommandSuccess) =
+    match x with
+    | AuctionAdded (d,a)-> jobj [ "$type" .= "AuctionAdded"; "at" .= d; "auction" .= a]
+    | BidAccepted (d,b)-> jobj [ "$type" .= "BidAccepted"; "at" .= d; "bid" .= b]
 
   
