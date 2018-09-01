@@ -16,7 +16,6 @@ module SuaveTask=
 type WebPart'<'a> = 'a -> OptionT<Async<'a option>>
 type WebPart = Suave.Http.HttpContext -> OptionT<Async<Suave.Http.HttpContext option>>
 module WebPart=
-
   let choose (options : WebPart'<'a> list) =fun x -> choice (List.map ( (|>) x) options)
 module Http=
   module H=Suave.Http
@@ -27,19 +26,21 @@ module Successful=
 
 module Filters=
   module F = Suave.Filters
-  let GET=  OptionT << F.GET
-  let POST= OptionT << F.POST
-  let DELETE= OptionT << F.DELETE
-  let PUT= OptionT << F.PUT
-  let HEAD= OptionT << F.HEAD
-  let PATCH= OptionT << F.PATCH
-  let OPTIONS= OptionT << F.OPTIONS
+  let GET               :WebPart = OptionT << F.GET
+  let POST              :WebPart = OptionT << F.POST
+  let DELETE            :WebPart = OptionT << F.DELETE
+  let PUT               :WebPart = OptionT << F.PUT
+  let HEAD              :WebPart = OptionT << F.HEAD
+  let PATCH             :WebPart = OptionT << F.PATCH
+  let OPTIONS           :WebPart = OptionT << F.OPTIONS
 
-  let path s= OptionT << (F.path s)
-  let pathStarts s=OptionT << (F.pathStarts s)
-  let isSecure =OptionT << F.isSecure
-  let pathRegex s=OptionT << (F.pathRegex s)
-  let pathScan format ctx=OptionT << (F.pathScan format ctx)
+  let path s            :WebPart= OptionT << (F.path s)
+  let pathStarts s      :WebPart= OptionT << (F.pathStarts s)
+  let isSecure          :WebPart= OptionT << F.isSecure
+  let pathRegex s       :WebPart= OptionT << (F.pathRegex s)
+  let pathScan (pf : PrintfFormat<_,_,_,_,'t>) (h : 't ->  WebPart) : WebPart =failwith "!"
+    //(F.pathScan) pf (fun t->h t)
+  
 module RequestErrors=
   module RE = Suave.RequestErrors
   let BAD_REQUEST s= OptionT<< (RE.BAD_REQUEST s )
@@ -47,6 +48,7 @@ module RequestErrors=
   let METHOD_NOT_ALLOWED s= OptionT<< (RE.METHOD_NOT_ALLOWED s )
   let FORBIDDEN s= OptionT<< (RE.FORBIDDEN s )
   let NOT_FOUND s= OptionT<< (RE.NOT_FOUND s )
+  let UNAUTHORIZED s = OptionT<< (RE.UNAUTHORIZED s ) 
 open FSharpPlus.Lens
 module Writers=
   open Suave
@@ -73,20 +75,19 @@ open FSharp.Data
 open Successful
 open RequestErrors
 open Writers
-let inline JSON v : WebPart= 
+let inline OK_JSON v : WebPart= 
   OK ((toJson v).ToString())
+  >=> setMimeType "application/json; charset=utf-8"
+let inline BAD_REQUEST_JSON v : WebPart= 
+  BAD_REQUEST ((toJson v).ToString())
   >=> setMimeType "application/json; charset=utf-8"
 
 let inline ``JSONorBAD_REQUEST`` (result) : WebPart=
   match result with
-  | Ok v -> JSON v
-  | Error err ->
-    ((toJson err).ToString()) 
-    |> BAD_REQUEST
-    >=> setMimeType "application/json; charset=utf-8"
-
-let private getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
+  | Ok v -> OK_JSON v
+  | Error err -> BAD_REQUEST_JSON err
 
 let inline getBodyAsJSON (ctx : Suave.Http.HttpContext)= 
+  let getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
   let str = ctx.request.rawForm |> getStringFromBytes
   ofJson (JsonValue.Parse str)

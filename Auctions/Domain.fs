@@ -57,7 +57,7 @@ type User =
     | Some user->user
     | None -> raise (FormatException "InvalidUser")
 
-  static member OfJson json = User.tryParse <!> ofJson json |> Result.bind (Result.ofOption "Invalid user")
+  static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption "Invalid user")
   static member ToJson (x: User) = toJson (x.ToString())
  
 
@@ -91,7 +91,7 @@ type Amount =
   static member (-) (a1 : Amount, a2 : Amount) = 
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
-  static member OfJson json = Amount.tryParse <!> ofJson json |> Result.bind (Result.ofOption "Invalid amount")
+  static member OfJson json = Amount.tryParse <!> ofJson json >>= (Result.ofOption "Invalid amount")
   static member ToJson (x: Amount) = toJson (x.ToString())
 
 module Amount=
@@ -166,7 +166,7 @@ module Auctions=
       match Type.tryParse typ with
       | Some t->t
       | None -> raise (FormatException "Invalid Type")
-    static member OfJson json = Type.tryParse <!> ofJson json |> Result.bind (Result.ofOption "Invalid auction type")
+    static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption "Invalid auction type")
     static member ToJson (x:Type) = toJson (x.ToString())
 
 type Auction = 
@@ -184,7 +184,7 @@ with
     let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
     match json with
     | JObject o -> 
-      let c = Currency.tryParse <!> (o .@ "currency")  |> Result.bind (Result.ofOption "Invalid currency")
+      let c = Currency.tryParse <!> (o .@ "currency")  >>= (Result.ofOption "Invalid currency")
       create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title") <*> (o .@ "expiry") <*> (o .@ "user") <*> (o .@ "type") <*> c
     | x -> Error (sprintf "Expected Auction, found %A" x)
   static member ToJson (x: Auction) =
