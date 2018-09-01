@@ -73,9 +73,9 @@ type AddAuctionReq = {
 }
 with 
   static member OfJson json:ParseResult<AddAuctionReq> =
-    let create id startsAt title endsAt currency typ= {id =id;startsAt=startsAt;title=title; endsAt=endsAt;currency=currency; typ=typ}
+    let create id startsAt title endsAt (currency:string option) (typ:string option)= {id =id;startsAt=startsAt;title=title; endsAt=endsAt;currency=Option.defaultValue "" currency; typ=Option.defaultValue "" typ}
     match json with
-    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")<*> (o .@ "currency")<*> (o .@ "type")
+    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")<*> (o .@? "currency")<*> (o .@? "type")
     | x -> Error (sprintf "Expected bid, found %A" x)
 
 type BidJsonResult = { 
@@ -230,6 +230,9 @@ let webPart (agent : AuctionDelegator) =
                    pathScan Paths.Auction.details details
                    pathScan Paths.Auction.placeBid placeBid ]
 
-//curl  -X POST -d '{ "id":"1","startsAt":"2017-01-01","endsAt":"2018-01-01","title":"First auction" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
+//curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
 
-//curl  -X POST -d '{ "auction":"1","amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid 
+//curl  -X POST -d '{ "amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
+
+
+//curl  -X GET -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
