@@ -135,7 +135,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
        async{
          match cmd with
          | AddAuction(at, auction) -> 
-            if auction.startsAt > now then
+            if auction.expiry > now then
               let agent = AuctionAgent.create auction (Auction.emptyState auction)
               agents <- Map.add auction.id (AuctionDState.started auction agent) agents
               reply.Reply(Ok (AuctionAdded(at, auction)))

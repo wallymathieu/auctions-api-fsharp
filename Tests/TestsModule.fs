@@ -2,6 +2,7 @@
 module Tests.TestsModule
 open Auctions.Domain
 open System
+open FSharpPlus
 
 let auctionId : AuctionId = 1L
 let title = "auction"
@@ -21,6 +22,10 @@ let auctionOfTyp typ : Auction =
 
 let auction : Auction = auctionOfTyp (SingleSealedBid Vickrey)
 
+module User=
+  let parse user = User.__parse user
+module Amount=
+  let parse amount =Amount.__parse amount
 
 let sek a = 
   { value = a
