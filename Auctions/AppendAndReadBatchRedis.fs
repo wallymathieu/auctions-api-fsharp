@@ -23,7 +23,7 @@ type AppendAndReadBatchRedis(connStr:string) =
       let ids = new List<RedisValue>()
       for command in commands do
         let id = hashCreate batch command
-        ids.Add(redisValueStr (id.ToString()))
+        ids.Add(redisValueStr (string id))
       batch.SetAddAsync(commandsKey, ids |> Seq.toArray, CommandFlags.None) |> ignore
       batch.Execute()
     

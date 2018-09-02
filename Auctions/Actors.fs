@@ -125,7 +125,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
       job{
         match cmd with
         | AddAuction(at, auction) -> 
-          if auction.startsAt > now then
+          if auction.expiry > now then
             let! agent = AuctionAgent.create auction (Auction.emptyState auction)
             do! agents|> MVar.mutateFun(Map.add auction.id (AuctionDState.started auction agent))
             do! IVar.fill reply (Ok (AuctionAdded(at, auction)))

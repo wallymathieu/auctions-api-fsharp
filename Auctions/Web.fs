@@ -29,7 +29,6 @@ let authenticated f =
                                     | None ->f NoSession
     | Choice2Of2 _ -> f NoSession)
 
-
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
   
@@ -70,16 +69,21 @@ type AuctionJsonResult = {
   winnerPrice : string
 }
 module JsonResult=
-  let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
+  let exnToInvalidUserData (err:exn)=
+    InvalidUserData
+      #if DEBUG
+      (sprintf "%s\n\n%s\n" err.Message err.StackTrace)
+      #else
+      err.Message
+      #endif
 
   let getAuctionResult (auction,bids,maybeAmountAndWinner) =
-    let now =DateTime.UtcNow
     let discloseBidders =Auction.biddersAreOpen auction
     let mapBid (b:Bid) :BidJsonResult = { 
       amount=b.amount
       bidder= if discloseBidders 
-              then b.user.ToString() 
-              else b.user.GetHashCode().ToString() // here you might want bidder number
+              then string b.user 
+              else string <| b.user.GetHashCode() // here you might want bidder number
     }
 
     let (winner,winnerPrice) = 
@@ -94,7 +98,7 @@ module JsonResult=
     }
 
   let toPostedAuction user = 
-      getBodyAsJSON<AddAuctionReq> 
+      Json.getBody<AddAuctionReq> 
         >> Result.map (fun a -> 
         let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
         
@@ -116,7 +120,7 @@ module JsonResult=
         >> Result.mapError exnToInvalidUserData
 
   let toPostedPlaceBid id user = 
-    getBodyAsJSON<BidReq> 
+    Json.getBody<BidReq> 
       >> Result.map (fun a -> 
       let d = DateTime.UtcNow
       (d, 
@@ -135,7 +139,7 @@ let webPart (agent : Job<AuctionDelegator>) =
                 let! a = agent
                 return! a.GetAuctions()
               }
-              return! JSON (r |>List.toArray) ctx
+              return! Json.OK (r |>List.toArray) ctx
             }
 
   let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
@@ -149,7 +153,16 @@ let webPart (agent : Job<AuctionDelegator>) =
         | None -> return Error (UnknownAuction id)
       }
 
-  let details id  = GET >=> JSON(getAuctionResult id)
+  let details id : WebPart= GET >=> (fun ctx->monad{ 
+    let! auctionAndBids = Job.toAsync <| job{
+      let! a = agent
+      return! a.GetAuction id
+    }
+    return!
+       match auctionAndBids with
+       | Some v-> Json.OK (JsonResult.getAuctionResult v) ctx
+       | None -> NOT_FOUND (sprintf "Could not find auction with id %o" id) ctx
+  })
   
   /// handle command and add result to repository
   let handleCommandAsync 
@@ -171,7 +184,7 @@ let webPart (agent : Job<AuctionDelegator>) =
       async {
         let r = toCommand ctx
         let! commandResult= handleCommandAsync r
-        return! JSONorBAD_REQUEST commandResult ctx
+        return! Json.OK_or_BAD_REQUEST commandResult ctx
       }
 
   /// register auction
@@ -194,6 +207,6 @@ let webPart (agent : Job<AuctionDelegator>) =
            pathScan Paths.Auction.details details
            pathScan Paths.Auction.placeBid placeBid ]
 
-//curl  -X POST -d '{ "id":"1","startsAt":"2017-01-01","endsAt":"2018-01-01","title":"First auction" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
-
-//curl  -X POST -d '{ "auction":"1","amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid 
+//curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
+//curl  -X POST -d '{ "amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
+//curl  -X GET -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions 

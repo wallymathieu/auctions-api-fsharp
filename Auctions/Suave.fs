@@ -8,29 +8,30 @@ open Newtonsoft.Json
 open Newtonsoft.Json.Serialization
 
 module Json=
-  let jsonSerializerSettings = JsonSerializerSettings()
-  jsonSerializerSettings.ContractResolver <- CamelCasePropertyNamesContractResolver()
+  module private Internals=
+    let jsonSerializerSettings = JsonSerializerSettings()
+    jsonSerializerSettings.ContractResolver <- CamelCasePropertyNamesContractResolver()
 
-  let stringify v=
-    JsonConvert.SerializeObject(v, jsonSerializerSettings)
-
-let JSON v : WebPart= 
-  Json.stringify v
-  |> OK
-  >=> setMimeType "application/json; charset=utf-8"
-
-let ``JSONorBAD_REQUEST`` (result:Result<_,_>) : WebPart=
-  match result with
-  | Ok v -> JSON v
-  | Error err -> 
-    Json.stringify err
+    let stringify v=
+      JsonConvert.SerializeObject(v, jsonSerializerSettings)
+  open Internals
+  let OK v : WebPart= 
+    stringify v
+    |> OK
+    >=> setMimeType "application/json; charset=utf-8"
+  let BAD_REQUEST v : WebPart= 
+    stringify v
     |> BAD_REQUEST
     >=> setMimeType "application/json; charset=utf-8"
 
-let private getStringFromBytes rawForm = System.Text.Encoding.UTF8.GetString(rawForm)
+  let ``OK_or_BAD_REQUEST`` (result:Result<_,_>) : WebPart=
+    match result with
+    | Ok v -> OK v
+    | Error err -> BAD_REQUEST err
 
-let getBodyAsJSON<'a> (ctx : HttpContext) = 
-  let str = ctx.request.rawForm |> getStringFromBytes
-  try 
-    Ok(JsonConvert.DeserializeObject<'a> str)
-  with exn -> Error exn
+
+  let getBody<'a> (ctx : HttpContext) = 
+    let str = ctx.request.rawForm |> System.Text.Encoding.UTF8.GetString
+    try 
+      Ok(JsonConvert.DeserializeObject<'a> str)
+    with exn -> Error exn
