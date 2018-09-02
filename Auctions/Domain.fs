@@ -61,6 +61,7 @@ type User =
       | "Support", id, _ -> Some (Support(id))
       | type', _, _ -> None
     else None
+  static member __parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
   static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption "Invalid user")
   static member ToJson (x: User) = toJson (string x)
 
@@ -82,6 +83,7 @@ type Amount =
       | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
       | type', _ -> None
     else None
+  static member __parse amount = Amount.tryParse amount |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" amount)
   static member (+) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value + a2.value }
@@ -92,6 +94,8 @@ type Amount =
   static member ToJson (x: Amount) = toJson (string x)
 
 module Amount=
+  let currency (a:Amount) = a.currency
+  let value (a:Amount) = a.value
   let zero c= { currency=c ; value=0L}
 
 let (|Amount|_|) = Amount.tryParse
@@ -157,6 +161,7 @@ module Auctions=
         | ["Blind"] -> Some (SingleSealedBid Blind)
         | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
+    static member __parse typ = Type.tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
     static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption "Invalid auction type")
     static member ToJson (x:Type) = toJson (string x)
 
@@ -199,10 +204,12 @@ with
     |> jfield "amount"  (fun x -> x.amount)
     |> jfield "at"      (fun x -> x.at)
 
+[<RequireQualifiedAccess>]
 module Bid=
   let getId (bid : Bid) = bid.id
-  let getAmount (bid : Bid) = bid.amount
-  let getBidder (bid: Bid) = bid.user
+  let amount (bid : Bid) = bid.amount
+  let auction (bid : Bid) = bid.auction
+  let bidder (bid: Bid) = bid.user
 
 type Errors = 
   | UnknownAuction of AuctionId
@@ -235,6 +242,12 @@ type Errors =
 [<RequireQualifiedAccess>]
 module Auction=
   let getId (auction : Auction) = auction.id
+  let title (auction : Auction) = auction.title
+  let expiry (auction : Auction) = auction.expiry
+  let startsAt (auction : Auction) = auction.startsAt
+  let typ (auction : Auction) = auction.typ
+  let currency (auction : Auction) = auction.currency
+  let user (auction : Auction) = auction.user
   /// if the bidders are open or anonymous
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
   let biddersAreOpen (auction : Auction) = true
@@ -332,7 +345,7 @@ module State=
           match now>=expiry with
           | false -> acceptingBids :>IState
           | true -> 
-            let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.getAmount
+            let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
             DisclosingBids(bids, expiry, opt):>IState
         | DisclosingBids _ as disclosingBids-> disclosingBids:>IState
       
@@ -344,7 +357,7 @@ module State=
           | false, false -> AcceptingBids (bids.Add (u,b), expiry, opt):>IState, Ok()
           | _, true -> acceptingBids:>IState, Error AlreadyPlacedBid 
           | true,_ -> 
-            let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.getAmount
+            let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
             DisclosingBids(bids,expiry, opt):>IState, Error (AuctionHasEnded b.auction)
         | DisclosingBids _ as disclosingBids-> 
           disclosingBids:>IState, Error (AuctionHasEnded b.auction)

@@ -23,9 +23,9 @@ let auctionOfTyp typ : Auction =
 let auction : Auction = auctionOfTyp (SingleSealedBid Vickrey)
 
 module User=
-  let parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
+  let parse = User.__parse
 module Amount=
-  let parse amount =Amount.tryParse amount |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" amount)
+  let parse = Amount.__parse
 
 let sek a = 
   { value = a

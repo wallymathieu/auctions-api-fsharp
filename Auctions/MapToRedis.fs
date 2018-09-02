@@ -3,42 +3,106 @@ open Auctions.Domain
 
 open StackExchange.Redis
 open System
+open FSharpPlus
+open FSharpPlus.Data
 
-let redisKey (str : string) = RedisKey.op_Implicit (str)
-let redisValueStr (str : string) = RedisValue.op_Implicit str
-let redisValueInt64 (v : int64) = RedisValue.op_Implicit v
-let redisValueFloat (v : float) = RedisValue.op_Implicit v
-let valueToKey (v : RedisValue) : RedisKey = RedisKey.op_Implicit (string v)
-let hashEntryStr key value = HashEntry(redisValueStr key, redisValueStr value)
-let hashEntryInt64 key value = HashEntry(redisValueStr key, redisValueInt64 value)
-let hashEntryFloat key value = HashEntry(redisValueStr key, redisValueFloat value)
+module Redis=
+  
+  // Codec definition From Fleece:
 
-let mapToHashEntries command = 
+  /// Encodes a value of a generic type 't into a value of raw type 'S.
+  type Encoder<'S, 't> = 't -> 'S 
+
+  /// Decodes a value of raw type 'S into a value of generic type 't, possibly returning an error.
+  type Decoder<'S, 't> = 'S -> Result<'t,string>
+
+  /// A decoder from raw type 'S1 and encoder to raw type 'S2 for string types 't1 and 't2.
+  type Codec<'S1, 'S2, 't1, 't2> = Decoder<'S1, 't1> * Encoder<'S2, 't2>
+
+  /// A decoder from raw type 'S1 and encoder to raw type 'S2 for type 't.
+  type Codec<'S1, 'S2, 't> = Codec<'S1, 'S2, 't, 't>
+
+  /// A codec for raw type 'S decoding to strong type 't1 and encoding to strong type 't2.
+  type SplitCodec<'S, 't1, 't2> = Codec<'S, 'S, 't1, 't2>
+
+  /// A codec for raw type 'S to strong type 't.
+  type Codec<'S, 't> = Codec<'S, 'S, 't>
+
+  let decode (d: Decoder<'i, 'a>) (i: 'i) : Result<'a,_> = d i
+  let encode (e: Encoder<'o, 'a>) (a: 'a) : 'o = e a
+
+  /// <summary>Initialize the field mappings.</summary>
+  /// <param name="f">An object initializer as a curried function.</param>
+  /// <returns>The resulting object codec.</returns>
+  let mapping f = (fun _ -> Ok f), (fun _ -> [])
+  let inline get fromRedis (o: HashEntry list) (key:string) =
+    let k :RedisValue= implicit key
+    match o |> List.tryFind (fun p -> p.Name.Equals(k) ) with
+    | Some v-> fromRedis v.Value
+    | None -> failwithf "Could not find %s" key
+
+  let diApply combiner toBC (remainderFields: SplitCodec<'S, 'f ->'r, 'T>) (currentField: Codec<'S, 'f>) = //NOTE: From Fleece
+      (
+          Compose.run (Compose (fst remainderFields: Decoder<'S, 'f -> 'r>) <*> Compose (fst currentField)),
+          toBC >> (encode (snd currentField) *** encode (snd remainderFields)) >> combiner
+      )
+
+  /// <summary>Appends a field mapping to the codec.</summary>
+  /// <param name="fieldName">A string that will be used as key to the field.</param>
+  /// <param name="getter">The field getter function.</param>
+  /// <param name="rest">The other mappings.</param>
+  /// <param name="fromRedis">Map from redis value to value.</param>
+  /// <param name="toRedis">Map to redis value.</param>
+  /// <returns>The resulting object codec.</returns>
+  let inline field fieldName fromRedis toRedis (getter: 'T -> 'Value) (rest: SplitCodec<_, _->'Rest, _>) = //NOTE: From Fleece
+      let inline deriveFieldCodec prop =
+          (
+              (fun (o: HashEntry list) -> get fromRedis o prop),
+              (fun (x: 't) -> [HashEntry(implicit prop, toRedis x)])
+          )
+      diApply (List.append |> uncurry) (fanout getter id) rest (deriveFieldCodec fieldName)
+  let fieldStr fieldName getter rest =
+    field fieldName (string>>Ok) implicit getter rest
+  let fieldInt64 fieldName getter rest =
+    let getInt64 (v:RedisValue)=
+      let intV = ref 0L
+      if v.TryParse intV then Ok (intV.Value)
+      else Error (sprintf "Could not parse %O" v)
+    field fieldName getInt64 implicit getter rest
+module DateTime=
+  let ticks (d:DateTime)=d.Ticks
+open Redis
+let addAuctionCodec =
+  fun id title expiry startsAt at typ currency user -> (DateTime at, { id=id;title=title; expiry =DateTime expiry; startsAt=DateTime startsAt; typ=Type.__parse typ; currency=Currency.ofValue currency; user=User.__parse user })
+  |> mapping
+  |> fieldInt64 "Id" (snd >> Auction.getId)
+  |> fieldStr "Title" (snd >> Auction.title)
+  |> fieldInt64 "Expiry" (snd >> Auction.expiry >> DateTime.ticks)
+  |> fieldInt64 "StartsAt" (snd >> Auction.expiry >> DateTime.ticks)
+  |> fieldInt64 "At" (fst >> DateTime.ticks)
+  |> fieldStr "Typ" (snd >> Auction.typ >> string)
+  |> fieldInt64 "Currency" (snd >> Auction.currency >> Currency.value)
+  |> fieldStr "User" (snd >> Auction.user >> string)
+let placeBidCodec =
+  fun (id:string) auction amountValue amountCurrency at user -> (DateTime at, { id=Guid.Parse id; auction=auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user=User.__parse user; at=DateTime at })
+  |> mapping
+  |> fieldStr "Id" (snd >> Bid.getId >> string)
+  |> fieldInt64 "Auction" (snd >> Bid.auction)
+  |> fieldInt64 "AmountValue" (snd >> Bid.amount >> Amount.value)
+  |> fieldInt64 "AmountCurrency" (snd >> Bid.amount >> Amount.currency >> Currency.value)
+  |> fieldInt64 "At" (fst >> DateTime.ticks)
+  |> fieldStr "User" (snd >> Bid.bidder >>  string)
+
+let mapToHashEntries command =
+  let hashEntryStr (key:string) (value:string) = HashEntry(implicit key, implicit value)
   let withType t xs = hashEntryStr "Type" t :: xs
   match command with
-  | AddAuction(at, auction) -> 
-    [ hashEntryInt64 "Id" (auction.id)
-      hashEntryStr "Title" (auction.title)
-      hashEntryInt64 "Expiry" auction.expiry.Ticks
-      hashEntryInt64 "StartsAt" auction.startsAt.Ticks
-      hashEntryInt64 "At" at.Ticks 
-      hashEntryStr "Typ" (string auction.typ)
-      hashEntryInt64 "Currency" (Currency.value auction.currency)
-      hashEntryStr "User" (string auction.user) ]
-    |> withType "AddAuction"
-  | PlaceBid(at, bid) -> 
-    [ hashEntryStr "Id" (string bid.id)
-      hashEntryInt64 "Auction" (bid.auction)
-      hashEntryInt64 "AmountValue" bid.amount.value
-      hashEntryInt64 "AmountCurrency" (Currency.value bid.amount.currency)
-      hashEntryInt64 "At" at.Ticks
-      hashEntryStr "User" (string bid.user) ]
-    |> withType "PlaceBid"
+  | AddAuction(at, auction)-> encode (snd addAuctionCodec) (at, auction) |> withType "AddAuction"
+  | PlaceBid(at, bid) ->  encode (snd placeBidCodec) (at, bid) |> withType "PlaceBid"
 
-let findEntry key (entries : HashEntry array) = 
-  let k = redisValueStr key
-  let entry = entries |> Array.tryFind (fun e -> e.Name.Equals(k))
-  match entry with
+let findEntry (key:string) (entries : HashEntry list) = 
+  let k :RedisValue= implicit key
+  match entries |> List.tryFind (fun e -> e.Name.Equals(k)) with
   | Some entry -> entry
   | None -> failwithf "could not find %s" key
 
@@ -46,103 +110,16 @@ let findEntryStr key entries =
   let entry = findEntry key entries
   string entry.Value
 
-let findEntryInt64 key entries : int64 = 
-  let entry = findEntry key entries
-  match Int64.TryParse(string entry.Value) with
-  | true, v -> v
-  | false, _ -> failwithf "unable to parse value %A" entry.Value
-
-let findEntryFloat key entries = 
-  let entry = findEntry key entries
-  match Double.TryParse(string entry.Value) with
-  | true, v -> v
-  | false, _ -> failwithf "unable to parse value %A" entry.Value
-
 let mapFromHashEntries entries : Command = 
   let t = entries |> findEntryStr "Type"
   match t with
   | "AddAuction" -> 
-    let id = entries |> findEntryInt64 "Id"
-    let title = entries |> findEntryStr "Title"
-    
-    let expiry = 
-      entries
-      |> findEntryInt64 "Expiry"
-      |> DateTime
-    
-    let startsAt = 
-      entries
-      |> findEntryInt64 "StartsAt"
-      |> DateTime
-    
-    let at = 
-      entries
-      |> findEntryInt64 "At"
-      |> DateTime
-
-    let currency = 
-      entries
-      |> findEntryInt64 "Currency"
-      |> Currency.ofValue
-    
-    let user = 
-      entries
-      |> findEntryStr "User"
-      |> User.tryParse
-
-    if user.IsNone then failwith "missing user in auction data!"
-
-    let typ = 
-      entries
-      |> findEntryStr "Typ"
-      |> Domain.Auctions.Type.tryParse
-
-    let auction : Auction = 
-      { id = id
-        title = title
-        startsAt = startsAt
-        expiry = expiry
-        user = user.Value 
-        currency = currency
-        typ = typ 
-              |> function
-                 | Some t -> t 
-                 | None -> Auctions.TimedAscending { // if no typ serialized, use english
-                    reservePrice=Amount.zero currency
-                    minRaise =Amount.zero currency
-                    timeFrame = TimeSpan.FromSeconds(0.0)
-                  } 
-      }// null ref expn
-    
-    AddAuction(at, auction)
+    match decode (fst addAuctionCodec) entries with
+    | Ok (at,auction) -> AddAuction (at,auction)
+    | Error err-> failwithf "Unknown %A" err
   | "PlaceBid" -> 
-    let id = 
-      entries
-      |> findEntryStr "Id"
-      |> BidId.Parse
-    
-    let auction = entries |> findEntryInt64 "Auction"
-    let amount = entries |> findEntryInt64 "AmountValue"
-    let currency = entries |> findEntryInt64 "AmountCurrency" |> Currency.ofValue
-    
-    let user = 
-      entries
-      |> findEntryStr "User"
-      |> User.tryParse
-    
-    let at = 
-      entries
-      |> findEntryInt64 "At"
-      |> DateTime
-    
-    let bid : Bid = 
-      { id = id
-        auction = auction
-        amount = 
-          { value = amount
-            currency = currency }
-        user = user.Value// null ref expn
-        at = at }
-    
-    PlaceBid(at, bid)
+    match decode (fst placeBidCodec) entries with
+    | Ok (at,bid) -> PlaceBid(at, bid)
+    | Error err-> failwithf "Unknown %A" err
   | v -> failwithf "Unknown type %s" v
+ 
