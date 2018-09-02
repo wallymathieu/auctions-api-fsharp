@@ -15,7 +15,7 @@ let auctionOfTyp typ : Auction =
     startsAt = startsAt
     expiry = endsAt
     user = seller
-    currency=Currency.SEK
+    currency=Currency CurrencyCode.SEK
     typ= typ
    }
 
@@ -24,7 +24,7 @@ let auction : Auction = auctionOfTyp (SingleSealedBid Vickrey)
 
 let sek a = 
   { value = a
-    currency = Currency.SEK }
+    currency = Currency CurrencyCode.SEK }
 
 let bid = 
     { id = Guid.NewGuid()

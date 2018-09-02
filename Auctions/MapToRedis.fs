@@ -23,14 +23,14 @@ let mapToHashEntries command =
       hashEntryInt64 "StartsAt" auction.startsAt.Ticks
       hashEntryInt64 "At" at.Ticks 
       hashEntryStr "Typ" (auction.typ.ToString())
-      hashEntryInt64 "Currency" (int64(LanguagePrimitives.EnumToValue auction.currency))
+      hashEntryInt64 "Currency" (Currency.value auction.currency)
       ]
     |> withType "AddAuction"
   | PlaceBid(at, bid) -> 
     [ hashEntryStr "Id" (bid.id.ToString())
       hashEntryInt64 "Auction" (bid.auction)
       hashEntryInt64 "AmountValue" bid.amount.value
-      hashEntryStr "AmountCurrency" (bid.amount.currency.ToString())
+      hashEntryInt64 "AmountCurrency" (Currency.value bid.amount.currency)
       hashEntryInt64 "At" at.Ticks
       hashEntryStr "User" (bid.user.ToString()) ]
     |> withType "PlaceBid"
@@ -81,8 +81,7 @@ let mapFromHashEntries entries : Command =
     let currency = 
       entries
       |> findEntryInt64 "Currency"
-      |> int
-      |> LanguagePrimitives.EnumOfValue<int,Currency>
+      |> Currency.ofValue
     
     let user = 
       entries
@@ -122,7 +121,7 @@ let mapFromHashEntries entries : Command =
     
     let auction = entries |> findEntryInt64 "Auction"
     let amount = entries |> findEntryInt64 "AmountValue"
-    let currency = entries |> findEntryStr "AmountCurrency"
+    let currency = entries |> findEntryInt64 "AmountCurrency" |> Currency.ofValue
     
     let user = 
       entries
@@ -139,7 +138,7 @@ let mapFromHashEntries entries : Command =
         auction = auction
         amount = 
           { value = amount
-            currency = Currency.Parse currency }
+            currency = currency }
         user = user.Value// null ref expn
         at = at }
     

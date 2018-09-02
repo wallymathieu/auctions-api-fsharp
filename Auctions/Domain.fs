@@ -15,17 +15,27 @@ open FSharpPlus.Operators
 module Result=
   let ofOption error option = match option with | Some v -> Ok v | None -> Error error
 
-type Currency = 
-  /// virtual acution currency
-  |VAC=1001  
+type CurrencyCode =
+  /// virtual auction currency
+  |VAC=1001
   /// Swedish 'Krona'
   |SEK=752
   /// Danish 'Krone'
   |DKK=208
+type Currency = Currency of CurrencyCode
+with
+  override x.ToString () =
+    let unwrap (Currency c) = c
+    Enum.GetName (typeof<Currency>, unwrap x)
 
-module Currency=
-  let tryParse c : Currency option= tryParse c
-  let toString (x:Currency) = Enum.GetName (typeof<Currency>, x)
+  static member OfJson json = Currency.tryParse <!> ofJson json >>= (Result.ofOption "Invalid currency")
+  static member ToJson (x: Currency) = toJson (string x)
+//module Currency=
+  static member tryParse c : Currency option= tryParse c |> Option.map Currency
+  static member VAC = Currency CurrencyCode.VAC
+  static member value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
+  static member inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
+
 type UserId = string
 
 type User = 
@@ -70,7 +80,7 @@ type Amount =
   { value : int64
     currency : Currency }
   override this.ToString() = 
-    sprintf "%s%i" (Currency.toString this.currency) this.value
+    sprintf "%s%i" (string this.currency) this.value
 
   static member tryParse amount = 
     let userRegex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
@@ -180,25 +190,16 @@ type Auction =
     currency:Currency
   }
 with
-
-  static member OfJson json =
-    let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
-    match json with
-    | JObject o -> 
-      let c = Currency.tryParse <!> (o .@ "currency")  >>= (Result.ofOption "Invalid currency")
-      create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title") <*> (o .@ "expiry") <*> (o .@ "user") <*> (o .@ "type") <*> c
-    | x -> Error (sprintf "Expected Auction, found %A" x)
-  static member ToJson (x: Auction) =
-    jobj [ 
-      "id" .= x.id
-      "startsAt" .= x.startsAt
-      "title" .= x.title
-      "expiry" .= x.expiry
-      "user" .= x.user
-      "type" .= x.typ
-      "currency" .= (Currency.toString x.currency)
-    ]
-
+  static member JsonObjCodec =
+    fun id startsAt title expiry user typ currency -> { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
+    |> mapping
+    |> jfield "id"      (fun x -> x.id)
+    |> jfield "startsAt" (fun x -> x.startsAt)
+    |> jfield "title"    (fun x -> x.title)
+    |> jfield "expiry"  (fun x -> x.expiry)
+    |> jfield "user"      (fun x -> x.user)
+    |> jfield "type"      (fun x -> x.typ)
+    |> jfield "currency"      (fun x -> x.currency)
 
 type Bid = 
   { id : BidId
@@ -245,7 +246,7 @@ type Errors =
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
     | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= u; "auctionId" .=a]
-    | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .=Currency.toString c]
+    | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .= c]
     | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
     | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
