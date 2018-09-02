@@ -51,10 +51,10 @@ type User =
     match user with
     | BuyerOrSeller(id, _) -> id
     | Support id -> id
-  
+
+  static member Regex = System.Text.RegularExpressions.Regex("(?<type>\w*)\|(?<id>[^|]*)(\|(?<name>.*))?")
   static member tryParse user = 
-    let userRegex = System.Text.RegularExpressions.Regex("(?<type>\w*)\|(?<id>[^|]*)(\|(?<name>.*))?")
-    let m = userRegex.Match(user)
+    let m = User.Regex.Match(user)
     if m.Success then 
       match (m.Groups.["type"].Value, m.Groups.["id"].Value, m.Groups.["name"].Value) with
       | "BuyerOrSeller", id, name -> Some (BuyerOrSeller(id, name))
@@ -82,9 +82,9 @@ type Amount =
   override this.ToString() = 
     sprintf "%s%i" (string this.currency) this.value
 
-  static member tryParse amount = 
-    let userRegex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
-    let m = userRegex.Match(amount)
+  static member Regex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
+  static member tryParse amount =
+    let m = Amount.Regex.Match(amount)
     if m.Success then 
       match (m.Groups.["currency"].Value, m.Groups.["value"].Value) with
       | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
