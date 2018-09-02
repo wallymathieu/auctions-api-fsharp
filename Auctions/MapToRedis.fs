@@ -8,7 +8,7 @@ let redisKey (str : string) = RedisKey.op_Implicit (str)
 let redisValueStr (str : string) = RedisValue.op_Implicit str
 let redisValueInt64 (v : int64) = RedisValue.op_Implicit v
 let redisValueFloat (v : float) = RedisValue.op_Implicit v
-let valueToKey (v : RedisValue) : RedisKey = RedisKey.op_Implicit (v.ToString())
+let valueToKey (v : RedisValue) : RedisKey = RedisKey.op_Implicit (string v)
 let hashEntryStr key value = HashEntry(redisValueStr key, redisValueStr value)
 let hashEntryInt64 key value = HashEntry(redisValueStr key, redisValueInt64 value)
 let hashEntryFloat key value = HashEntry(redisValueStr key, redisValueFloat value)
@@ -22,37 +22,39 @@ let mapToHashEntries command =
       hashEntryInt64 "Expiry" auction.expiry.Ticks
       hashEntryInt64 "StartsAt" auction.startsAt.Ticks
       hashEntryInt64 "At" at.Ticks 
-      hashEntryStr "Typ" (auction.typ.ToString())
+      hashEntryStr "Typ" (string auction.typ)
       hashEntryInt64 "Currency" (Currency.value auction.currency)
-      ]
+      hashEntryStr "User" (string auction.user) ]
     |> withType "AddAuction"
   | PlaceBid(at, bid) -> 
-    [ hashEntryStr "Id" (bid.id.ToString())
+    [ hashEntryStr "Id" (string bid.id)
       hashEntryInt64 "Auction" (bid.auction)
       hashEntryInt64 "AmountValue" bid.amount.value
       hashEntryInt64 "AmountCurrency" (Currency.value bid.amount.currency)
       hashEntryInt64 "At" at.Ticks
-      hashEntryStr "User" (bid.user.ToString()) ]
+      hashEntryStr "User" (string bid.user) ]
     |> withType "PlaceBid"
 
 let findEntry key (entries : HashEntry array) = 
   let k = redisValueStr key
-  let entry = entries |> Array.find (fun e -> e.Name.Equals(k))
-  entry
+  let entry = entries |> Array.tryFind (fun e -> e.Name.Equals(k))
+  match entry with
+  | Some entry -> entry
+  | None -> failwithf "could not find %s" key
 
 let findEntryStr key entries = 
   let entry = findEntry key entries
-  entry.Value.ToString()
+  string entry.Value
 
 let findEntryInt64 key entries : int64 = 
   let entry = findEntry key entries
-  match Int64.TryParse(entry.Value.ToString()) with
+  match Int64.TryParse(string entry.Value) with
   | true, v -> v
   | false, _ -> failwithf "unable to parse value %A" entry.Value
 
 let findEntryFloat key entries = 
   let entry = findEntry key entries
-  match Double.TryParse(entry.Value.ToString()) with
+  match Double.TryParse(string entry.Value) with
   | true, v -> v
   | false, _ -> failwithf "unable to parse value %A" entry.Value
 
@@ -121,7 +123,7 @@ let mapFromHashEntries entries : Command =
     
     let auction = entries |> findEntryInt64 "Auction"
     let amount = entries |> findEntryInt64 "AmountValue"
-    let currency = entries |> findEntryInt64 "AmountCurrency" |> Currency.ofValue
+    let currency = entries |> findEntryStr "AmountCurrency" |> Currency.ofValue
     
     let user = 
       entries

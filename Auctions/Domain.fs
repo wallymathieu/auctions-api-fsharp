@@ -36,6 +36,8 @@ with
   static member value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
   static member inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
 
+  let value (c:Currency) = int64(LanguagePrimitives.EnumToValue c)
+  let inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,Currency>
 type UserId = string
 
 type User = 
@@ -53,7 +55,7 @@ type User =
     | Support id -> id
 
   static member Regex = System.Text.RegularExpressions.Regex("(?<type>\w*)\|(?<id>[^|]*)(\|(?<name>.*))?")
-  static member tryParse user = 
+  static member tryParse user =
     let m = User.Regex.Match(user)
     if m.Success then 
       match (m.Groups.["type"].Value, m.Groups.["id"].Value, m.Groups.["name"].Value) with
@@ -63,7 +65,6 @@ type User =
     else None
   static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption "Invalid user")
   static member ToJson (x: User) = toJson (string x)
- 
 
 type BidId = Guid
 
@@ -73,11 +74,10 @@ let (|Currency|_|) = Currency.tryParse
 type Amount = 
   { value : int64
     currency : Currency }
-  override this.ToString() = 
-    sprintf "%s%i" (string this.currency) this.value
-
+  override this.ToString() =
+    sprintf "%O%i" (this.currency) this.value
   static member Regex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
-  static member tryParse amount =
+  static member tryParse amount = 
     let m = Amount.Regex.Match(amount)
     if m.Success then 
       match (m.Groups.["currency"].Value, m.Groups.["value"].Value) with
@@ -142,8 +142,8 @@ module Auctions=
     with
     override this.ToString() = 
       match this with
-      | TimedAscending english -> sprintf "English|%s|%s|%d" 
-                                    (string english.reservePrice) (string english.minRaise) english.timeFrame.Ticks
+      | TimedAscending english -> sprintf "English|%O|%O|%d"
+                                    (english.reservePrice) (english.minRaise) english.timeFrame.Ticks
       | SingleSealedBid Blind -> sprintf "Blind"
       | SingleSealedBid Vickrey -> sprintf "Vickrey"
     static member tryParse typ =
@@ -299,7 +299,7 @@ module State=
           if b.at<expiry then
             match bids with
             | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt):>IState,Ok()
-            | highestBid::_ -> 
+            | highestBid::_ ->
               // you cannot bid lower than the "current bid"
               if b.amount > (highestBid.amount + opt.minRaise)
               then

@@ -135,7 +135,6 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
        async{
          match cmd with
          | AddAuction(at, auction) -> 
-            //printfn "add auction %A %O" auction now
             if auction.expiry > now then
               let agent = AuctionAgent.create auction (Auction.emptyState auction)
               agents <- Map.add auction.id (AuctionDState.started auction agent) agents

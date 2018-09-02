@@ -16,6 +16,7 @@ open Auctions.Domain
 open Auctions.Actors
 open Auctions
 open FSharpPlus.Data
+open System.Diagnostics
 (* Fake auth in order to simplify web testing *)
 type WebErrors=
   | DomainError of Errors
@@ -38,7 +39,6 @@ let authenticated f = //
                                         f (UserLoggedOn(user))
                                     | None ->f NoSession
     | Choice2Of2 _ -> f NoSession)
-
 
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -112,14 +112,20 @@ type AuctionJsonResult = {
     ]
 
 module JsonResult=
-  let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
+  let exnToInvalidUserData (err:exn)=
+    InvalidUserData
+      #if DEBUG
+      (sprintf "%s\n\n%s\n" err.Message err.StackTrace)
+      #else
+      err.Message
+      #endif
 
   let getAuctionResult (auction,bids,maybeAmountAndWinner) =
     let discloseBidders =Auction.biddersAreOpen auction
     let mapBid (b:Bid) :BidJsonResult = { 
       amount=b.amount
       bidder= if discloseBidders 
-              then string b.user
+              then string b.user 
               else string <| b.user.GetHashCode() // here you might want bidder number
     }
 
@@ -235,5 +241,6 @@ let webPart (agent : AuctionDelegator) =
 
 //curl  -X POST -d '{ "amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
 
-
-//curl  -X GET -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
+//curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
+//curl  -X POST -d '{ "amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
+//curl  -X GET -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions 
