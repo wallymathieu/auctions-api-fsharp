@@ -36,8 +36,6 @@ with
   static member value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
   static member inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
 
-  let value (c:Currency) = int64(LanguagePrimitives.EnumToValue c)
-  let inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,Currency>
 type UserId = string
 
 type User = 
@@ -182,7 +180,7 @@ with
     |> jfield "expiry"  (fun x -> x.expiry)
     |> jfield "user"      (fun x -> x.user)
     |> jfield "type"      (fun x -> x.typ)
-    |> jfield "currency"      (fun x -> x.currency)
+    |> jfield "currency"  (fun x -> x.currency)
 
 type Bid = 
   { id : BidId
