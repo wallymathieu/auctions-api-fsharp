@@ -16,16 +16,8 @@ open Auctions.Domain
 open Auctions.Actors
 open Auctions
 open FSharpPlus.Data
-open System.Diagnostics
 (* Fake auth in order to simplify web testing *)
-type WebErrors=
-  | DomainError of Errors
-  | ParseError of string
-with 
-  static member ToJson (x: WebErrors) =
-    match x with
-    | DomainError err-> toJson err
-    | ParseError err-> JString( sprintf "Could not parse json %s" err)
+
 type Session = 
   | NoSession
   | UserLoggedOn of User
@@ -112,14 +104,6 @@ type AuctionJsonResult = {
     ]
 
 module JsonResult=
-  let exnToInvalidUserData (err:exn)=
-    InvalidUserData
-      #if DEBUG
-      (sprintf "%s\n\n%s\n" err.Message err.StackTrace)
-      #else
-      err.Message
-      #endif
-
   let getAuctionResult (auction,bids,maybeAmountAndWinner) =
     let discloseBidders =Auction.biddersAreOpen auction
     let mapBid (b:Bid) :BidJsonResult = { 
@@ -160,7 +144,7 @@ module JsonResult=
         }
         |> Timed.atNow
         |> AddAuction)
-        >> Result.mapError (fun a->WebErrors.ParseError a)
+        >> Result.mapError InvalidUserData
 
 
   let toPostedPlaceBid id user = 
@@ -172,7 +156,7 @@ module JsonResult=
          amount=a.amount;auction=id
          at = d })
       |> PlaceBid)
-      >> Result.mapError (fun a->WebErrors.ParseError a)
+      >> Result.mapError InvalidUserData
 
 let webPart (agent : AuctionDelegator) = 
 
@@ -203,8 +187,7 @@ let webPart (agent : AuctionDelegator) =
   let handleCommandAsync 
     (maybeC:_->Result<Command,_>) :WebPart = 
     fun ctx -> monad {
-      let userCommand = agent.UserCommand >> map (Result.mapError DomainError)
-      match userCommand <!> (maybeC ctx) with
+      match agent.UserCommand <!> (maybeC ctx) with
       | Ok asyncR->
           match! lift asyncR with
           | Ok v->return! Json.OK v ctx
@@ -217,19 +200,16 @@ let webPart (agent : AuctionDelegator) =
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user ->
-        POST >=> (fun ctx->
-                      let maybeAuction=JsonResult.toPostedAuction user
-                      handleCommandAsync maybeAuction ctx)
+        POST >=> handleCommandAsync (JsonResult.toPostedAuction user)
       )
 
   /// place bid
   let placeBid (id : AuctionId) = 
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
-      | UserLoggedOn user -> monad{
-        let! maybeBid = (JsonResult.toPostedPlaceBid id user)
-        return! POST >=> (fun ctx -> handleCommandAsync (fun _ ->maybeBid) ctx)
-      })
+      | UserLoggedOn user ->
+        POST >=> handleCommandAsync (JsonResult.toPostedPlaceBid id user)
+      )
   
   WebPart.choose [ path "/" >=> (OK "")
                    path Paths.Auction.overview >=> overview
