@@ -18,6 +18,8 @@ type Currency =
 module Currency=
   let tryParse c : Currency option= tryParse c
 
+  let value (c:Currency) = int64(LanguagePrimitives.EnumToValue c)
+  let inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,Currency>
 type UserId = string
 
 [<TypeConverter(typeof<ParseTypeConverter<User>>)>]
@@ -35,10 +37,9 @@ type User =
     match user with
     | BuyerOrSeller(id, _) -> id
     | Support id -> id
-  
-  static member tryParse user = 
-    let userRegex = System.Text.RegularExpressions.Regex("(?<type>\w*)\|(?<id>[^|]*)(\|(?<name>.*))?")
-    let m = userRegex.Match(user)
+  static member Regex = System.Text.RegularExpressions.Regex("(?<type>\w*)\|(?<id>[^|]*)(\|(?<name>.*))?")
+  static member tryParse user =
+    let m = User.Regex.Match(user)
     if m.Success then 
       match (m.Groups.["type"].Value, m.Groups.["id"].Value, m.Groups.["name"].Value) with
       | "BuyerOrSeller", id, name -> Some (BuyerOrSeller(id, name))
@@ -46,11 +47,10 @@ type User =
       | type', _, _ -> None
     else None
   [<CompiledName("Parse")>]
-  static member parse user = 
+  static member __parse user =
     match User.tryParse user with
-    | Some user->user
-    | None -> raise (FormatException "InvalidUser")
-    
+    | Some v->v
+    | None -> raise (FormatException (sprintf "InvalidUser %s" user))
 
 type BidId = Guid
 
@@ -63,27 +63,27 @@ type Amount =
   { value : int64
     currency : Currency }
   override this.ToString() = 
-    sprintf "%s%i" (this.currency.ToString()) this.value
-
+    sprintf "%O%i" (this.currency) this.value
+  static member Regex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
   static member tryParse amount = 
-    let userRegex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
-    let m = userRegex.Match(amount)
+    let m = Amount.Regex.Match(amount)
     if m.Success then 
       match (m.Groups.["currency"].Value, m.Groups.["value"].Value) with
       | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
       | type', _ -> None
     else None
-  [<CompiledName("Parse")>]
-  static member parse amount = 
-    match Amount.tryParse amount with
-    | Some amount->amount
-    | None -> raise (FormatException "InvalidAmount")
   static member (+) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value + a2.value }
   static member (-) (a1 : Amount, a2 : Amount) = 
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
+  [<CompiledName("Parse")>]
+  static member __parse amount =
+    match Amount.tryParse amount with
+    | Some v->v
+    | None -> raise (FormatException (sprintf "InvalidAmount %s" amount))
+
 module Amount=
   let zero c= { currency=c ; value=0L}
 
@@ -135,8 +135,8 @@ module Auctions=
     with
     override this.ToString() = 
       match this with
-      | TimedAscending english -> sprintf "English|%s|%s|%d" 
-                                    (english.reservePrice.ToString()) (english.minRaise.ToString()) english.timeFrame.Ticks
+      | TimedAscending english -> sprintf "English|%O|%O|%d"
+                                    (english.reservePrice) (english.minRaise) english.timeFrame.Ticks
       | SingleSealedBid Blind -> sprintf "Blind"
       | SingleSealedBid Vickrey -> sprintf "Vickrey"
     static member tryParse typ =
@@ -152,12 +152,6 @@ module Auctions=
         | ["Blind"] -> Some (SingleSealedBid Blind)
         | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
-    
-    [<CompiledName("Parse")>]
-    static member parse typ = 
-      match Type.tryParse typ with
-      | Some t->t
-      | None -> raise (FormatException "Invalid Type")
 
 type Auction = 
   { id : AuctionId
@@ -261,7 +255,7 @@ module State=
           if b.at<expiry then
             match bids with
             | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt):>IState,Ok()
-            | highestBid::xs -> 
+            | highestBid::_ ->
               // you cannot bid lower than the "current bid"
               if b.amount > (highestBid.amount + opt.minRaise)
               then
