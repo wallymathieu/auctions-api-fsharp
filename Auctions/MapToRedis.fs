@@ -24,7 +24,7 @@ let mapToHashEntries command =
       hashEntryInt64 "At" at.Ticks 
       hashEntryStr "Typ" (string auction.typ)
       hashEntryInt64 "Currency" (Currency.value auction.currency)
-      ]
+      hashEntryStr "User" (string auction.user) ]
     |> withType "AddAuction"
   | PlaceBid(at, bid) -> 
     [ hashEntryStr "Id" (string bid.id)
@@ -37,8 +37,10 @@ let mapToHashEntries command =
 
 let findEntry key (entries : HashEntry array) = 
   let k = redisValueStr key
-  let entry = entries |> Array.find (fun e -> e.Name.Equals(k))
-  entry
+  let entry = entries |> Array.tryFind (fun e -> e.Name.Equals(k))
+  match entry with
+  | Some entry -> entry
+  | None -> failwithf "could not find %s" key
 
 let findEntryStr key entries = 
   let entry = findEntry key entries

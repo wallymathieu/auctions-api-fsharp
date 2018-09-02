@@ -153,6 +153,12 @@ module Auctions=
         | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
 
+    [<CompiledName("Parse")>]
+    static member __parse typ =
+      match Type.tryParse typ with
+      | Some t->t
+      | None -> raise (FormatException (sprintf "Invalid Type %s" typ))
+
 type Auction = 
   { id : AuctionId
     startsAt : DateTime

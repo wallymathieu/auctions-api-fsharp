@@ -29,10 +29,6 @@ let authenticated f =
                                     | None ->f NoSession
     | Choice2Of2 _ -> f NoSession)
 
-type WebErrors=
-  | DomainError of Errors
-  | ParseError of string
-
 module Paths = 
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
   
@@ -73,7 +69,13 @@ type AuctionJsonResult = {
   winnerPrice : string
 }
 module JsonResult=
-  let exnToInvalidUserData (err:exn)=InvalidUserData (sprintf "%s\n\n%s\n" err.Message err.StackTrace)
+  let exnToInvalidUserData (err:exn)=
+    InvalidUserData
+      #if DEBUG
+      (sprintf "%s\n\n%s\n" err.Message err.StackTrace)
+      #else
+      err.Message
+      #endif
 
   let getAuctionResult (auction,bids,maybeAmountAndWinner) =
     let discloseBidders =Auction.biddersAreOpen auction
@@ -157,8 +159,7 @@ let webPart (agent : AuctionDelegator) =
   let handleCommandAsync 
     (maybeC:_->Result<Command,_>) :WebPart =
     fun ctx -> monad {
-      let userCommand = agent.UserCommand >> map (Result.mapError DomainError)
-      match userCommand <!> (maybeC ctx) with
+      match agent.UserCommand <!> (maybeC ctx) with
       | Ok asyncR->
           match! asyncR with
           | Ok v->return! Json.OK v ctx
