@@ -44,13 +44,13 @@ let buyer2 = BuyerOrSeller("x3", "Buyer")
 let bid1 = { id = BidId.NewGuid()
              auction =1L
              user=buyer1
-             amount =Amount.tryParse "SEK10" |> Option.get
+             amount =Amount.parse "SEK10"
              at = startsAt.AddHours(1.0)
            } 
 let bid2 = { id = BidId.NewGuid()
              auction =1L
              user=buyer2
-             amount =Amount.tryParse "SEK12" |> Option.get
+             amount =Amount.parse "SEK12"
              at = startsAt.AddHours(2.0)
            } 
 

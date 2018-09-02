@@ -22,3 +22,7 @@ module ``Amount tests`` =
   let ``Can parse currency``() = 
     Assert.Equal (Some (Currency CurrencyCode.SEK), Currency.tryParse("SEK"))
     
+  [<Fact>]
+  let ``Currency to string``() = 
+    Assert.Equal ("SEK", string (Currency CurrencyCode.SEK))
+

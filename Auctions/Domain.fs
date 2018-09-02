@@ -26,7 +26,7 @@ type Currency = Currency of CurrencyCode
 with
   override x.ToString () =
     let unwrap (Currency c) = c
-    Enum.GetName (typeof<Currency>, unwrap x)
+    Enum.GetName (typeof<CurrencyCode>, unwrap x)
 
   static member OfJson json = Currency.tryParse <!> ofJson json >>= (Result.ofOption "Invalid currency")
   static member ToJson (x: Currency) = toJson (string x)
