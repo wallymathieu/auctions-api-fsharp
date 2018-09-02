@@ -36,7 +36,7 @@ module Redis=
   /// <returns>The resulting object codec.</returns>
   let mapping f = (fun _ -> Ok f), (fun _ -> [])
   let inline get fromRedis (o: HashEntry list) (key:string) =
-    let k = RedisValue.op_Implicit key
+    let k = implicit key
     match o |> List.tryFind (fun p -> p.Name.Equals(k) ) with
     | Some v-> fromRedis v.Value
     | None -> failwithf "Could not find %s" key
@@ -51,22 +51,24 @@ module Redis=
   /// <param name="fieldName">A string that will be used as key to the field.</param>
   /// <param name="getter">The field getter function.</param>
   /// <param name="rest">The other mappings.</param>
+  /// <param name="fromRedis">Map from redis value to value.</param>
+  /// <param name="toRedis">Map to redis value.</param>
   /// <returns>The resulting object codec.</returns>
   let inline field fieldName fromRedis toRedis (getter: 'T -> 'Value) (rest: SplitCodec<_, _->'Rest, _>) = //NOTE: From Fleece
       let inline deriveFieldCodec prop =
           (
               (fun (o: HashEntry list) -> get fromRedis o prop),
-              (fun (x: 't) -> [HashEntry(RedisValue.op_Implicit prop, toRedis x)])
+              (fun (x: 't) -> [HashEntry(implicit prop, toRedis x)])
           )
       diApply (List.append |> uncurry) (fanout getter id) rest (deriveFieldCodec fieldName)
   let fieldStr fieldName getter rest =
-    field fieldName (string>>Ok) (RedisValue.op_Implicit) getter rest
+    field fieldName (string>>Ok) implicit getter rest
   let fieldInt64 fieldName getter rest =
     let getInt64 (v:RedisValue)=
       let intV = ref 0L
       if v.TryParse intV then Ok (intV.Value)
       else Error (sprintf "Could not parse %O" v)
-    field fieldName getInt64 RedisValue.op_Implicit getter rest
+    field fieldName getInt64 implicit getter rest
 module DateTime=
   let ticks (d:DateTime)=d.Ticks
 open Redis
@@ -92,14 +94,14 @@ let placeBidCodec =
   |> fieldStr "User" (snd >> Bid.bidder >>  string)
 
 let mapToHashEntries command =
-  let hashEntryStr (key:string) (value:string) = HashEntry(RedisValue.op_Implicit key, RedisValue.op_Implicit value)
+  let hashEntryStr (key:string) (value:string) = HashEntry(implicit key, implicit value)
   let withType t xs = hashEntryStr "Type" t :: xs
   match command with
   | AddAuction(at, auction)-> encode (snd addAuctionCodec) (at, auction) |> withType "AddAuction"
   | PlaceBid(at, bid) ->  encode (snd placeBidCodec) (at, bid) |> withType "PlaceBid"
 
 let findEntry (key:string) (entries : HashEntry list) = 
-  let k = RedisValue.op_Implicit key
+  let k = implicit key
   match entries |> List.tryFind (fun e -> e.Name.Equals(k)) with
   | Some entry -> entry
   | None -> failwithf "could not find %s" key
