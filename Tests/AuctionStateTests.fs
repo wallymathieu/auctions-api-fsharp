@@ -8,8 +8,8 @@ open Xunit
 module ``Auction state tests`` = 
 
   let timedAscAuction = auctionOfTyp (TimedAscending { // let's start out with english auctions
-    reservePrice=Amount.parse "SEK0" 
-    minRaise =Amount.parse "SEK0"
+    reservePrice=Amount.tryParse "SEK0" |> Option.get
+    minRaise =Amount.tryParse "SEK0" |> Option.get
     timeFrame = TimeSpan.FromSeconds(0.0)
   })
   let timedAscState= Auction.emptyState timedAscAuction

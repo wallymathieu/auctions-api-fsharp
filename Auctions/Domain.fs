@@ -61,12 +61,6 @@ type User =
       | "Support", id, _ -> Some (Support(id))
       | type', _, _ -> None
     else None
-  [<CompiledName("Parse")>]
-  static member parse user = 
-    match User.tryParse user with
-    | Some user->user
-    | None -> raise (FormatException "InvalidUser")
-
   static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption "Invalid user")
   static member ToJson (x: User) = toJson (string x)
  
@@ -90,11 +84,6 @@ type Amount =
       | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
       | type', _ -> None
     else None
-  [<CompiledName("Parse")>]
-  static member parse amount = 
-    match Amount.tryParse amount with
-    | Some amount->amount
-    | None -> raise (FormatException "InvalidAmount")
   static member (+) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value + a2.value }
@@ -170,12 +159,6 @@ module Auctions=
         | ["Blind"] -> Some (SingleSealedBid Blind)
         | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
-    
-    [<CompiledName("Parse")>]
-    static member parse typ = 
-      match Type.tryParse typ with
-      | Some t->t
-      | None -> raise (FormatException "Invalid Type")
     static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption "Invalid auction type")
     static member ToJson (x:Type) = toJson (string x)
 

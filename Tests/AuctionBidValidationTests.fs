@@ -8,7 +8,7 @@ module ``Auction Bid tests`` =
   let validBid = { id = BidId.NewGuid()
                    auction =1L
                    user=buyer
-                   amount =Amount.parse "SEK10"
+                   amount =Amount.tryParse "SEK10" |> Option.get
                    at = DateTime(2008,12,1)
                  } 
   let bidWithSameUser = { validBid with user=seller } 
