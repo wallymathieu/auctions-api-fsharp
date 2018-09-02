@@ -123,7 +123,7 @@ let mapFromHashEntries entries : Command =
     
     let auction = entries |> findEntryInt64 "Auction"
     let amount = entries |> findEntryInt64 "AmountValue"
-    let currency = entries |> findEntryStr "AmountCurrency" |> Currency.ofValue
+    let currency = entries |> findEntryInt64 "AmountCurrency" |> Currency.ofValue
     
     let user = 
       entries
