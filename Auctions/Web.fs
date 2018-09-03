@@ -14,6 +14,21 @@ open Auctions
 open Newtonsoft.Json
 open FSharpPlus.Data
 open Hopac
+
+type AgentAdapter (agent : Job<AuctionDelegator>)=
+  member __.GetAuction id =  Job.toAsync <| job{
+    let! a = agent
+    return! a.GetAuction id
+  }
+  member __.GetAuctions () =  Job.toAsync <| job{
+    let! a = agent
+    return! a.GetAuctions()
+  }
+  member __.UserCommand c =  Job.toAsync <| job{
+    let! a = agent
+    return! a.UserCommand c
+  }
+  
 (* Fake auth in order to simplify web testing *)
 
 type Session = 
@@ -131,33 +146,24 @@ module JsonResult=
       >> Result.mapError exnToInvalidUserData 
 
 let webPart (agent : Job<AuctionDelegator>) = 
-
+  let agent = AgentAdapter(agent)
   let overview = 
     GET >=> fun (ctx) ->
             async {
-              let! r =Job.toAsync <| job{
-                let! a = agent
-                return! a.GetAuctions()
-              }
+              let! r = agent.GetAuctions()
               return! Json.OK (r |>List.toArray) ctx
             }
 
   let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
       monad {
-        let! auctionAndBids = Job.toAsync <| job{
-          let! a = agent
-          return! a.GetAuction id
-        }
+        let! auctionAndBids = agent.GetAuction id
         match auctionAndBids with
         | Some v-> return Ok <| JsonResult.getAuctionResult v
         | None -> return Error (UnknownAuction id)
       }
 
   let details id : WebPart= GET >=> (fun ctx->monad{ 
-    let! auctionAndBids = Job.toAsync <| job{
-      let! a = agent
-      return! a.GetAuction id
-    }
+    let! auctionAndBids = agent.GetAuction id
     return!
        match auctionAndBids with
        | Some v-> Json.OK (JsonResult.getAuctionResult v) ctx
@@ -166,26 +172,15 @@ let webPart (agent : Job<AuctionDelegator>) =
   
   /// handle command and add result to repository
   let handleCommandAsync 
-    (maybeC:Result<Command,_>) :Async<Result<_,_>> = 
-    monad {
-      match (fun c->Job.toAsync <| job{
-          let! a = agent
-          return! a.UserCommand c
-        }) <!> maybeC with
-      | Ok asyncR-> 
-          let! result = asyncR
-          return result
-      | Error c'->return Error c'
+    (maybeC:_->Result<Command,_>) :WebPart =
+    fun ctx -> monad {
+      match agent.UserCommand <!> (maybeC ctx) with
+      | Ok asyncR->
+          match! asyncR with
+          | Ok v->return! Json.OK v ctx
+          | Error e-> return! Json.BAD_REQUEST e ctx
+      | Error c'->return! Json.BAD_REQUEST c' ctx
     }
-
-  /// turn handle command to webpart
-  let handleCommandAsync toCommand: WebPart = 
-    fun (ctx : HttpContext) ->
-      async {
-        let r = toCommand ctx
-        let! commandResult= handleCommandAsync r
-        return! Json.OK_or_BAD_REQUEST commandResult ctx
-      }
 
   /// register auction
   let register = 
