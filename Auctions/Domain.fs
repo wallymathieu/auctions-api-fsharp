@@ -25,13 +25,12 @@ type CurrencyCode =
 [<Struct>]
 type Currency = Currency of CurrencyCode
 with
-  override x.ToString () =
-    let unwrap (Currency c) = c
-    Enum.GetName (typeof<CurrencyCode>, unwrap x)
+  override x.ToString () = Enum.GetName (typeof<CurrencyCode>, Currency.code x)
 
   static member OfJson json = Currency.tryParse <!> ofJson json >>= (Result.ofOption "Invalid currency")
   static member ToJson (x: Currency) = toJson (string x)
 //module Currency=
+  static member code (Currency c) = c
   static member tryParse c : Currency option= tryParse c |> Option.map Currency
   static member VAC = Currency CurrencyCode.VAC
   static member value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
