@@ -22,6 +22,7 @@ type CurrencyCode =
   |SEK=752
   /// Danish 'Krone'
   |DKK=208
+[<Struct>]
 type Currency = Currency of CurrencyCode
 with
   override x.ToString () =
