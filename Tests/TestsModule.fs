@@ -16,20 +16,20 @@ let auctionOfTyp typ : Auction =
     startsAt = startsAt
     expiry = endsAt
     user = seller
-    currency=Currency.SEK
+    currency=Currency CurrencyCode.SEK
     typ= typ
    }
 
 let auction : Auction = auctionOfTyp (SingleSealedBid Vickrey)
 
 module User=
-  let parse user = User.__parse user
+  let parse = User.__parse
 module Amount=
-  let parse amount =Amount.__parse amount
+  let parse = Amount.__parse
 
 let sek a = 
   { value = a
-    currency = Currency.SEK }
+    currency = Currency CurrencyCode.SEK }
 
 let bid = 
     { id = Guid.NewGuid()

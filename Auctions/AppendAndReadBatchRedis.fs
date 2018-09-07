@@ -16,7 +16,7 @@ type AppendAndReadBatchRedis(connStr:string) =
     batch.HashSetAsync(implicit id, entries |> List.toArray) |> ignore
     id
   
-  let commandsKey = implicit "Commands"
+  let commandsKey:RedisKey = implicit "Commands"
   interface IAppendBatch with
     
     member __.Batch commands = 

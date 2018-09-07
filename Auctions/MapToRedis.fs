@@ -36,7 +36,7 @@ module Redis=
   /// <returns>The resulting object codec.</returns>
   let mapping f = (fun _ -> Ok f), (fun _ -> [])
   let inline get fromRedis (o: HashEntry list) (key:string) =
-    let k = implicit key
+    let k :RedisValue= implicit key
     match o |> List.tryFind (fun p -> p.Name.Equals(k) ) with
     | Some v-> fromRedis v.Value
     | None -> failwithf "Could not find %s" key
@@ -86,7 +86,7 @@ let addAuctionCodec =
   |> fieldInt64 "Currency" (snd >> Auction.currency >> Currency.value)
   |> field "User" tryParseUser (string>>implicit) (snd >> Auction.user )
 let placeBidCodec =
-  fun id auction amountValue amountCurrency at user -> (DateTime at, { id=Guid.Parse id; auction=auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at=DateTime at })
+  fun (id:string) auction amountValue amountCurrency at user -> (DateTime at, { id=Guid.Parse id; auction=auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at=DateTime at })
   |> mapping
   |> fieldStr "Id" (snd >> Bid.getId >> string)
   |> fieldInt64 "Auction" (snd >> Bid.auction)
@@ -103,7 +103,7 @@ let mapToHashEntries command =
   | PlaceBid(at, bid) ->  encode (snd placeBidCodec) (at, bid) |> withType "PlaceBid"
 
 let findEntry (key:string) (entries : HashEntry list) = 
-  let k = implicit key
+  let k :RedisValue= implicit key
   match entries |> List.tryFind (fun e -> e.Name.Equals(k)) with
   | Some entry -> entry
   | None -> failwithf "could not find %s" key

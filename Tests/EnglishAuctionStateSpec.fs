@@ -4,7 +4,7 @@ open AuctionStateSpecs
 open Xunit
 open System
 let timedAscAuction = auctionOfTyp (TimedAscending { // let's start out with english auctions
-    reservePrice=Amount.parse "SEK0" 
+    reservePrice=Amount.parse "SEK0"
     minRaise =Amount.parse "SEK0"
     timeFrame = TimeSpan.FromSeconds(0.0)
   })

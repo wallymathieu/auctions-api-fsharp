@@ -16,7 +16,7 @@ module ``Auction agent tests`` =
                   user = seller 
                   currency=Currency.VAC
                   typ=TimedAscending { // let's start out with english auctions
-                    reservePrice=Amount.parse "VAC0" 
+                    reservePrice=Amount.parse "VAC0"
                     minRaise =Amount.parse "VAC0"
                     timeFrame = TimeSpan.FromSeconds(0.0)
                   } 

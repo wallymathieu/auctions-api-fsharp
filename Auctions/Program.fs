@@ -4,6 +4,8 @@ open System
 open Auctions.Web
 open Auctions.Actors
 open Auctions
+open FSharpPlus
+open FSharpPlus.Data
 open FSharpPlus.Operators
 type CmdArgs = 
   { IP : System.Net.IPAddress
@@ -56,5 +58,5 @@ let main argv =
   persist.Start()
   let agent = AuctionDelegator.create(commands, persist.Handle, fun ()->DateTime.UtcNow)
   // start suave
-  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (webPart agent)
+  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
   0
