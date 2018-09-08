@@ -14,7 +14,7 @@ let CurrencyType =
     options= (values |> Seq.map (fun v -> Define.EnumValue(enumName v,v) ) |> Seq.toList)
     )
     
-let rec AmountType =
+let AmountType =
   let currencyCode (a:Amount) = Currency.code (a.currency)
   Define.Object<Amount>(
     name = "Amount",
@@ -26,7 +26,7 @@ let rec AmountType =
         Define.Field("currency", CurrencyType, "The currency for the amount.", fun _ h -> currencyCode h)
     ])
   
-let rec BidType =
+let BidType =
   Define.Object<Bid>(
     name = "Bid",
     description = "A bid",
@@ -39,8 +39,7 @@ let rec BidType =
         Define.Field("user", String, "User that placed the bid.", fun _ h -> string h.user)
         Define.Field("at", Date, "When the bid was placed.", fun _ h -> h.at)
     ])
-  
-let rec AuctionType =
+let rec AuctionType=
   let currencyCode (a:Auction) = Currency.code (a.currency)
   Define.Object<Auction>(
     name = "Auction",
@@ -55,4 +54,17 @@ let rec AuctionType =
         Define.Field("user", String, "User that placed owns the auction.", fun _ (h:Auction) -> string h.user)
         Define.Field("type", String, "Type of auction.", fun _ (h:Auction) -> string h.typ)
         Define.Field("currency", CurrencyType, "Type of auction.", fun _ (h:Auction) -> currencyCode h)
+    ])
+and StateType=
+  let currencyCode (a:Auction) = Currency.code (a.currency)
+  Define.Object<IState>(
+    name = "State",
+    description = "State of an auction",
+    isTypeOf = (fun o -> o :? IState),
+    fieldsFn = fun () ->
+    [
+        Define.Field("bids", ListOf BidType, "List of bids.", fun _ (h:IState) -> h.GetBids())
+        Define.Field("hasEnded", Boolean, "has ended.", fun _ (h:IState) -> h.HasEnded())
+        Define.Field("winner",Nullable String, "winner.", fun _ (h:IState) -> h.TryGetAmountAndWinner() |> Option.map (snd >>string) )
+        Define.Field("winningAmount", Nullable AmountType, "", fun _ (h:IState) -> h.TryGetAmountAndWinner() |> Option.map (fst))
     ])

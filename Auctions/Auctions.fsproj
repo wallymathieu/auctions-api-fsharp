@@ -8,7 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="GraphQL.fs" />
     <Compile Include="Suave.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="AppendBatch.fs" />
@@ -17,6 +16,7 @@
     <Compile Include="JsonAppendToFile.fs" />
     <Compile Include="PersistCommands.fs" />
     <Compile Include="Actors.fs" />
+    <Compile Include="GraphQL.fs" />
     <None Include="Script.fsx" />
     <Compile Include="Web.fs" />
     <Compile Include="Program.fs" />
