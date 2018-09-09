@@ -29,8 +29,9 @@ type AppendAndReadBatchRedis(connStr:string) =
       batch.Execute()
     
     member __.ReadAll() = 
+      let commandIdToCommand = string >> implicit >> db.HashGetAll >> List.ofArray >> mapFromHashEntries 
       let commands = db.SetMembers(commandsKey, CommandFlags.None)
       commands
-      |> Array.map( (db.HashGetAll<<(string>>implicit)) >> List.ofArray >> mapFromHashEntries )
+      |> Array.map commandIdToCommand
       |> Array.toList
       |> List.sortBy Command.getAt
