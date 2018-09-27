@@ -179,7 +179,7 @@ type Auction =
 with
   static member JsonObjCodec =
     fun id startsAt title expiry user typ currency -> { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
-    |> mapping
+    |> withFields
     |> jfield "id"      (fun x -> x.id)
     |> jfield "startsAt" (fun x -> x.startsAt)
     |> jfield "title"    (fun x -> x.title)
@@ -198,7 +198,7 @@ type Bid =
 with
   static member JsonObjCodec =
     fun id auction user amount at-> { id =id; auction =auction; user = user; amount=amount; at=at }
-    |> mapping
+    |> withFields
     |> jfield "id"      (fun x -> x.id)
     |> jfield "auction" (fun x -> x.auction)
     |> jfield "user"    (fun x -> x.user)
