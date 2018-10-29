@@ -39,7 +39,7 @@ type JsonAppendToFile(fileName) =
           let k: Command array ParseResult = ofJson p
           match k with
           | Ok line ->yield line
-          | Error err->failwithf "Couldn't parse line %s" err //TODO: Fix IAppendBatch interface
+          | Error err->failwithf "Couldn't parse line %O" err //TODO: Fix IAppendBatch interface
       }
       |> Seq.concat
       |> Seq.toList

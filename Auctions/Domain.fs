@@ -29,7 +29,7 @@ with
     let unwrap (Currency c) = c
     Enum.GetName (typeof<CurrencyCode>, unwrap x)
 
-  static member OfJson json = Currency.tryParse <!> ofJson json >>= (Result.ofOption "Invalid currency")
+  static member OfJson json = Currency.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid currency")
   static member ToJson (x: Currency) = toJson (string x)
 //module Currency=
   static member tryParse c : Currency option= tryParse c |> Option.map Currency
@@ -63,7 +63,7 @@ type User =
       | type', _, _ -> None
     else None
   static member __parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
-  static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption "Invalid user")
+  static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid user")
   static member ToJson (x: User) = toJson (string x)
 
 type BidId = Guid
@@ -91,7 +91,7 @@ type Amount =
   static member (-) (a1 : Amount, a2 : Amount) = 
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
-  static member OfJson json = Amount.tryParse <!> ofJson json >>= (Result.ofOption "Invalid amount")
+  static member OfJson json = Amount.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid amount")
   static member ToJson (x: Amount) = toJson (string x)
 
 module Amount=
@@ -163,7 +163,7 @@ module Auctions=
         | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
     static member __parse typ = Type.tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
-    static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption "Invalid auction type")
+    static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid auction type")
     static member ToJson (x:Type) = toJson (string x)
 
 type Auction = 
@@ -222,7 +222,7 @@ type Errors =
   | AuctionNotFound of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
   | BidCurrencyConversion of BidId * Currency
-  | InvalidUserData of string
+  | InvalidUserData of DecodeError
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
   static member ToJson (x: Errors) =
@@ -236,7 +236,7 @@ type Errors =
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
     | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= u; "auctionId" .=a]
     | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .= c]
-    | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= u]
+    | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
     | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
 
@@ -422,9 +422,9 @@ type Command =
         | "PlaceBid" ->
           let create d b = PlaceBid (d,b)
           return! (create <!> (o .@ "at") <*> (o .@ "bid"))
-        | x -> return! (Error (sprintf "Expected known $type, found %A" x))
+        | x -> return! (Decode.Fail.invalidValue json (Some x))
       }
-    | x -> Error (sprintf "Expected Auction, found %A" x)
+    | x -> Decode.Fail.objExpected json
   static member ToJson (x: Command) =
     match x with
     | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]

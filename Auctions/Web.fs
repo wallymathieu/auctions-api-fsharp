@@ -53,7 +53,7 @@ with
     let create a = {amount =a}
     match json with
     | JObject o -> create <!> (o .@ "amount")
-    | x -> Error (sprintf "Expected bid, found %A" x)
+    | x -> Decode.Fail.objExpected x
 
 type AddAuctionReq = {
   id : AuctionId
@@ -68,7 +68,7 @@ with
     let create id startsAt title endsAt (currency:string option) (typ:string option)= {id =id;startsAt=startsAt;title=title; endsAt=endsAt;currency=Option.defaultValue "" currency; typ=Option.defaultValue "" typ}
     match json with
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")<*> (o .@? "currency")<*> (o .@? "type")
-    | x -> Error (sprintf "Expected bid, found %A" x)
+    | x -> Decode.Fail.objExpected x
 
 type BidJsonResult = { 
   amount:Amount
