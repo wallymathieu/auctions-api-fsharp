@@ -13,7 +13,7 @@ open FSharpPlus.Data
 open FSharpPlus.Operators
 
 module Result=
-  let ofOption error option = match option with | Some v -> Ok v | None -> Error error
+  let ofOption error option = match option with | Some v -> Ok v | None -> error
 
 type CurrencyCode =
   /// virtual auction currency
@@ -29,7 +29,8 @@ with
     let unwrap (Currency c) = c
     Enum.GetName (typeof<CurrencyCode>, unwrap x)
 
-  static member OfJson json = Currency.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid currency")
+  static member OfJson json = Currency.tryParse <!> ofJson json >>= (Result.ofOption <|
+                                                                       Decode.Fail.invalidValue json (Some "Unable to interpret as currency"))
   static member ToJson (x: Currency) = toJson (string x)
 //module Currency=
   static member tryParse c : Currency option= tryParse c |> Option.map Currency
@@ -63,7 +64,8 @@ type User =
       | type', _, _ -> None
     else None
   static member __parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
-  static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid user")
+  static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption <|
+                                                                  Decode.Fail.invalidValue json (Some "Unable to interpret as user"))
   static member ToJson (x: User) = toJson (string x)
 
 type BidId = Guid
@@ -91,7 +93,8 @@ type Amount =
   static member (-) (a1 : Amount, a2 : Amount) = 
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
-  static member OfJson json = Amount.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid amount")
+  static member OfJson json = Amount.tryParse <!> ofJson json >>= (Result.ofOption <|
+                                                                    Decode.Fail.invalidValue json (Some "Unable to interpret as amount"))
   static member ToJson (x: Amount) = toJson (string x)
 
 module Amount=
@@ -163,7 +166,8 @@ module Auctions=
         | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
     static member __parse typ = Type.tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
-    static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption <| Uncategorized "Invalid auction type")
+    static member OfJson json = Type.tryParse <!> ofJson json >>= (Result.ofOption <|
+                                                                    Decode.Fail.invalidValue json (Some "unrecognized type"))
     static member ToJson (x:Type) = toJson (string x)
 
 type Auction = 
