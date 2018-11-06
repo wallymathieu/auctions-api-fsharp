@@ -27,7 +27,7 @@ with
     Enum.GetName (typeof<CurrencyCode>, unwrap x)
 
   static member OfJson json = Currency.tryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                       InvalidValue(typeof<Currency>, json, (Some "Unable to interpret as currency")))
+                                                                       InvalidValue(typeof<Currency>, json, "Unable to interpret as currency"))
   static member ToJson (x: Currency) = toJson (string x)
 //module Currency=
   static member tryParse c : Currency option= tryParse c |> Option.map Currency
@@ -62,7 +62,7 @@ type User =
     else None
   static member __parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
   static member OfJson json = User.tryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                  InvalidValue(typeof<Currency>, json, (Some "Unable to interpret as user")))
+                                                                  InvalidValue(typeof<Currency>, json, "Unable to interpret as user"))
   static member ToJson (x: User) = toJson (string x)
 
 type BidId = Guid
@@ -91,7 +91,7 @@ type Amount =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
   static member OfJson json = Amount.tryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                    InvalidValue(typeof<Currency>, json, (Some "Unable to interpret as amount")))
+                                                                    InvalidValue(typeof<Currency>, json, "Unable to interpret as amount"))
   static member ToJson (x: Amount) = toJson (string x)
 
 module Amount=
@@ -164,7 +164,7 @@ module Auctions=
         | _ -> None
     static member __parse typ = Type.tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
     static member OfJson json = Type.tryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                    InvalidValue(typeof<Currency>, json, (Some "unrecognized type")))
+                                                                    InvalidValue(typeof<Currency>, json, "unrecognized type"))
     static member ToJson (x:Type) = toJson (string x)
 
 type Auction = 
@@ -423,7 +423,7 @@ type Command =
         | "PlaceBid" ->
           let create d b = PlaceBid (d,b)
           return! (create <!> (o .@ "at") <*> (o .@ "bid"))
-        | x -> return! (Decode.Fail.invalidValue json (Some <| sprintf "Expected one of: 'AddAuction', 'PlaceBid' for $type but %s" x))
+        | x -> return! (Decode.Fail.invalidValue json (sprintf "Expected one of: 'AddAuction', 'PlaceBid' for $type but %s" x))
       }
     | x -> Decode.Fail.objExpected json
   static member ToJson (x: Command) =
