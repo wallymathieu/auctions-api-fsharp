@@ -20,7 +20,7 @@ type AuctionAgent(auction, state:S) =
      let mutable state = state
 
      let rec messageLoop() = 
-       async { 
+       async {
          let! msg = inbox.Receive()
          match msg with
          | AgentBid(bid, reply) -> 
