@@ -19,6 +19,7 @@ type JsonAppendToFile(fileName) =
       use w = new StreamWriter(fs)
       let json = toJson cs
       json.WriteTo (w, JsonSaveOptions.DisableFormatting)
+      do! w.WriteLineAsync()
       do! fs.FlushAsync()
       return ()
     }
