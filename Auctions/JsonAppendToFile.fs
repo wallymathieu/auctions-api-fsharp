@@ -5,42 +5,38 @@ open System.IO
 open System
 open Fleece
 open Fleece.FSharpData
-
+open FSharp.Data
 
 type JsonAppendToFile(fileName) = 
   let notNull= not << isNull
-  
+  let fileDoesNotExist = not << File.Exists
   do
-    if not <| File.Exists fileName then File.WriteAllText(fileName, "")
-    else 
-        ()
-
+    if fileDoesNotExist fileName then File.WriteAllText(fileName, "")
 
   interface IAppendBatch with
-    
-    member __.Batch cs = 
+    member __.Batch cs = async{ 
       use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
       use w = new StreamWriter(fs)
       let json = toJson cs
-      json.WriteTo (w,FSharp.Data.JsonSaveOptions.DisableFormatting)
-      fs.Flush()
-    
-    member __.ReadAll() = 
+      json.WriteTo (w, JsonSaveOptions.DisableFormatting)
+      do! w.WriteLineAsync()
+      do! fs.FlushAsync()
+      return ()
+    }
+    member __.ReadAll() = async{
       use fs = File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.Read)
       use r = new StreamReader(fs)
-      seq { 
-        let line = ref ""
-        
-        let readLine() = 
-          line := r.ReadLine()
-          line.Value
-        while (notNull <| readLine()) do
-          let p = FSharp.Data.JsonValue.Parse line.Value
-          let k: Command array ParseResult = ofJson p
-          match k with
-          | Ok line ->yield line
-          | Error err->failwithf "Couldn't parse line %s" err //TODO: Fix IAppendBatch interface
-      }
-      |> Seq.concat
-      |> Seq.toList
-      |> List.sortBy Command.getAt
+      let! lines = r.ReadToEndAsync()
+      let map line=
+        let p = FSharp.Data.JsonValue.Parse line
+        let k: Command array ParseResult = ofJson p
+        match k with
+        | Ok line ->line
+        | Error err->failwithf "Couldn't parse line %O" err //TODO: Fix IAppendBatch interface
+      let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
+      return splitLines lines
+              |> Array.map map
+              |> Array.concat
+              |> Array.toList
+              |> List.sortBy Command.getAt
+    }

@@ -27,6 +27,7 @@ type AppendAndReadBatchRedis(connStr:string) =
         ids.Add(implicit (string id))
       batch.SetAddAsync(commandsKey, ids |> Seq.toArray, CommandFlags.None) |> ignore
       batch.Execute()
+      async.Zero() 
     
     member __.ReadAll() = 
       let commandIdToCommand = string >> implicit >> db.HashGetAll >> List.ofArray >> mapFromHashEntries 
@@ -35,3 +36,4 @@ type AppendAndReadBatchRedis(connStr:string) =
       |> Array.map commandIdToCommand
       |> Array.toList
       |> List.sortBy Command.getAt
+      |> async.Return
