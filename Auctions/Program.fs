@@ -51,11 +51,13 @@ let main argv =
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
       }
   let persist = PersistCommands (appenders |> Seq.map (fun a->a.Batch) |> List.ofSeq)
-  let commands = appenders
-                 |> Seq.collect (fun a->a.ReadAll()) 
+  let commands = monad.plus {
+                  for appender in appenders do
+                    yield appender.ReadAll()
+                 }
+                 |> Async.Parallel |> Async.RunSynchronously
+                 |> Seq.collect id
                  |> Seq.toList
-
-  persist.Start()
   let agent = AuctionDelegator.create(commands, persist.Handle, fun ()->DateTime.UtcNow)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)

@@ -72,8 +72,8 @@ module Redis=
 module DateTime=
   let ticks (d:DateTime)=d.Ticks
 open Redis
-let tryParseUser (u:RedisValue) =match User.tryParse <| string u with | Some v -> Ok v | None -> Error "InvalidUser"
-let tryParseType (t:RedisValue) =match Type.tryParse  <| string t with | Some v -> Ok v | None -> Error "InvalidType"
+let tryParseUser (u:RedisValue) =match string u |> User.tryParse with | Some v -> Ok v | None -> Error "InvalidUser"
+let tryParseType (t:RedisValue) =match string t |> Type.tryParse with | Some v -> Ok v | None -> Error "InvalidType"
 let addAuctionCodec =
   fun id title expiry startsAt at typ currency user -> (DateTime at, { id=id;title=title; expiry =DateTime expiry; startsAt=DateTime startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
   |> mapping

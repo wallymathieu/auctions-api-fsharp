@@ -110,7 +110,7 @@ module JsonResult=
       amount=b.amount
       bidder= if discloseBidders 
               then string b.user 
-              else string <| b.user.GetHashCode() // here you might want bidder number
+              else b.user.GetHashCode() |> string // here you might want bidder number
     }
 
     let (winner,winnerPrice) = 
@@ -171,7 +171,7 @@ let webPart (agent : AuctionDelegator) =
       monad {
         let! auctionAndBids = agent.GetAuction id
         match auctionAndBids with
-        | Some v-> return Ok <| JsonResult.getAuctionResult v
+        | Some v-> return Ok (JsonResult.getAuctionResult v)
         | None -> return Error (UnknownAuction id)
       }
 
