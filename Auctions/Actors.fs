@@ -5,7 +5,28 @@ open System
 open System.Collections.Generic
 open FSharpPlus
 
-type Agent<'T> = MailboxProcessor<'T>
+let exitOnException (e:exn)=
+  printfn "Failed with exception %s, %s, exit!" e.Message e.StackTrace  
+  exit 1
+
+type PersistCommands(appendBatches : (Command list -> Async<unit>) list) = 
+  let mbox = MailboxProcessor.Start(fun inbox ->
+       let rec messageLoop() =
+         async {
+           let! command = inbox.Receive()
+           let toAppend = [command]
+           for appendBatch in appendBatches do
+             do! appendBatch toAppend
+           return! messageLoop()
+         }
+       messageLoop())
+  do
+    mbox.Error.Add exitOnException
+
+  member __.Handle(command) =
+    mbox.Post(command)
+
+
 type AuctionEnded = (Amount * User) option
 
 type AgentSignals = 
@@ -15,7 +36,7 @@ type AgentSignals =
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded>
 
 type AuctionAgent(auction, state:S) =
-  let agent = Agent<AgentSignals>.Start(fun inbox -> 
+  let agent = MailboxProcessor<AgentSignals>.Start(fun inbox -> 
     (let validateBid = fun b->Auction.validateBid b auction
      let mutable state = state
 
@@ -57,7 +78,8 @@ type AuctionAgent(auction, state:S) =
        }
      
      messageLoop()))
-
+  do
+    agent.Error.Add exitOnException
   member __.AgentBid bid = agent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
   member __.GetBids () = agent.PostAndAsyncReply(fun reply -> GetBids(reply))
   member __.AuctionEnded time = agent.PostAndAsyncReply(fun reply -> HasAuctionEnded(time, reply))
@@ -117,7 +139,7 @@ module AuctionDState=
   let started auction agent :T= (auction ,Ongoing agent)
   let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
 type AuctionDelegator(commands:Command list, persistCommand, now) = 
-  let agent =Agent<DelegatorSignals>.Start(fun inbox -> 
+  let agent =MailboxProcessor<DelegatorSignals>.Start(fun inbox -> 
     let mutable agents = let _now =now()
                          let r = Repository()
                          List.iter r.Handle commands
@@ -215,6 +237,8 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
            return! messageLoop()
       }
     messageLoop())
+  do
+    agent.Error.Add exitOnException
   member __.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
   member __.WakeUp () = agent.PostAndAsyncReply WakeUp
   member __.GetAuctions ()= agent.PostAndAsyncReply(fun reply -> GetAuctions(reply))
