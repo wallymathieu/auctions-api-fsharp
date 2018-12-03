@@ -5,8 +5,8 @@ open System
 open Xunit
 
 module ``Auction Bid tests`` = 
-  let validBid = { id = BidId.NewGuid()
-                   auction =1L
+  let validBid = { id = BidId.New()
+                   auction =auctionId
                    user=buyer
                    amount =Amount.parse "SEK10"
                    at = DateTime(2008,12,1)
@@ -20,5 +20,5 @@ module ``Auction Bid tests`` =
 
   [<Fact>]
   let ``seller bidding on auction``() = 
-    Assert.Equal( Error (SellerCannotPlaceBids ("x1",1L)), validateBid bidWithSameUser )
+    Assert.Equal( Error (SellerCannotPlaceBids (UserId "x1",auctionId)), validateBid bidWithSameUser )
 

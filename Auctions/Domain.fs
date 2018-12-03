@@ -37,16 +37,19 @@ with
   static member value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
   static member inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
 
-type UserId = string
+[<Struct>]
+type UserId = UserId of string
+with
+  override this.ToString()=match this with UserId uId->uId
 
-type User = 
+type User =
   | BuyerOrSeller of id : UserId * name : string
   | Support of id : UserId
   
   override this.ToString() = 
     match this with
-    | BuyerOrSeller(id, name) -> sprintf "BuyerOrSeller|%s|%s" (id) name
-    | Support(id) -> sprintf "Support|%s" (id)
+    | BuyerOrSeller(id, name) -> sprintf "BuyerOrSeller|%O|%s" id name
+    | Support(id) -> sprintf "Support|%O" id
   
   static member getId user = 
     match user with
@@ -58,24 +61,41 @@ type User =
     let m = User.Regex.Match(user)
     if m.Success then 
       match (m.Groups.["type"].Value, m.Groups.["id"].Value, m.Groups.["name"].Value) with
-      | "BuyerOrSeller", id, name -> Some (BuyerOrSeller(id, name))
-      | "Support", id, _ -> Some (Support(id))
+      | "BuyerOrSeller", id, name -> Some (BuyerOrSeller(UserId id, name))
+      | "Support", id, _ -> Some (Support(UserId id))
       | type', _, _ -> None
     else None
   static member __parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
   static member OfJson json = User.tryParse <!> ofJson json >>= (Result.ofOption "Invalid user")
   static member ToJson (x: User) = toJson (string x)
 
-type BidId = Guid
+[<Struct>]
+type BidId = BidId of Guid
+with
+  override this.ToString()=match this with BidId bId->bId.ToString("N")
+  static member OfJson json = BidId.tryParse <!> ofJson json >>= (Result.ofOption "Invalid bid id")
+  static member ToJson (b:BidId) = toJson (string b)
+  static member New()= Guid.NewGuid() |> BidId
+//Module BidId
+  static member tryParse v : BidId option= tryParse v |> Option.map BidId
+  static member unwrap (BidId bId)=bId
 
-type AuctionId = int64
+[<Struct>]
+type AuctionId = AuctionId of int64
+with
+  override this.ToString()=match this with AuctionId aId->string aId
+  static member OfJson json =AuctionId <!> ofJson json
+  static member ToJson (b:AuctionId) = toJson (string b)
+//Module AuctionId
+  static member unwrap (AuctionId aId)=aId
+
 let (|Currency|_|) = Currency.tryParse
 
 type Amount = 
   { value : int64
     currency : Currency }
   override this.ToString() =
-    sprintf "%O%i" (this.currency) this.value
+    sprintf "%O%i" this.currency this.value
   static member Regex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
   static member tryParse amount = 
     let m = Amount.Regex.Match(amount)
@@ -234,7 +254,7 @@ type Errors =
     | AuctionHasEnded a-> jobj [ "type".="AuctionHasEnded"; "auctionId" .= a]
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
-    | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= u; "auctionId" .=a]
+    | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
     | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .= c]
     | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]

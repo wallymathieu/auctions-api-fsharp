@@ -9,7 +9,7 @@ open Auctions.Web
 [<Fact>]
 let ``Add auction``() = 
   let a: AddAuctionReq = {
-    id = 1L
+    id = auctionId
     startsAt = DateTime(2018,1,1, 10,0,0)
     title = "First auction"
     endsAt = DateTime(2019,1,1, 10,0,0)
