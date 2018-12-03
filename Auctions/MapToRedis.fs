@@ -75,9 +75,9 @@ open Redis
 let tryParseUser (u:RedisValue) =match string u |> User.tryParse with | Some v -> Ok v | None -> Error "InvalidUser"
 let tryParseType (t:RedisValue) =match string t |> Type.tryParse with | Some v -> Ok v | None -> Error "InvalidType"
 let addAuctionCodec =
-  fun id title expiry startsAt at typ currency user -> (DateTime at, { id=id;title=title; expiry =DateTime expiry; startsAt=DateTime startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
+  fun id title expiry startsAt at typ currency user -> (DateTime at, { id=AuctionId id;title=title; expiry =DateTime expiry; startsAt=DateTime startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
   |> mapping
-  |> fieldInt64 "Id" (snd >> Auction.getId)
+  |> fieldInt64 "Id" (snd >> Auction.getId >> AuctionId.unwrap)
   |> fieldStr "Title" (snd >> Auction.title)
   |> fieldInt64 "Expiry" (snd >> Auction.expiry >> DateTime.ticks)
   |> fieldInt64 "StartsAt" (snd >> Auction.expiry >> DateTime.ticks)
@@ -86,10 +86,10 @@ let addAuctionCodec =
   |> fieldInt64 "Currency" (snd >> Auction.currency >> Currency.value)
   |> field "User" tryParseUser (string>>implicit) (snd >> Auction.user )
 let placeBidCodec =
-  fun (id:string) auction amountValue amountCurrency at user -> (DateTime at, { id=Guid.Parse id; auction=auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at=DateTime at })
+  fun (id:string) auction amountValue amountCurrency at user -> (DateTime at, { id=Guid.Parse id |> BidId; auction=AuctionId auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at=DateTime at })
   |> mapping
   |> fieldStr "Id" (snd >> Bid.getId >> string)
-  |> fieldInt64 "Auction" (snd >> Bid.auction)
+  |> fieldInt64 "Auction" (snd >> Bid.auction >> AuctionId.unwrap)
   |> fieldInt64 "AmountValue" (snd >> Bid.amount >> Amount.value)
   |> fieldInt64 "AmountCurrency" (snd >> Bid.amount >> Amount.currency >> Currency.value)
   |> fieldInt64 "At" (fst >> DateTime.ticks)

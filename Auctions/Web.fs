@@ -152,7 +152,7 @@ module JsonResult=
       >> Result.map (fun (a:BidReq) -> 
       let d = DateTime.UtcNow
       (d, 
-       { user = user; id= BidId.NewGuid();
+       { user = user; id= BidId.New();
          amount=a.amount;auction=id
          at = d })
       |> PlaceBid)
@@ -168,6 +168,7 @@ let webPart (agent : AuctionDelegator) =
             }
 
   let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
+      let id = AuctionId id
       monad {
         let! auctionAndBids = agent.GetAuction id
         match auctionAndBids with
@@ -176,11 +177,12 @@ let webPart (agent : AuctionDelegator) =
       }
 
   let details id : WebPart= GET >=> (fun ctx->monad{ 
+      let id = AuctionId id
       let! auctionAndBids = lift (agent.GetAuction id)
       return! 
          match auctionAndBids with
          | Some v-> Json.OK (JsonResult.getAuctionResult v) ctx
-         | None -> NOT_FOUND (sprintf "Could not find auction with id %o" id) ctx
+         | None -> NOT_FOUND (sprintf "Could not find auction with id %O" id) ctx
   })
 
   /// handle command and add result to repository
@@ -204,7 +206,8 @@ let webPart (agent : AuctionDelegator) =
       )
 
   /// place bid
-  let placeBid (id : AuctionId) = 
+  let placeBid id =
+    let id = AuctionId id
     authenticated (function 
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user ->

@@ -8,9 +8,9 @@ open System
 open Xunit
 
 module ``Auction agent tests`` = 
-  let seller = BuyerOrSeller("x1", "Seller")
+  let seller = BuyerOrSeller(UserId "x1", "Seller")
 
-  let auction = { id = 1L; startsAt = DateTime(2008,11,25)
+  let auction = { id = auctionId; startsAt = DateTime(2008,11,25)
                   title = ""
                   expiry = DateTime(2009,1,1)
                   user = seller 
@@ -22,11 +22,11 @@ module ``Auction agent tests`` =
                   } 
                 }
 
-  let buyer = BuyerOrSeller("x2", "Buyer")
+  let buyer = BuyerOrSeller(UserId "x2", "Buyer")
 
   let emptyHandler= ignore
-  let validBid = { id = BidId.NewGuid()
-                   auction =1L
+  let validBid = { id = BidId.New()
+                   auction =auctionId
                    user=buyer
                    amount =Amount.parse "VAC10"
                    at = DateTime(2008,12,1)
