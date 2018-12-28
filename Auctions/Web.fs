@@ -16,26 +16,44 @@ open Auctions.Domain
 open Auctions.Actors
 open Auctions
 open FSharpPlus.Data
-(* Fake auth in order to simplify web testing *)
+open System.Text
+(* Assuming front proxy verification of auth in order to simplify web testing *)
 
-type Session = 
+type Session =
   | NoSession
   | UserLoggedOn of User
-
+type UserType=
+  | BuyerOrSeller=0
+  | Support=1
+type JwtPayload = { subject:string; name:string; userType:UserType }
+with
+  static member OfJson json:ParseResult<JwtPayload> =
+    let create sub name userType= {subject =sub ; name=name; userType=Enum.Parse userType}
+    match json with
+    | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
+    | x -> Error (sprintf "Expected JwtPayload, found %A" x)
 let authenticated f = //
   let context apply (a : Suave.Http.HttpContext) = apply a a
-  context (fun x -> 
-    match x.request.header "x-fake-auth" with
-    | Choice1Of2 u -> 
-        User.tryParse u |> function | Some user->
-                                        f (UserLoggedOn(user))
-                                    | None ->f NoSession
+  context (fun x ->
+    match x.request.header "x-jwt-payload" with
+    | Choice1Of2 u ->
+      Convert.FromBase64String u
+      |>Encoding.UTF8.GetString
+      |> parseJson
+      |> Result.bind( fun (payload:JwtPayload)->
+        let userId = UserId payload.subject
+        match payload.userType with
+        | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
+        | UserType.Support -> Support userId |> Ok
+        | _ -> Error "Unknown user type")
+      |> function | Ok user->f (UserLoggedOn(user))
+                  | Error _ ->f NoSession
     | Choice2Of2 _ -> f NoSession)
 
-module Paths = 
+module Paths =
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
-  
-  module Auction = 
+
+  module Auction =
     /// /auctions
     let overview = "/auctions"
     /// /auction
@@ -48,7 +66,7 @@ module Paths =
 (* Json API *)
 
 type BidReq = {amount : Amount}
-with 
+with
   static member OfJson json:ParseResult<BidReq> =
     let create a = {amount =a}
     match json with
@@ -63,20 +81,20 @@ type AddAuctionReq = {
   currency : string
   typ:string
 }
-with 
+with
   static member OfJson json:ParseResult<AddAuctionReq> =
     let create id startsAt title endsAt (currency:string option) (typ:string option)= {id =id;startsAt=startsAt;title=title; endsAt=endsAt;currency=Option.defaultValue "" currency; typ=Option.defaultValue "" typ}
     match json with
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")<*> (o .@? "currency")<*> (o .@? "type")
     | x -> Error (sprintf "Expected bid, found %A" x)
 
-type BidJsonResult = { 
+type BidJsonResult = {
   amount:Amount
   bidder:string
 }
-with 
+with
   static member ToJson (x: BidJsonResult) :JsonValue =
-    jobj [ 
+    jobj [
       "amount" .= x.amount
       "bidder" .= x.bidder
     ]
@@ -90,9 +108,9 @@ type AuctionJsonResult = {
   winner : string
   winnerPrice : string
 }
- with 
+ with
   static member ToJson (x: AuctionJsonResult) :JsonValue =
-    jobj [ 
+    jobj [
       "id" .= x.id
       "startsAt" .= x.startsAt
       "title" .= x.title
@@ -106,14 +124,14 @@ type AuctionJsonResult = {
 module JsonResult=
   let getAuctionResult (auction,bids,maybeAmountAndWinner) =
     let discloseBidders =Auction.biddersAreOpen auction
-    let mapBid (b:Bid) :BidJsonResult = { 
+    let mapBid (b:Bid) :BidJsonResult = {
       amount=b.amount
-      bidder= if discloseBidders 
-              then string b.user 
+      bidder= if discloseBidders
+              then string b.user
               else b.user.GetHashCode() |> string // here you might want bidder number
     }
 
-    let (winner,winnerPrice) = 
+    let (winner,winnerPrice) =
               match maybeAmountAndWinner with
               | None -> ("","")
               | Some (amount, winner)->
@@ -124,13 +142,13 @@ module JsonResult=
       winnerPrice = winnerPrice
     }
 
-  let toPostedAuction user = 
-      Json.getBody 
-        >> Result.map (fun (a:AddAuctionReq) -> 
+  let toPostedAuction user =
+      Json.getBody
+        >> Result.map (fun (a:AddAuctionReq) ->
         let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
-        
-        let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending { 
-                                                                            reservePrice=Amount.zero currency 
+
+        let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending {
+                                                                            reservePrice=Amount.zero currency
                                                                             minRaise =Amount.zero currency
                                                                             timeFrame =TimeSpan.FromSeconds(0.0)
                                                                           })
@@ -147,20 +165,20 @@ module JsonResult=
         >> Result.mapError InvalidUserData
 
 
-  let toPostedPlaceBid id user = 
-    Json.getBody 
-      >> Result.map (fun (a:BidReq) -> 
+  let toPostedPlaceBid id user =
+    Json.getBody
+      >> Result.map (fun (a:BidReq) ->
       let d = DateTime.UtcNow
-      (d, 
+      (d,
        { user = user; id= BidId.New();
          amount=a.amount;auction=id
          at = d })
       |> PlaceBid)
       >> Result.mapError InvalidUserData
 
-let webPart (agent : AuctionDelegator) = 
+let webPart (agent : AuctionDelegator) =
 
-  let overview = 
+  let overview =
     GET >=> fun (ctx) ->
             monad {
               let! auctionList =lift ( agent.GetAuctions())
@@ -176,18 +194,18 @@ let webPart (agent : AuctionDelegator) =
         | None -> return Error (UnknownAuction id)
       }
 
-  let details id : WebPart= GET >=> (fun ctx->monad{ 
+  let details id : WebPart= GET >=> (fun ctx->monad{
       let id = AuctionId id
       let! auctionAndBids = lift (agent.GetAuction id)
-      return! 
+      return!
          match auctionAndBids with
          | Some v-> Json.OK (JsonResult.getAuctionResult v) ctx
          | None -> NOT_FOUND (sprintf "Could not find auction with id %O" id) ctx
   })
 
   /// handle command and add result to repository
-  let handleCommandAsync 
-    (maybeC:_->Result<Command,_>) :WebPart = 
+  let handleCommandAsync
+    (maybeC:_->Result<Command,_>) :WebPart =
     fun ctx -> monad {
       match agent.UserCommand <!> (maybeC ctx) with
       | Ok asyncR->
@@ -198,8 +216,8 @@ let webPart (agent : AuctionDelegator) =
     }
 
   /// register auction
-  let register = 
-    authenticated (function 
+  let register =
+    authenticated (function
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user ->
         POST >=> handleCommandAsync (JsonResult.toPostedAuction user)
@@ -208,18 +226,22 @@ let webPart (agent : AuctionDelegator) =
   /// place bid
   let placeBid id =
     let id = AuctionId id
-    authenticated (function 
+    authenticated (function
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user ->
         POST >=> handleCommandAsync (JsonResult.toPostedPlaceBid id user)
       )
-  
+
   WebPart.choose [ path "/" >=> (OK "")
                    path Paths.Auction.overview >=> overview
                    path Paths.Auction.register >=> register
                    pathScan Paths.Auction.details details
                    pathScan Paths.Auction.placeBid placeBid ]
+(*
+>  AUCTION_TOKEN=`echo '{"sub":"a1", "name":"Test", "u_typ":"0"}' | base64`
+ i.e.   eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo=
+> curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
+> curl  -X POST -d '{ "amount":"VAC10" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
+> curl  -X GET -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
+*)
 
-//curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
-//curl  -X POST -d '{ "amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
-//curl  -X GET -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions 
