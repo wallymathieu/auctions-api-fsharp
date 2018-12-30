@@ -1,4 +1,5 @@
-﻿open Suave
+﻿module Auctions.Program
+open Suave
 open System
 
 open Auctions.Web
@@ -14,8 +15,18 @@ type CmdArgs =
     Port : Sockets.Port
     Redis : string option
     Json : string option
-    WebHook : Uri option
+    CommandsWebHook : Uri option
   }
+module Env=
+  let envArgs (prefix:string) =
+    let mangle (str:string) = Regex.replace "_" "-" str
+    Seq.cast<DictEntry>( Environment.GetEnvironmentVariables())
+    |> Seq.map(fun kv-> (string kv.Key, string kv.Value) )
+    |> Seq.filter( fun (key, value) -> key.StartsWith(prefix, StringComparison.InvariantCultureIgnoreCase)
+                                       && not <| String.IsNullOrEmpty value)
+    |> Seq.collect( fun (key, value) -> [ "--"+ (mangle (key.Substring(0, prefix.Length))).ToLowerInvariant(); value ])
+    |> Seq.toList
+
 [<EntryPoint>]
 let main argv =
   // parse arguments
@@ -29,16 +40,9 @@ let main argv =
         Port = 8083us
         Redis = None
         Json = None
-        WebHook = None
+        CommandsWebHook = None
       }
-    let envArgs =
-                let prefix = "AUCTIONS_"
-                Seq.cast<DictEntry>( Environment.GetEnvironmentVariables())
-                |> Seq.map(fun kv-> (string kv.Key, string kv.Value) )
-                |> Seq.filter( fun (key, value) -> key.StartsWith(prefix, StringComparison.InvariantCultureIgnoreCase) && not <| String.IsNullOrEmpty value )
-                |> Seq.collect( fun (key, value) -> [ "--"+ key.Substring(0, prefix.Length).ToLowerInvariant(); value ])
-                |> Seq.toList
-
+    let envArgs = Env.envArgs "AUCTIONS_"
     let rec parseArgs b args =
       match args with
       | [] -> b
@@ -46,15 +50,15 @@ let main argv =
       | "--port" :: Port p :: xs -> parseArgs { b with Port = p } xs
       | "--redis" :: conn :: xs -> parseArgs { b with Redis = Some conn } xs
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
-      | "--web-hook" :: Uri url :: xs -> parseArgs { b with WebHook = Some url } xs
+      | "--commands-web-hook" :: Uri url :: xs -> parseArgs { b with CommandsWebHook = Some url } xs
       | invalidArgs ->
         printfn "error: invalid arguments %A" invalidArgs
         printfn "Usage:"
-        printfn "    --ip          ADDRESS     ip address (Default: %O)" defaultArgs.IP
-        printfn "    --port        PORT        port (Default: %i)" defaultArgs.Port
-        printfn "    --redis       CONN        redis connection string"
-        printfn "    --json        FILE        path to filename to store commands"
-        printfn "    --web-hook    URI         web hook to receive events"
+        printfn "    --ip                   ADDRESS     ip address (Default: %O)" defaultArgs.IP
+        printfn "    --port                 PORT        port (Default: %i)" defaultArgs.Port
+        printfn "    --redis                CONN        redis connection string"
+        printfn "    --json                 FILE        path to filename to store commands"
+        printfn "    --commands-web-hook    URI         web hook to receive commands"
         exit 1
 
     argv
@@ -67,7 +71,7 @@ let main argv =
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
       }
   let appendOnly = seq {
-    if Option.isSome args.WebHook then yield webHook args.WebHook.Value Console.Error.WriteLine
+    if Option.isSome args.CommandsWebHook then yield WebHook.commands args.CommandsWebHook.Value Console.Error.WriteLine
   }
   let commands = monad.plus {
                   for appender in appenders do

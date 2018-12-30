@@ -244,14 +244,19 @@ let webPart (agent : AuctionDelegator) =
 > curl  -X POST -d '{ "amount":"VAC10" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
 > curl  -X GET -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
 *)
-open FSharp.Data.HttpRequestHeaders
-open FSharp.Data.HttpContentTypes
-let webHook (uri:Uri) (onError:string->unit) (commands: Command list)=async{
-  let! res = Http.AsyncRequest(
-              string uri,
-              headers = [ Accept Json ; ContentType Json],
-              body = (toJson commands |> string |>  TextRequest),
-              silentHttpErrors = true)
-  if 300 >= res.StatusCode || res.StatusCode < 200 then
-    onError (string res.Body)
-}
+
+module WebHook=
+  open FSharp.Data.HttpRequestHeaders
+  open FSharp.Data.HttpContentTypes
+  let isError (code:int) = code >=300 || code<200
+  let commands (uri:Uri) (onError:string->unit) (commands: Command list)=async{
+    try
+      let! res = Http.AsyncRequest(
+                  string uri,
+                  headers = [ Accept Json ; ContentType Json],
+                  silentHttpErrors = true,
+                  body = (toJson commands |> string |>  TextRequest))
+      if (isError res.StatusCode ) then onError (sprintf "Status code: %d, response: %O" res.StatusCode res.Body)
+    with
+    | e-> onError (string e)
+  }
