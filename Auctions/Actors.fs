@@ -26,6 +26,21 @@ type PersistCommands(appendBatches : (Command list -> Async<unit>) list) =
   member __.Handle(command) =
     mbox.Post(command)
 
+type Observer<'t>(observers : ('t-> Async<unit>) list) =
+  let mbox = MailboxProcessor.Start(fun inbox ->
+      let rec messageLoop() =
+        async {
+          let! input = inbox.Receive()
+          for observe in observers do
+              do! observe input
+          return! messageLoop()
+        }
+      messageLoop())
+  do
+    mbox.Error.Add exitOnException
+
+  member __.Observe(input:'t) =
+    mbox.Post(input)
 
 type AuctionEnded = (Amount * User) option
 
@@ -138,7 +153,7 @@ module AuctionDState=
      | _, _ -> HasEnded()
   let started auction agent :T= (auction ,Ongoing agent)
   let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
-type AuctionDelegator(commands:Command list, persistCommand, now, observeResult) =
+type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResult) =
   let agent =MailboxProcessor<DelegatorSignals>.Start(fun inbox ->
     let mutable agents = let _now =now()
                          let r = Repository()
@@ -223,7 +238,7 @@ type AuctionDelegator(commands:Command list, persistCommand, now, observeResult)
         let now = now()
         match msg with
          | UserCommand(cmd, reply) ->
-           do persistCommand cmd
+           do onIncomingCommand cmd
            do! userCommand cmd now reply
            return! messageLoop()
          | GetAuction (auctionId,reply) ->

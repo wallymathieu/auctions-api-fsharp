@@ -458,3 +458,14 @@ type CommandSuccess =
     | BidAccepted (d,b)-> jobj [ "$type" .= "BidAccepted"; "at" .= d; "bid" .= b]
 
 
+type Observable =
+  | Commands of Command list
+  | Results of Result<CommandSuccess, Errors> list
+  static member ToJson (x: Observable) =
+    match x with
+    | Commands commands->
+      jobj [ "$type" .= "Commands"; "commands" .= commands]
+    | Results results->
+      let mapToJson = function | Ok o-> JArray [|JString "Ok"; toJson o|] | Error e->JArray [JString "Error";toJson e]
+      let jresults = results |> List.map mapToJson |> List.toArray |> JArray
+      jobj [ "$type" .= "Results"; "results", jresults]

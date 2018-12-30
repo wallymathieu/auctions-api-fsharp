@@ -253,14 +253,10 @@ module WebHook=
   let isError (code:int) = code >=300 || code<200
   /// Send commands to webhook
   /// Any errors will be ignored
-  let commands (uri:Uri) (onError:string->unit) (commands: Command list)=async{
-    try
-      let! res = Http.AsyncRequest(
-                  string uri,
-                  headers = [ Accept Json ; ContentType Json],
-                  silentHttpErrors = true,
-                  body = (toJson commands |> string |>  TextRequest))
-      if (isError res.StatusCode ) then onError (sprintf "Status code: %d, response: %O" res.StatusCode res.Body)
-    with
-    | e-> onError (string e)
+  let inline ofUri (uri:Uri) payload=async{
+    let! res = Http.AsyncRequest(
+                string uri,
+                headers = [ Accept Json ; ContentType Json],
+                body = (toJson payload |> string |>  TextRequest))
+    if (isError res.StatusCode ) then failwithf "Status code: %d, response: %O" res.StatusCode res.Body
   }

@@ -15,7 +15,7 @@ type CmdArgs =
     Port : Sockets.Port
     Redis : string option
     Json : string option
-    CommandsWebHook : Uri option
+    WebHook : Uri option
   }
 module Env=
   let envArgs (prefix:string) =
@@ -40,7 +40,7 @@ let main argv =
         Port = 8083us
         Redis = None
         Json = None
-        CommandsWebHook = None
+        WebHook = None
       }
     let envArgs = Env.envArgs "AUCTIONS_"
     let rec parseArgs b args =
@@ -50,7 +50,7 @@ let main argv =
       | "--port" :: Port p :: xs -> parseArgs { b with Port = p } xs
       | "--redis" :: conn :: xs -> parseArgs { b with Redis = Some conn } xs
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
-      | "--commands-web-hook" :: Uri url :: xs -> parseArgs { b with CommandsWebHook = Some url } xs
+      | "--web-hook" :: Uri url :: xs -> parseArgs { b with WebHook = Some url } xs
       | invalidArgs ->
         printfn "error: invalid arguments %A" invalidArgs
         printfn "Usage:"
@@ -58,8 +58,7 @@ let main argv =
         printfn "    --port                 PORT        port (Default: %i)" defaultArgs.Port
         printfn "    --redis                CONN        redis connection string"
         printfn "    --json                 FILE        path to filename to store commands"
-        printfn "    --commands-web-hook    URI         web hook to receive commands"
-        printfn "    --results-web-hook     URI         web hook to receive command results"
+        printfn "    --web-hook             URI         web hook to receive commands and command results"
         exit 1
 
     argv
@@ -71,8 +70,8 @@ let main argv =
         if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
       }
-  let appendOnly = seq {
-    if Option.isSome args.CommandsWebHook then yield WebHook.commands args.CommandsWebHook.Value Console.Error.WriteLine
+  let observers = seq {
+    if Option.isSome args.WebHook then yield WebHook.ofUri args.WebHook.Value
   }
   let commands = monad.plus {
                   for appender in appenders do
@@ -83,12 +82,19 @@ let main argv =
                  |> Seq.toList
   let batchAppend = appenders
                     |> Seq.map (fun a->a.Batch)
-                    |> Seq.append appendOnly
                     |> List.ofSeq
   let persist = PersistCommands batchAppend
-  let observeCommandResult (r:Result<_,_>) = ignore r
+  let observer = Observer <| Seq.toList observers
   let time ()= DateTime.UtcNow
-  let agent = AuctionDelegator.create(commands, persist.Handle, time, observeCommandResult)
+  let onIncomingCommand command=
+    persist.Handle command
+    observer.Observe <| Domain.Commands [command]
+  let observeCommandResult result =
+    observer.Observe <| Domain.Results [result]
+  // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
+  observer.Observe <| Domain.Commands []
+
+  let agent = AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
   0
