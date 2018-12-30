@@ -138,7 +138,7 @@ module AuctionDState=
      | _, _ -> HasEnded()
   let started auction agent :T= (auction ,Ongoing agent)
   let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
-type AuctionDelegator(commands:Command list, persistCommand, now) =
+type AuctionDelegator(commands:Command list, persistCommand, now, observeResult) =
   let agent =MailboxProcessor<DelegatorSignals>.Start(fun inbox ->
     let mutable agents = let _now =now()
                          let r = Repository()
@@ -154,15 +154,18 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
                          |> Map
 
     let userCommand cmd now (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
-       async{
+      let observeAndReply result=
+         observeResult result
+         reply.Reply result
+      async{
          match cmd with
          | AddAuction(at, auction) ->
             if auction.expiry > now then
               let agent = AuctionAgent.create auction (Auction.emptyState auction)
               agents <- Map.add auction.id (AuctionDState.started auction agent) agents
-              reply.Reply(Ok (AuctionAdded(at, auction)))
+              observeAndReply (Ok (AuctionAdded(at, auction)))
             else
-              reply.Reply(Error (AuctionHasEnded auction.id))
+              observeAndReply (Error (AuctionHasEnded auction.id))
          | PlaceBid(at, bid) ->
            let auctionId = Command.getAuction cmd
            let maybeAgent=match Map.tryFind auctionId agents with
@@ -175,9 +178,10 @@ type AuctionDelegator(commands:Command list, persistCommand, now) =
            match maybeAgent with
            | Ok auctionAgent ->
               let! m = auctionAgent.AgentBid bid
-              reply.Reply(m |> Result.map (fun () -> BidAccepted(at, bid)))
+              let result = m |> Result.map (fun () -> BidAccepted(at, bid))
+              observeAndReply result
            | Error err ->
-              reply.Reply(Error err)
+              observeAndReply (Error err)
        }
 
     let wakeUp now=

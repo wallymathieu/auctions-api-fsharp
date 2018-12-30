@@ -59,6 +59,7 @@ let main argv =
         printfn "    --redis                CONN        redis connection string"
         printfn "    --json                 FILE        path to filename to store commands"
         printfn "    --commands-web-hook    URI         web hook to receive commands"
+        printfn "    --results-web-hook     URI         web hook to receive command results"
         exit 1
 
     argv
@@ -85,8 +86,9 @@ let main argv =
                     |> Seq.append appendOnly
                     |> List.ofSeq
   let persist = PersistCommands batchAppend
-
-  let agent = AuctionDelegator.create(commands, persist.Handle, fun ()->DateTime.UtcNow)
+  let observeCommandResult (r:Result<_,_>) = ignore r
+  let time ()= DateTime.UtcNow
+  let agent = AuctionDelegator.create(commands, persist.Handle, time, observeCommandResult)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
   0

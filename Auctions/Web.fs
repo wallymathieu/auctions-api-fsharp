@@ -205,12 +205,14 @@ let webPart (agent : AuctionDelegator) =
 
   /// handle command and add result to repository
   let handleCommandAsync
-    (maybeC:_->Result<Command,_>) :WebPart =
+    (tryGetCommand:_->Result<Command,_>) :WebPart =
     fun ctx -> monad {
-      match agent.UserCommand <!> (maybeC ctx) with
-      | Ok asyncR->
-          match! lift asyncR with
-          | Ok v->return! Json.OK v ctx
+      let command = tryGetCommand ctx
+      match agent.UserCommand <!> command with
+      | Ok asyncResult->
+          match! lift asyncResult with
+          | Ok commandSuccess->
+            return! Json.OK commandSuccess ctx
           | Error e-> return! Json.BAD_REQUEST e ctx
       | Error c'->return! Json.BAD_REQUEST c' ctx
     }
@@ -249,6 +251,8 @@ module WebHook=
   open FSharp.Data.HttpRequestHeaders
   open FSharp.Data.HttpContentTypes
   let isError (code:int) = code >=300 || code<200
+  /// Send commands to webhook
+  /// Any errors will be ignored
   let commands (uri:Uri) (onError:string->unit) (commands: Command list)=async{
     try
       let! res = Http.AsyncRequest(
