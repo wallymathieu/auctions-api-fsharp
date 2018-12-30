@@ -41,7 +41,7 @@ module Filters=
   let pathRegex s       :WebPart= OptionT << (F.pathRegex s)
   let pathScan (pf : PrintfFormat<_,_,_,_,'t>) (h : 't ->  WebPart) : WebPart =
     OptionT<< (F.pathScan pf (fun t ctx->OptionT.run ((h t) ctx))) // looks kind of weird, but perhaps OK
-  
+
 module RequestErrors=
   module RE = Suave.RequestErrors
   let BAD_REQUEST s= OptionT<< (RE.BAD_REQUEST s )
@@ -49,7 +49,7 @@ module RequestErrors=
   let METHOD_NOT_ALLOWED s= OptionT<< (RE.METHOD_NOT_ALLOWED s )
   let FORBIDDEN s= OptionT<< (RE.FORBIDDEN s )
   let NOT_FOUND s= OptionT<< (RE.NOT_FOUND s )
-  let UNAUTHORIZED s = OptionT<< (RE.UNAUTHORIZED s ) 
+  let UNAUTHORIZED s = OptionT<< (RE.UNAUTHORIZED s )
 open FSharpPlus.Lens
 module Writers=
   open Suave
@@ -77,10 +77,10 @@ module Json=
   open Successful
   open RequestErrors
   open Writers
-  let inline OK v : WebPart= 
+  let inline OK v : WebPart=
     OK (string (toJson v))
     >=> setMimeType "application/json; charset=utf-8"
-  let inline BAD_REQUEST v : WebPart= 
+  let inline BAD_REQUEST v : WebPart=
     BAD_REQUEST (string (toJson v))
     >=> setMimeType "application/json; charset=utf-8"
 
@@ -89,6 +89,6 @@ module Json=
     | Ok v -> OK v
     | Error err -> BAD_REQUEST err
 
-  let inline getBody (ctx : Suave.Http.HttpContext)= 
+  let inline getBody (ctx : Suave.Http.HttpContext)=
     ctx.request.rawForm |> System.Text.Encoding.UTF8.GetString |> parseJson
 

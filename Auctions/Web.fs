@@ -205,12 +205,14 @@ let webPart (agent : AuctionDelegator) =
 
   /// handle command and add result to repository
   let handleCommandAsync
-    (maybeC:_->Result<Command,_>) :WebPart =
+    (tryGetCommand:_->Result<Command,_>) :WebPart =
     fun ctx -> monad {
-      match agent.UserCommand <!> (maybeC ctx) with
-      | Ok asyncR->
-          match! lift asyncR with
-          | Ok v->return! Json.OK v ctx
+      let command = tryGetCommand ctx
+      match agent.UserCommand <!> command with
+      | Ok asyncResult->
+          match! lift asyncResult with
+          | Ok commandSuccess->
+            return! Json.OK commandSuccess ctx
           | Error e-> return! Json.BAD_REQUEST e ctx
       | Error c'->return! Json.BAD_REQUEST c' ctx
     }
@@ -237,11 +239,16 @@ let webPart (agent : AuctionDelegator) =
                    path Paths.Auction.register >=> register
                    pathScan Paths.Auction.details details
                    pathScan Paths.Auction.placeBid placeBid ]
-(*
->  AUCTION_TOKEN=`echo '{"sub":"a1", "name":"Test", "u_typ":"0"}' | base64`
- i.e.   eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo=
-> curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
-> curl  -X POST -d '{ "amount":"VAC10" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
-> curl  -X GET -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
-*)
 
+module WebHook=
+  open FSharp.Data.HttpRequestHeaders
+  open FSharp.Data.HttpContentTypes
+  let isError (code:int) = code >=300 || code<200
+  /// Send payload to webhook
+  let inline ofUri (uri:Uri) payload=async{
+    let! res = Http.AsyncRequest(
+                string uri,
+                headers = [ Accept Json ; ContentType Json],
+                body = (toJson payload |> string |>  TextRequest))
+    if (isError res.StatusCode ) then failwithf "Status code: %d, response: %O" res.StatusCode res.Body
+  }
