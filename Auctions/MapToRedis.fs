@@ -7,11 +7,11 @@ open FSharpPlus
 open FSharpPlus.Data
 
 module Redis=
-  
+
   // Codec definition From Fleece:
 
   /// Encodes a value of a generic type 't into a value of raw type 'S.
-  type Encoder<'S, 't> = 't -> 'S 
+  type Encoder<'S, 't> = 't -> 'S
 
   /// Decodes a value of raw type 'S into a value of generic type 't, possibly returning an error.
   type Decoder<'S, 't> = 'S -> Result<'t,string>
@@ -102,26 +102,26 @@ let mapToHashEntries command =
   | AddAuction(at, auction)-> encode (snd addAuctionCodec) (at, auction) |> withType "AddAuction"
   | PlaceBid(at, bid) ->  encode (snd placeBidCodec) (at, bid) |> withType "PlaceBid"
 
-let findEntry (key:string) (entries : HashEntry list) = 
+let findEntry (key:string) (entries : HashEntry list) =
   let k :RedisValue= implicit key
   match entries |> List.tryFind (fun e -> e.Name.Equals(k)) with
   | Some entry -> entry
   | None -> failwithf "could not find %s" key
 
-let findEntryStr key entries = 
+let findEntryStr key entries =
   let entry = findEntry key entries
   string entry.Value
 
-let mapFromHashEntries entries : Command = 
+let mapFromHashEntries entries : Command =
   let t = entries |> findEntryStr "Type"
   match t with
-  | "AddAuction" -> 
+  | "AddAuction" ->
     match decode (fst addAuctionCodec) entries with
     | Ok (at,auction) -> AddAuction (at,auction)
     | Error err-> failwithf "Unknown %A" err
-  | "PlaceBid" -> 
+  | "PlaceBid" ->
     match decode (fst placeBidCodec) entries with
     | Ok (at,bid) -> PlaceBid(at, bid)
     | Error err-> failwithf "Unknown %A" err
   | v -> failwithf "Unknown type %s" v
- 
+

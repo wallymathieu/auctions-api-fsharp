@@ -7,50 +7,68 @@ open Auctions
 open FSharpPlus
 open FSharpPlus.Data
 open FSharpPlus.Operators
-type CmdArgs = 
+type DictEntry = System.Collections.DictionaryEntry
+
+type CmdArgs =
   { IP : System.Net.IPAddress
     Port : Sockets.Port
     Redis : string option
     Json : string option
+    WebHook : Uri option
   }
 [<EntryPoint>]
-let main argv = 
+let main argv =
   // parse arguments
-  let args = 
+  let args =
     let (|Port|_|) : _-> UInt16 option = tryParse
-    let (|IPAddress|_|) :_->System.Net.IPAddress option= tryParse
-    
+    let (|IPAddress|_|) :_->System.Net.IPAddress option = tryParse
+    let (|Uri|_|) (uri:string) :System.Uri option = try System.Uri uri |> Some with | _ -> None
     //default bind to 127.0.0.1:8083
-    let defaultArgs = 
+    let defaultArgs =
       { IP = System.Net.IPAddress.Loopback
         Port = 8083us
         Redis = None
         Json = None
+        WebHook = None
       }
-    
-    let rec parseArgs b args = 
+    let envArgs =
+                let prefix = "AUCTIONS_"
+                Seq.cast<DictEntry>( Environment.GetEnvironmentVariables())
+                |> Seq.map(fun kv-> (string kv.Key, string kv.Value) )
+                |> Seq.filter( fun (key, value) -> key.StartsWith(prefix, StringComparison.InvariantCultureIgnoreCase) && not <| String.IsNullOrEmpty value )
+                |> Seq.collect( fun (key, value) -> [ "--"+ key.Substring(0, prefix.Length).ToLowerInvariant(); value ])
+                |> Seq.toList
+
+    let rec parseArgs b args =
       match args with
       | [] -> b
       | "--ip" :: IPAddress ip :: xs -> parseArgs { b with IP = ip } xs
       | "--port" :: Port p :: xs -> parseArgs { b with Port = p } xs
       | "--redis" :: conn :: xs -> parseArgs { b with Redis = Some conn } xs
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
-      | invalidArgs -> 
+      | "--web-hook" :: Uri url :: xs -> parseArgs { b with WebHook = Some url } xs
+      | invalidArgs ->
         printfn "error: invalid arguments %A" invalidArgs
         printfn "Usage:"
-        printfn "    --ip ADDRESS   ip address (Default: %O)" defaultArgs.IP
-        printfn "    --port PORT    port (Default: %i)" defaultArgs.Port
+        printfn "    --ip          ADDRESS     ip address (Default: %O)" defaultArgs.IP
+        printfn "    --port        PORT        port (Default: %i)" defaultArgs.Port
+        printfn "    --redis       CONN        redis connection string"
+        printfn "    --json        FILE        path to filename to store commands"
+        printfn "    --web-hook    URI         web hook to receive events"
         exit 1
-    
+
     argv
     |> List.ofArray
+    |> List.append envArgs
     |> parseArgs defaultArgs
-  
+
   let appenders = seq {
         if Option.isSome args.Redis then yield AppendAndReadBatchRedis(args.Redis.Value) :> IAppendBatch
         if Option.isSome args.Json then yield JsonAppendToFile(args.Json.Value) :> IAppendBatch
       }
-  let persist = PersistCommands (appenders |> Seq.map (fun a->a.Batch) |> List.ofSeq)
+  let appendOnly = seq {
+    if Option.isSome args.WebHook then yield webHook args.WebHook.Value Console.Error.WriteLine
+  }
   let commands = monad.plus {
                   for appender in appenders do
                     yield appender.ReadAll()
@@ -58,6 +76,12 @@ let main argv =
                  |> Async.Parallel |> Async.RunSynchronously
                  |> Seq.collect id
                  |> Seq.toList
+  let batchAppend = appenders
+                    |> Seq.map (fun a->a.Batch)
+                    |> Seq.append appendOnly
+                    |> List.ofSeq
+  let persist = PersistCommands batchAppend
+
   let agent = AuctionDelegator.create(commands, persist.Handle, fun ()->DateTime.UtcNow)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
