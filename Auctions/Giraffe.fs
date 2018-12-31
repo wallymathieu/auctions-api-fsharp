@@ -11,9 +11,9 @@ let ``JSONorBAD_REQUEST`` (result:Result<_,_>) = fun next ctx ->
   ) next ctx
 
 
-let getBodyAsJSON<'a> (ctx : HttpContext) = 
+let getBodyAsJSON<'a> (ctx : HttpContext) =
   task {
-    try 
+    try
       let! s=ctx.BindJsonAsync<'a>()
       return Ok s
     with exn -> return Error exn

@@ -16,3 +16,4 @@ nuget:
 branches:
   only:
   - master
+  - hopac

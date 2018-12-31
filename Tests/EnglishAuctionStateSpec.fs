@@ -4,7 +4,7 @@ open AuctionStateSpecs
 open Xunit
 open System
 let timedAscAuction = auctionOfTyp (TimedAscending { // let's start out with english auctions
-    reservePrice=Amount.parse "SEK0" 
+    reservePrice=Amount.parse "SEK0"
     minRaise =Amount.parse "SEK0"
     timeFrame = TimeSpan.FromSeconds(0.0)
   })
@@ -18,7 +18,7 @@ let timedAscState= englishEmptyState
                      |> S.inc endsAt
 [<Fact>]
 let ``bid after auction has ended``() = 
-    Assert.Equal( Error (AuctionHasEnded 1L), timedAscState |> S.addBid bid |> snd )
+    Assert.Equal(auctionId |> AuctionHasEnded |> Error, timedAscState |> S.addBid bid |> snd )
 
 [<Fact>]
 let ``english auction winner and price``() = 
@@ -31,7 +31,7 @@ let ``english auction Can't place bid lower than highest bid``() =
     // setup
     let (state,res) = englishEmptyState
                        |> S.addBid {bid with at=startsAt.AddHours(1.0)}
-    let nextBid = {bid with at=startsAt.AddHours(2.0); id=Guid.NewGuid()}
+    let nextBid = {bid with at=startsAt.AddHours(2.0); id=BidId.New()}
     
     // act
     let res = S.addBid nextBid state |> snd 

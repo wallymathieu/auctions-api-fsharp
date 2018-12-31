@@ -1,5 +1,5 @@
 ﻿namespace Tests
-
+open FSharpPlus
 open Auctions
 open System
 open Xunit
