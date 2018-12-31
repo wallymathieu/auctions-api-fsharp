@@ -16,5 +16,4 @@ nuget:
 branches:
   only:
   - master
-  - static_constraints
-
+  - hopac
