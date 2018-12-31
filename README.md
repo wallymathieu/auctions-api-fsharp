@@ -41,9 +41,11 @@ dotnet run --project Auctions --redis CONN --json FILE --web-hook URI
 To try out the auction API you can then curl the service:
 
 ```bash
-AUCTION_TOKEN=`echo '{"sub":"a1", "name":"Test", "u_typ":"0"}' | base64`
-# i.e.   eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo=
-curl  -X POST -d '{ "id":1,"startsAt":"2018-12-01T10:00:00.000Z","endsAt":"2019-03-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
-curl  -X POST -d '{ "amount":"VAC10" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
-curl  -X GET -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
+AUCTIONS_TOKEN_SELLER=`echo '{"sub":"a1", "name":"Seller", "u_typ":"0"}' | base64`
+# eyJzdWIiOiJhMSIsICJuYW1lIjoiU2VsbGVyIiwgInVfdHlwIjoiMCJ9Cg==
+AUCTIONS_TOKEN_BUYER=`echo '{"sub":"a2", "name":"Buyer", "u_typ":"0"}' | base64`
+# eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K
+curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-jwt-payload: $AUCTIONS_TOKEN_SELLER"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
+curl  -X POST -d '{ "amount":"VAC10" }' -H "x-jwt-payload: $AUCTIONS_TOKEN_BUYER"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
+curl  -X GET -H "x-jwt-payload: $AUCTIONS_TOKEN_SELLER"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
 ```
