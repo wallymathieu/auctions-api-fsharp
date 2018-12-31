@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="AsyncExtensions.fs" />
     <Compile Include="Giraffe.fs" />
     <Compile Include="Domain.fs" />
     <Compile Include="AppendBatch.fs" />
