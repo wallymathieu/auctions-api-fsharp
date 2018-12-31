@@ -25,7 +25,7 @@ module ``Auction agent tests`` =
 
   let buyer = BuyerOrSeller(UserId "x2", "Buyer")
 
-  let emptyHandler= ignore
+  let emptyHandler= fun _ -> Job.unit()
   let validBid = { id = BidId.New()
                    auction =auctionId
                    user=buyer
@@ -37,7 +37,7 @@ module ``Auction agent tests`` =
     let j = job{
       let mutable t = DateTime(2008,11,24)
       let time () = t
-      let! d =  AuctionDelegator.create ([], emptyHandler, time, ignore)
+      let! d =  AuctionDelegator.create ([], emptyHandler, time, fun _ -> Job.unit())
       let! res= d.UserCommand (AddAuction (t,auction))
       Assert.Equal(Ok (AuctionAdded (t, auction)), res)
       t <- t.AddDays(0.5)
@@ -51,13 +51,13 @@ module ``Auction agent tests`` =
       //printfn "++++++++++++++++++++++++\n%A\n++++++++++++++++++++++++" maybeAuctionAndBids
       Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
     }
-    Async.RunSynchronously(j|> Job.toAsync)
+    run j
   [<Fact>]
   let ``create auction with bid, and ping until the end of the auction``() =
     let j = job{
       let mutable t = DateTime(2008,11,24)
       let time () = t
-      let! d =  AuctionDelegator.create ([], emptyHandler, time, ignore)
+      let! d =  AuctionDelegator.create ([], emptyHandler, time, fun _ -> Job.unit())
       let! res= d.UserCommand (AddAuction (t,auction))
       Assert.Equal(Ok (AuctionAdded (t, auction)), res)
       t <- t.AddDays(0.5)
@@ -72,4 +72,4 @@ module ``Auction agent tests`` =
       let! maybeAuctionAndBids = d.GetAuction auction.id
       Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
     }
-    Async.RunSynchronously(j|> Job.toAsync)
+    run j

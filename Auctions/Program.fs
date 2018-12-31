@@ -8,6 +8,7 @@ open Auctions
 open FSharpPlus
 open FSharpPlus.Data
 open FSharpPlus.Operators
+open Hopac
 type DictEntry = System.Collections.DictionaryEntry
 
 type CmdArgs =
@@ -83,18 +84,20 @@ let main argv =
   let batchAppend = appenders
                     |> Seq.map (fun a->a.Batch)
                     |> List.ofSeq
-  let persist = PersistCommands batchAppend
-  let observer = Observer <| Seq.toList observers
-  let time ()= DateTime.UtcNow
-  let onIncomingCommand command=
-    persist.Handle command
-    observer.Observe <| Domain.Commands [command]
-  let observeCommandResult result =
-    observer.Observe <| Domain.Results [result]
-  // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
-  observer.Observe <| Domain.Commands []
+  let agent=job{
+    let! persister = PersistCommands.create batchAppend
+    let! observer = Observer.create <| Seq.toList observers
+    let time ()= DateTime.UtcNow
+    let onIncomingCommand command=job {
+      do! command |> persister
+      do! Domain.Commands [command] |> observer
+    }
+    let observeCommandResult result =
+      Domain.Results [result] |> observer
+    // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
+    do! Domain.Commands [] |> observer
 
-  let agent = AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
-  // start suave
-  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
+    return! AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
+  }
+  do startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart (run agent))
   0

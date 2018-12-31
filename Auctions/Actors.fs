@@ -61,43 +61,32 @@ type AuctionAgent(auction, state:S) =
   }
   member __.Job = agent
 
-let exitOnException (e:exn)=
-  printfn "Failed with exception %s, %s, exit!" e.Message e.StackTrace
-  exit 1
+module PersistCommands=
+  let create(appendBatches : (Command list -> Async<unit>) list)=
+    let inbox = Ch ()
+    let agent = Job.foreverServer(job {
+      let! command = Ch.take inbox
+      let toAppend = [command]
+      for appendBatch in appendBatches do
+        do! appendBatch toAppend
+    })
+    job{
+      do! agent
+      return fun command -> Ch.send inbox command
+    }
+module Observer=
+  let create (observers : ('t-> Async<unit>) list)=
+    let inbox = Ch ()
 
-type PersistCommands(appendBatches : (Command list -> Async<unit>) list) =
-  let mbox = MailboxProcessor.Start(fun inbox ->
-       let rec messageLoop() =
-         async {
-           let! command = inbox.Receive()
-           let toAppend = [command]
-           for appendBatch in appendBatches do
-             do! appendBatch toAppend
-           return! messageLoop()
-         }
-       messageLoop())
-  do
-    mbox.Error.Add exitOnException
-
-  member __.Handle(command) =
-    mbox.Post(command)
-
-type Observer<'t>(observers : ('t-> Async<unit>) list) =
-  let mbox = MailboxProcessor.Start(fun inbox ->
-      let rec messageLoop() =
-        async {
-          let! input = inbox.Receive()
-          for observe in observers do
-              do! observe input
-          return! messageLoop()
-        }
-      messageLoop())
-  do
-    mbox.Error.Add exitOnException
-
-  member __.Observe(input:'t) =
-    mbox.Post(input)
-
+    let agent = Job.foreverServer(job {
+      let! input = Ch.take inbox
+      for observe in observers do
+          do! observe input
+    })
+    job{
+      do! agent
+      return fun input -> Ch.send inbox input
+    }
 
 /// repository that takes commands and translate them to auctions and auction states
 /// assumption is that it's used in a single threaded sync manner
@@ -153,62 +142,63 @@ module AuctionDState=
   let started auction agent :T= (auction ,Ongoing agent)
   let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
 
-type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResult) =
+type AuctionDelegator(commands:Command list, onIncomingCommand:Command->Job<unit>, time, observeResult:Result<_,_>->Job<unit>) =
   let inbox = Ch ()
 
   let agents : MVar<Map<AuctionId,AuctionDState.T>> = MVar()
 
   let userCommand cmd now (reply:IVar<Result<CommandSuccess, Errors>>) : Job<_>=
-      let observeAndReply result=
-        observeResult result
-        IVar.fill reply result
+    let observeAndReply result=job{
+      do! observeResult result
+      do! IVar.fill reply result
+    }
 
-      job{
-        match cmd with
-        | AddAuction(at, auction) ->
-          if auction.expiry > now then
-            let! agent = AuctionAgent.create auction (Auction.emptyState auction)
-            do! agents|> MVar.mutateFun(Map.add auction.id (AuctionDState.started auction agent))
-            do! observeAndReply (Ok (AuctionAdded(at, auction)))
-          else do! observeAndReply (Error (AuctionHasEnded auction.id))
-        | PlaceBid(at, bid) ->
-          let auctionId = Command.getAuction cmd
-          let! a= MVar.read agents
-          let maybeAgent=match  a |> Map.tryFind auctionId with
-                          | Some (AuctionDState.IsOngoing agent) ->
-                            Ok agent
-                          | Some AuctionDState.HasEnded ->
-                            Error (AuctionHasEnded auctionId)
-                          | None ->
-                            Error (AuctionNotFound auctionId)
-          match maybeAgent with
-          | Ok agent ->
-            let! m' = agent.AgentBid bid
-            do! observeAndReply (m' |> Result.map (fun _ -> BidAccepted(at, bid)))
-          | Error err ->
-            do! observeAndReply (Error err)
-      }
+    job{
+      match cmd with
+      | AddAuction(at, auction) ->
+        if auction.expiry > now then
+          let! agent = AuctionAgent.create auction (Auction.emptyState auction)
+          let addAgent = Map.add auction.id (AuctionDState.started auction agent)
+          do! MVar.mutateFun addAgent agents
+          do! observeAndReply (Ok (AuctionAdded(at, auction)))
+        else do! observeAndReply (Error (AuctionHasEnded auction.id))
+      | PlaceBid(at, bid) ->
+        let auctionId = Command.getAuction cmd
+        let! a= MVar.read agents
+        let maybeAgent=match  a |> Map.tryFind auctionId with
+                        | Some (AuctionDState.IsOngoing agent) ->
+                          Ok agent
+                        | Some AuctionDState.HasEnded ->
+                          Error (AuctionHasEnded auctionId)
+                        | None ->
+                          Error (AuctionNotFound auctionId)
+        match maybeAgent with
+        | Ok agent ->
+          let! m' = agent.AgentBid bid
+          do! observeAndReply (m' |> Result.map (fun _ -> BidAccepted(at, bid)))
+        | Error err ->
+          do! observeAndReply (Error err)
+    }
 
   let wakeUp now=
-    agents |>
-      MVar.mutateJob(fun a->job{
-        let! next = a
-                    |> Map.toSeq
-                    |> Seq.map (fun (id, (auction, c2) as self)->job{
-                      match c2 with
-                      | AuctionDState.Ongoing agent->
-                        let! endedAuction=agent.AuctionEnded now
-                        match endedAuction with
-                        | Some _ ->
-                          let! bids= agent.GetBids()
-                          return (id,(AuctionDState.ended auction endedAuction bids))
-                        | None ->
-                          return self
-                      | _ ->
+    agents |> MVar.mutateJob(fun a->job{
+      let! next = a
+                  |> Map.toSeq
+                  |> Seq.map (fun (id, (auction, c2) as self)->job{
+                    match c2 with
+                    | AuctionDState.Ongoing agent->
+                      let! endedAuction=agent.AuctionEnded now
+                      match endedAuction with
+                      | Some _ ->
+                        let! bids= agent.GetBids()
+                        return (id,(AuctionDState.ended auction endedAuction bids))
+                      | None ->
                         return self
-                    })
-                    |> Job.seqCollect
-        return Map.ofSeq next
+                    | _ ->
+                      return self
+                  })
+                  |> Job.seqCollect
+      return Map.ofSeq next
     })
 
   let getAuction auctionId now (reply:IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>)= job {
@@ -225,12 +215,12 @@ type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResu
   }
   let agent = Job.foreverServer(job {
     let! msg = Ch.take inbox
-    let _now = now()
+    let _now = time()
     match msg with
       | UserCommand(cmd, reply) ->
-        do onIncomingCommand cmd
+        do! onIncomingCommand cmd
         do! userCommand cmd _now reply
-      | GetAuction (auctionId,reply) ->
+      | GetAuction (auctionId, reply) ->
         do! getAuction auctionId _now reply
       | WakeUp ->
         do! wakeUp _now
@@ -256,7 +246,7 @@ type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResu
   }
   member __.Job =
     let initialAgents =
-      let _now =now()
+      let _now =time()
       let r = Repository()
       List.iter r.Handle commands
       r.Auctions()

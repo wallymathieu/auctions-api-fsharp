@@ -19,19 +19,13 @@ open FSharpPlus.Data
 open System.Text
 open Hopac
 
-type AgentAdapter (agent : Job<AuctionDelegator>)=
-  member __.GetAuction id =  Job.toAsync <| job{
-    let! a = agent
-    return! a.GetAuction id
-  }
-  member __.GetAuctions () =  Job.toAsync <| job{
-    let! a = agent
-    return! a.GetAuctions()
-  }
-  member __.UserCommand c =  Job.toAsync <| job{
-    let! a = agent
-    return! a.UserCommand c
-  }
+type AgentAdapter (agent : AuctionDelegator)=
+  member __.GetAuction id =
+    agent.GetAuction id |> Job.toAsync
+  member __.GetAuctions () =
+    agent.GetAuctions() |> Job.toAsync
+  member __.UserCommand c =
+    agent.UserCommand c |> Job.toAsync
 
 (* Assuming front proxy verification of auth in order to simplify web testing *)
 
@@ -192,7 +186,7 @@ module JsonResult=
       |> PlaceBid)
       >> Result.mapError InvalidUserData
 
-let webPart (agent : Job<AuctionDelegator>) =
+let webPart (agent : AuctionDelegator) =
   let agent = AgentAdapter(agent)
   let overview =
     GET >=> fun (ctx) ->

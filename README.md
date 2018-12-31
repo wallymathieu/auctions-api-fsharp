@@ -6,10 +6,10 @@ Auctions site implemented in f# with f#+, Redis, Fleece and Suave
 
 ### Assumptions
 
-- each auction get 1 mailbox
+- agent is a `Job.foreverServer`
+- each auction get 1 agent
 - all commands (once they are authorized) are logged in redis, json et.c. (even commands that are rejected)
-- one dedicated mailbox for command persisters (json, redis)
-- exceptions in mailbox causes the entire program to exit with non zero exit code
+- one dedicated agent for command persisters (json, redis)
 
 A more complete implementation could have supervisors, circuit breakers, retries et.c..
 
@@ -43,8 +43,7 @@ To try out the auction API you can then curl the service:
 ```bash
 AUCTION_TOKEN=`echo '{"sub":"a1", "name":"Test", "u_typ":"0"}' | base64`
 # i.e.   eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo=
-curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
+curl  -X POST -d '{ "id":1,"startsAt":"2018-12-01T10:00:00.000Z","endsAt":"2019-03-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
 curl  -X POST -d '{ "amount":"VAC10" }' -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
 curl  -X GET -H "x-jwt-payload: $AUCTION_TOKEN"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
 ```
-
