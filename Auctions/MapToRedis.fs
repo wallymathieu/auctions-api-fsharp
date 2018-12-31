@@ -7,11 +7,11 @@ open FSharpPlus
 open FSharpPlus.Data
 
 module Redis=
-  
+
   // Codec definition From Fleece:
 
   /// Encodes a value of a generic type 't into a value of raw type 'S.
-  type Encoder<'S, 't> = 't -> 'S 
+  type Encoder<'S, 't> = 't -> 'S
 
   /// Decodes a value of raw type 'S into a value of generic type 't, possibly returning an error.
   type Decoder<'S, 't> = 'S -> Result<'t,string>
@@ -36,7 +36,7 @@ module Redis=
   /// <returns>The resulting object codec.</returns>
   let mapping f = (fun _ -> Ok f), (fun _ -> [])
   let inline get fromRedis (o: HashEntry list) (key:string) =
-    let k = implicit key
+    let k :RedisValue= implicit key
     match o |> List.tryFind (fun p -> p.Name.Equals(k) ) with
     | Some v-> fromRedis v.Value
     | None -> failwithf "Could not find %s" key
@@ -72,12 +72,12 @@ module Redis=
 module DateTime=
   let ticks (d:DateTime)=d.Ticks
 open Redis
-let tryParseUser (u:RedisValue) =match User.tryParse <| string u with | Some v -> Ok v | None -> Error "InvalidUser"
-let tryParseType (t:RedisValue) =match Type.tryParse  <| string t with | Some v -> Ok v | None -> Error "InvalidType"
+let tryParseUser (u:RedisValue) =match string u |> User.tryParse with | Some v -> Ok v | None -> Error "InvalidUser"
+let tryParseType (t:RedisValue) =match string t |> Type.tryParse with | Some v -> Ok v | None -> Error "InvalidType"
 let addAuctionCodec =
-  fun id title expiry startsAt at typ currency user -> (DateTime at, { id=id;title=title; expiry =DateTime expiry; startsAt=DateTime startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
+  fun id title expiry startsAt at typ currency user -> (DateTime at, { id=AuctionId id;title=title; expiry =DateTime expiry; startsAt=DateTime startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
   |> mapping
-  |> fieldInt64 "Id" (snd >> Auction.getId)
+  |> fieldInt64 "Id" (snd >> Auction.getId >> AuctionId.unwrap)
   |> fieldStr "Title" (snd >> Auction.title)
   |> fieldInt64 "Expiry" (snd >> Auction.expiry >> DateTime.ticks)
   |> fieldInt64 "StartsAt" (snd >> Auction.expiry >> DateTime.ticks)
@@ -86,10 +86,10 @@ let addAuctionCodec =
   |> fieldInt64 "Currency" (snd >> Auction.currency >> Currency.value)
   |> field "User" tryParseUser (string>>implicit) (snd >> Auction.user )
 let placeBidCodec =
-  fun id auction amountValue amountCurrency at user -> (DateTime at, { id=Guid.Parse id; auction=auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at=DateTime at })
+  fun (id:string) auction amountValue amountCurrency at user -> (DateTime at, { id=Guid.Parse id |> BidId; auction=AuctionId auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at=DateTime at })
   |> mapping
   |> fieldStr "Id" (snd >> Bid.getId >> string)
-  |> fieldInt64 "Auction" (snd >> Bid.auction)
+  |> fieldInt64 "Auction" (snd >> Bid.auction >> AuctionId.unwrap)
   |> fieldInt64 "AmountValue" (snd >> Bid.amount >> Amount.value)
   |> fieldInt64 "AmountCurrency" (snd >> Bid.amount >> Amount.currency >> Currency.value)
   |> fieldInt64 "At" (fst >> DateTime.ticks)
@@ -102,26 +102,26 @@ let mapToHashEntries command =
   | AddAuction(at, auction)-> encode (snd addAuctionCodec) (at, auction) |> withType "AddAuction"
   | PlaceBid(at, bid) ->  encode (snd placeBidCodec) (at, bid) |> withType "PlaceBid"
 
-let findEntry (key:string) (entries : HashEntry list) = 
-  let k = implicit key
+let findEntry (key:string) (entries : HashEntry list) =
+  let k :RedisValue= implicit key
   match entries |> List.tryFind (fun e -> e.Name.Equals(k)) with
   | Some entry -> entry
   | None -> failwithf "could not find %s" key
 
-let findEntryStr key entries = 
+let findEntryStr key entries =
   let entry = findEntry key entries
   string entry.Value
 
-let mapFromHashEntries entries : Command = 
+let mapFromHashEntries entries : Command =
   let t = entries |> findEntryStr "Type"
   match t with
-  | "AddAuction" -> 
+  | "AddAuction" ->
     match decode (fst addAuctionCodec) entries with
     | Ok (at,auction) -> AddAuction (at,auction)
     | Error err-> failwithf "Unknown %A" err
-  | "PlaceBid" -> 
+  | "PlaceBid" ->
     match decode (fst placeBidCodec) entries with
     | Ok (at,bid) -> PlaceBid(at, bid)
     | Error err-> failwithf "Unknown %A" err
   | v -> failwithf "Unknown type %s" v
- 
+
