@@ -1,6 +1,6 @@
 # auctions-site [![Build Status](https://travis-ci.org/wallymathieu/auctions-site.svg?branch=master)](https://travis-ci.org/wallymathieu/auctions-site) [![Build status](https://ci.appveyor.com/api/projects/status/wwefc0io4oh2wnrf/branch/master?svg=true)](https://ci.appveyor.com/project/wallymathieu/auctions-site/branch/master)
 
-Auctions site implemented in f# with f#+, Redis, Fleece and Suave
+Auctions site implemented in f# with f#+, Redis, Fleece and Giraffe
 
 ## Technical overview
 
@@ -35,7 +35,7 @@ connection string to redis or file to persist commands in.
 
 ```bash
 dotnet restore
-dotnet run --project Auctions --redis CONN --json FILE --web-hook URI
+(export ASPNETCORE_URLS=http://0.0.0.0:8083; dotnet run --project Auctions --redis CONN --json FILE --web-hook URI)
 ```
 
 To try out the auction API you can then curl the service:

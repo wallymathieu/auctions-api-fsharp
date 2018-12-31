@@ -113,7 +113,6 @@ let main argv =
   let agent = AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
   let configureApp (app : IApplicationBuilder) =
     app.UseGiraffeErrorHandler(errorHandler)
-       .UseAuthentication()
        .UseGiraffe (Web.webApp agent)
 
   WebHost.CreateDefaultBuilder()
