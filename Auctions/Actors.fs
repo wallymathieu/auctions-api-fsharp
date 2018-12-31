@@ -9,38 +9,36 @@ let exitOnException (e:exn)=
   printfn "Failed with exception %s, %s, exit!" e.Message e.StackTrace
   exit 1
 
-type PersistCommands(appendBatches : (Command list -> Async<unit>) list) =
-  let mbox = MailboxProcessor.Start(fun inbox ->
+module PersistCommands=
+  let create(appendBatches : (Command list -> Async<unit>) list) =
+    let mbox = MailboxProcessor.Start(fun inbox ->
        let rec messageLoop() =
          async {
            let! command = inbox.Receive()
            let toAppend = [command]
            for appendBatch in appendBatches do
              do! appendBatch toAppend
-           return! messageLoop()
-         }
+           return! messageLoop()}
        messageLoop())
-  do
+
     mbox.Error.Add exitOnException
 
-  member __.Handle(command) =
-    mbox.Post(command)
+    fun command -> mbox.Post(command)
 
-type Observer<'t>(observers : ('t-> Async<unit>) list) =
-  let mbox = MailboxProcessor.Start(fun inbox ->
+module Observer=
+  let create<'t>(observers : ('t-> Async<unit>) list) =
+    let mbox = MailboxProcessor.Start(fun inbox ->
       let rec messageLoop() =
         async {
           let! input = inbox.Receive()
           for observe in observers do
               do! observe input
-          return! messageLoop()
-        }
+          return! messageLoop()}
       messageLoop())
-  do
+
     mbox.Error.Add exitOnException
 
-  member __.Observe(input:'t) =
-    mbox.Post(input)
+    fun (input:'t) -> mbox.Post(input)
 
 type AuctionEnded = (Amount * User) option
 

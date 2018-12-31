@@ -83,16 +83,16 @@ let main argv =
   let batchAppend = appenders
                     |> Seq.map (fun a->a.Batch)
                     |> List.ofSeq
-  let persist = PersistCommands batchAppend
-  let observer = Observer <| Seq.toList observers
+  let persist = PersistCommands.create batchAppend
+  let observer = Observer.create <| Seq.toList observers
   let time ()= DateTime.UtcNow
   let onIncomingCommand command=
-    persist.Handle command
-    observer.Observe <| Domain.Commands [command]
+    persist command
+    Domain.Commands [command] |> observer
   let observeCommandResult result =
-    observer.Observe <| Domain.Results [result]
+    Domain.Results [result] |> observer
   // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
-  observer.Observe <| Domain.Commands []
+  Domain.Commands [] |> observer
 
   let agent = AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
   // start suave
