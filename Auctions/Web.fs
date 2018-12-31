@@ -3,9 +3,6 @@ open System
 open FSharpPlus
 open Giraffe
 
-open Microsoft.AspNetCore.Authentication
-open Microsoft.AspNetCore.Builder
-open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Http
 
 open Auctions.Domain
@@ -16,6 +13,8 @@ open System.Text
 open Fleece.FSharpData
 open Fleece.FSharpData.Operators
 open FSharp.Data
+open FSharp.Control.Tasks.V2
+
 (* Assuming front proxy verification of auth in order to simplify web testing *)
 
 type Session =
@@ -122,8 +121,6 @@ type AuctionJsonResult = {
     ]
 
 module JsonResult=
-  let exnToInvalidUserData (err:exn)=InvalidUserData err.Message
-
   let getAuctionResult (auction,bids,maybeAmountAndWinner) =
     let discloseBidders =Auction.biddersAreOpen auction
     let mapBid (b:Bid) :BidJsonResult = {
@@ -144,50 +141,38 @@ module JsonResult=
       winnerPrice = winnerPrice
     }
 
-  let toPostedAuction user httpContext =
-    task {
-       let! body = getBodyAsJSON<AddAuctionReq> httpContext
+  let toPostedAuction user httpContext = task {
+    match! getBodyAsJSON httpContext with
+    | Ok (a:AddAuctionReq)->
+      let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
 
-       let res = body |> Result.map (fun a ->
-        let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
-
-        let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending {
-                                                                            reservePrice=Amount.zero currency
-                                                                            minRaise =Amount.zero currency
-                                                                            timeFrame =TimeSpan.FromSeconds(0.0)
-                                                                          })
-        { user = user
-          id=a.id
-          startsAt=a.startsAt
-          expiry=a.endsAt
-          title=a.title
-          currency=currency
-          typ=typ
-        }
-        |> Timed.atNow
-        |> AddAuction)
-      return Result.mapError exnToInvalidUserData res
-    }
+      let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending {
+                                                                          reservePrice=Amount.zero currency
+                                                                          minRaise =Amount.zero currency
+                                                                          timeFrame =TimeSpan.FromSeconds(0.0)
+                                                                        })
+      let u = { user = user; id=a.id; startsAt=a.startsAt; expiry=a.endsAt; title=a.title; currency=currency; typ=typ }
+      return u |> Timed.atNow |> AddAuction |> Ok
+    | Error err -> return InvalidUserData err |> Error
+  }
 
   let toPostedPlaceBid id user httpContext=
     task {
-      let! body = getBodyAsJSON<BidReq> httpContext
-      let res = body |> Result.map (fun a ->
+      match! getBodyAsJSON httpContext with
+      | Ok (a:BidReq) ->
         let d = DateTime.UtcNow
-        (d,
+        return (d,
          { user = user; id=Guid.NewGuid() |> BidId
            amount=a.amount;auction=id
-           at = d })
-        |> PlaceBid)
-      return Result.mapError exnToInvalidUserData res
+           at = d }) |> PlaceBid |> Ok
+      | Error err -> return InvalidUserData err |> Error
     }
 
 let webApp (agent : AuctionDelegator) =
 
   let overview =
-    GET >=> fun (next:HttpFunc) ctx ->
-            task {
-              let! r = agent.GetAuctions() |> Async.StartAsTask
+    GET >=> fun (next:HttpFunc) ctx -> task {
+              let! r = agent.GetAuctions()
               return! (json (r |>List.toArray)) next ctx
             }
 
@@ -195,12 +180,14 @@ let webApp (agent : AuctionDelegator) =
     let auctionId = AuctionId id
     monad {
       let! auctionAndBids = agent.GetAuction auctionId
-      match auctionAndBids with
-      | Some v-> return Ok <| JsonResult.getAuctionResult v
-      | None -> return Error (UnknownAuction auctionId)
+      return auctionAndBids |> Option.map (JsonResult.getAuctionResult)
     }
 
-  let details id  = GET >=> json(getAuctionResult id)
+  let details id  = GET >=> fun next ctx -> task{
+    match! getAuctionResult id with
+    | Some auction -> return! json(auction) next ctx
+    | None -> return! setStatusCode 404 next ctx
+  }
 
   /// handle command and add result to repository
   let handleCommandAsync
