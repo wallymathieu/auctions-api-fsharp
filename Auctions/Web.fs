@@ -86,13 +86,21 @@ module OfJson=
     | x -> Error (sprintf "Expected bid, found %A" x)
 
 module ToJson=
-  let auction (x:Auction, bids, maybeAmountAndWinner) : JsonValue =
+  let auctionList (auction:Auction) =[
+      "id" .= auction.id
+      "startsAt" .= auction.startsAt
+      "title" .= auction.title
+      "expiry" .= auction.expiry
+      "currency" .= auction.currency
+    ]
+  let auction auction = auctionList auction |> jobj
+  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) : JsonValue =
     let (winner,winnerPrice) =
             match maybeAmountAndWinner with
             | None -> ("","")
             | Some (amount, winner)->
                 (winner.ToString(), amount.ToString())
-    let discloseBidders =Auction.biddersAreOpen x
+    let discloseBidders =Auction.biddersAreOpen auction
     let bid (x: Bid) :JsonValue =
       let userId = string x.user
       jobj [
@@ -100,43 +108,28 @@ module ToJson=
         "bidder" .= (if discloseBidders then userId else SHA512.ofString userId)
       ]
     let bids = (List.map bid bids |> List.toArray |> JArray)
-    jobj [
-      "id" .= x.id
-      "startsAt" .= x.startsAt
-      "title" .= x.title
-      "expiry" .= x.expiry
-      "currency" .= x.currency
+    auctionList auction @ [
       "bids", bids
       "winner" .= winner
       "winnerPrice" .= winnerPrice
-    ]
+    ] |> jobj
 
 let webPart (agent : AuctionDelegator) =
 
-  let overview =
-    GET >=> fun (ctx) ->
-            monad {
-              let! auctionList =lift ( agent.GetAuctions())
-              return! Json.OK (toJson auctionList) ctx
-            }
+  let overview : WebPart=fun (ctx) -> monad {
+    let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
+    let json = auctionList |> List.map ToJson.auction |> List.toArray |> JArray
+    return! Json.OK json ctx
+  }
 
-  let getAuctionResult id : Async<Result<JsonValue, Errors>>=
-      let id = AuctionId id
-      monad {
-        let! auctionAndBids = agent.GetAuction id
-        match auctionAndBids with
-        | Some v-> return Ok (ToJson.auction v)
-        | None -> return Error (UnknownAuction id)
-      }
-
-  let details id : WebPart= GET >=> (fun ctx->monad{
-      let id = AuctionId id
-      let! auctionAndBids = lift (agent.GetAuction id)
-      return!
-         match auctionAndBids with
-         | Some v-> Json.OK (ToJson.auction v) ctx
-         | None -> NOT_FOUND (sprintf "Could not find auction with id %O" id) ctx
-  })
+  let details id : WebPart= fun ctx->monad{
+    let id = AuctionId id
+    let! auctionAndBids = lift (agent.GetAuction id)
+    return!
+       match auctionAndBids with
+       | Some v-> Json.OK (ToJson.auctionAndBidsAndMaybeWinnerAndAmount v) ctx
+       | None -> NOT_FOUND (sprintf "Could not find auction with id %O" id) ctx
+  }
 
   /// handle command and add result to repository
   let handleCommandAsync
@@ -180,8 +173,8 @@ let webPart (agent : AuctionDelegator) =
         POST >=> handleCommandAsync (toPostedPlaceBid (AuctionId auctionId) user)
       )
 
-  WebPart.choose [ path "/" >=> (OK "")
-                   path Paths.Auction.overview >=> overview
+  WebPart.choose [ path "/" >=> GET >=> (OK "")
+                   path Paths.Auction.overview >=> GET >=> overview
                    path Paths.Auction.register >=> register
                    pathScan Paths.Auction.details details
                    pathScan Paths.Auction.placeBid placeBid ]
