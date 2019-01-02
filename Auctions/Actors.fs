@@ -173,12 +173,15 @@ type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResu
       async{
          match cmd with
          | AddAuction(at, auction) ->
-            if auction.expiry > now then
+            match (auction.expiry > now, Map.containsKey auction.id agents) with
+            | (true, false)->
               let agent = AuctionAgent.create auction (Auction.emptyState auction)
               agents <- Map.add auction.id (AuctionDState.started auction agent) agents
               observeAndReply (Ok (AuctionAdded(at, auction)))
-            else
+            | (false, _) ->
               observeAndReply (Error (AuctionHasEnded auction.id))
+            | (_, true) ->
+              observeAndReply (Error (AuctionAlreadyExists auction.id))
          | PlaceBid(at, bid) ->
            let auctionId = Command.getAuction cmd
            let maybeAgent=match Map.tryFind auctionId agents with

@@ -2,9 +2,9 @@ module Auctions.Web
 open System
 open FSharpPlus
 open Giraffe
-
 open Microsoft.AspNetCore.Http
 
+open Auctions.Security.Cryptography
 open Auctions.Domain
 open Auctions.Actors
 open Auctions
@@ -63,110 +63,51 @@ module Paths =
     let placeBid : Int64Path = "/auction/%d/bid"
 
 (* Json API *)
-
-type BidReq = {amount : Amount}
-with
-  static member OfJson json:ParseResult<BidReq> =
-    let create a = {amount =a}
+module OfJson=
+  let bidReq (auctionId, user, at) json =
+    let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
     match json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Error (sprintf "Expected bid, found %A" x)
-
-type AddAuctionReq = {
-  id : AuctionId
-  startsAt : DateTime
-  title : string
-  endsAt : DateTime
-  currency : string
-  typ:string
-}
-with
-  static member OfJson json:ParseResult<AddAuctionReq> =
-    let create id startsAt title endsAt (currency:string option) (typ:string option)= {id =id;startsAt=startsAt;title=title; endsAt=endsAt;currency=Option.defaultValue "" currency; typ=Option.defaultValue "" typ}
+  let addAuctionReq (user) json =
+    let create id startsAt title endsAt (currency:string option) (typ:string option)
+      =
+        let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
+        let defaultTyp = TimedAscending { reservePrice=Amount.zero currency; minRaise =Amount.zero currency;
+          timeFrame =TimeSpan.FromSeconds(0.0) }
+        let typ = typ |> Option.bind Type.tryParse
+                      |> Option.defaultValue defaultTyp
+        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
     match json with
-    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")<*> (o .@? "currency")<*> (o .@? "type")
+    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
+                   <*> (o .@? "currency")<*> (o .@? "type")
     | x -> Error (sprintf "Expected bid, found %A" x)
 
-type BidJsonResult = {
-  amount:Amount
-  bidder:string
-}
-with
-  static member ToJson (x: BidJsonResult) :JsonValue =
-    jobj [
-      "amount" .= x.amount
-      "bidder" .= x.bidder
-    ]
-type AuctionJsonResult = {
-  id : AuctionId
-  startsAt : DateTime
-  title : string
-  expiry : DateTime
-  currency : Currency
-  bids : BidJsonResult array
-  winner : string
-  winnerPrice : string
-}
- with
-  static member ToJson (x: AuctionJsonResult) :JsonValue =
+module ToJson=
+  let auction (x:Auction, bids, maybeAmountAndWinner) : JsonValue =
+    let (winner,winnerPrice) =
+            match maybeAmountAndWinner with
+            | None -> ("","")
+            | Some (amount, winner)->
+                (winner.ToString(), amount.ToString())
+    let discloseBidders =Auction.biddersAreOpen x
+    let bid (x: Bid) :JsonValue =
+      let userId = string x.user
+      jobj [
+        "amount" .= x.amount
+        "bidder" .= (if discloseBidders then userId else SHA512.ofString userId)
+      ]
+    let bids = (List.map bid bids |> List.toArray |> JArray)
     jobj [
       "id" .= x.id
       "startsAt" .= x.startsAt
       "title" .= x.title
       "expiry" .= x.expiry
       "currency" .= x.currency
-      "bids" .= x.bids
-      "winner" .= x.winner
-      "winnerPrice" .= x.winnerPrice
+      "bids", bids
+      "winner" .= winner
+      "winnerPrice" .= winnerPrice
     ]
-
-module JsonResult=
-  let getAuctionResult (auction,bids,maybeAmountAndWinner) =
-    let discloseBidders =Auction.biddersAreOpen auction
-    let mapBid (b:Bid) :BidJsonResult = {
-      amount=b.amount
-      bidder= if discloseBidders
-              then string b.user
-              else b.user.GetHashCode() |> string // here you might want bidder number
-    }
-
-    let (winner,winnerPrice) =
-              match maybeAmountAndWinner with
-              | None -> ("","")
-              | Some (amount, winner)->
-                  (winner.ToString(), amount.ToString())
-    { id=auction.id; startsAt=auction.startsAt; title=auction.title;expiry=auction.expiry; currency=auction.currency
-      bids=bids |> List.map mapBid |> List.toArray
-      winner = winner
-      winnerPrice = winnerPrice
-    }
-
-  let toPostedAuction user httpContext = task {
-    match! getBodyAsJSON httpContext with
-    | Ok (a:AddAuctionReq)->
-      let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
-
-      let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending {
-                                                                          reservePrice=Amount.zero currency
-                                                                          minRaise =Amount.zero currency
-                                                                          timeFrame =TimeSpan.FromSeconds(0.0)
-                                                                        })
-      let u = { user = user; id=a.id; startsAt=a.startsAt; expiry=a.endsAt; title=a.title; currency=currency; typ=typ }
-      return u |> Timed.atNow |> AddAuction |> Ok
-    | Error err -> return InvalidUserData err |> Error
-  }
-
-  let toPostedPlaceBid id user httpContext=
-    task {
-      match! getBodyAsJSON httpContext with
-      | Ok (a:BidReq) ->
-        let d = DateTime.UtcNow
-        return (d,
-         { user = user; id=Guid.NewGuid() |> BidId
-           amount=a.amount;auction=id
-           at = d }) |> PlaceBid |> Ok
-      | Error err -> return InvalidUserData err |> Error
-    }
 
 let webApp (agent : AuctionDelegator) =
 
@@ -176,19 +117,12 @@ let webApp (agent : AuctionDelegator) =
               return! (json (r |>List.toArray)) next ctx
             }
 
-  let getAuctionResult id=
-    let auctionId = AuctionId id
-    monad {
-      let! auctionAndBids = agent.GetAuction auctionId
-      return auctionAndBids |> Option.map (JsonResult.getAuctionResult)
-    }
-
   let details id  = GET >=> fun next ctx -> task{
-    match! getAuctionResult id with
+    let id = AuctionId id
+    match! agent.GetAuction id with
     | Some auction -> return! json(auction) next ctx
     | None -> return! setStatusCode 404 next ctx
   }
-
   /// handle command and add result to repository
   let handleCommandAsync
     (maybeC:Result<Command,_>) :Async<Result<_,_>> =
@@ -202,26 +136,41 @@ let webApp (agent : AuctionDelegator) =
   /// turn handle command to webpart
   let handleCommandAsync toCommand =
     fun next ctx ->
-      monad {
-        let! r = toCommand ctx
-        let! commandResult= handleCommandAsync r |> Async.StartAsTask
-        return! (JSONorBAD_REQUEST commandResult) next ctx
+      task {
+        let! maybeCommand = toCommand ctx
+        let! commandResult= handleCommandAsync maybeCommand
+        return! (Json.OK_or_BAD_REQUEST commandResult) next ctx
       }
   let unauthorized txt= setStatusCode 401 >=> text txt
   /// register auction
   let register =
+    let toPostedAuction user ctx= task {
+        let! body = Json.getBody ctx
+        return body
+               |> Result.bind (OfJson.addAuctionReq (user))
+               |> Result.map (Timed.atNow >>AddAuction)
+               |> Result.mapError InvalidUserData
+    }
     authenticated (function
       | NoSession -> unauthorized "Not logged in"
       | UserLoggedOn user ->
-        POST >=> handleCommandAsync (JsonResult.toPostedAuction user))
+        POST >=> handleCommandAsync (toPostedAuction user))
 
   /// place bid
   let placeBid id =
     let auctionId = AuctionId id
+    let toPostedPlaceBid id user ctx=task{
+      let! body = Json.getBody ctx
+      return body
+             |> Result.bind (OfJson.bidReq (id,user,DateTime.UtcNow) )
+             |> Result.map (Timed.atNow >>PlaceBid)
+             |> Result.mapError InvalidUserData
+    }
     authenticated (function
       | NoSession -> unauthorized "Not logged in"
       | UserLoggedOn user ->
-        POST >=> handleCommandAsync (JsonResult.toPostedPlaceBid auctionId user))
+        POST >=> handleCommandAsync (toPostedPlaceBid auctionId user)
+      )
 
   choose [ route "/" >=> (text "")
            route Paths.Auction.overview >=> overview

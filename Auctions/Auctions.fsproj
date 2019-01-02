@@ -3,8 +3,12 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
   </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="Security.Cryptography.fs" />
     <Compile Include="AsyncExtensions.fs" />
     <Compile Include="Giraffe.fs" />
     <Compile Include="Domain.fs" />
@@ -18,13 +22,12 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
     <PackageReference Include="Giraffe" Version="3.5.0" />
     <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.*" />
     <DotNetCliToolReference Include="Microsoft.DotNet.Watcher.Tools" Version="2.0.0" />
     <PackageReference Include="Fleece.FSharpData" Version="0.7.0" />
     <PackageReference Update="FSharp.Core" Version="4.5.4" />
-    <PackageReference Include="StackExchange.Redis" Version="1.2.*" />
+    <PackageReference Include="StackExchange.Redis" Version="2.0.519" />
     <PackageReference Include="FSharpPlus" Version="1.1.0-CI00245" />
   </ItemGroup>
 </Project>
