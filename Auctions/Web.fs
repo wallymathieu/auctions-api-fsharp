@@ -32,7 +32,7 @@ with
     let create sub name userType= {subject =sub ; name=name; userType=Enum.Parse userType}
     match json with
     | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
-    | x -> Error (sprintf "Expected JwtPayload, found %A" x)
+    | x -> Decode.Fail.objExpected x
 let authenticated f = //
   let context apply (a : Suave.Http.HttpContext) = apply a a
   context (fun x ->
@@ -46,7 +46,7 @@ let authenticated f = //
         match payload.userType with
         | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
         | UserType.Support -> Support userId |> Ok
-        | _ -> Error "Unknown user type")
+        | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type")
       |> function | Ok user->f (UserLoggedOn(user))
                   | Error _ ->f NoSession
     | Choice2Of2 _ -> f NoSession)
@@ -71,6 +71,7 @@ module OfJson=
     match json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
+    |> Result.mapError string
   let addAuctionReq (user) json =
     let create id startsAt title endsAt (currency:string option) (typ:string option)
       =
@@ -84,6 +85,7 @@ module OfJson=
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
                    <*> (o .@? "currency")<*> (o .@? "type")
     | x -> Decode.Fail.objExpected x
+    |> Result.mapError string
 
 module ToJson=
   let auctionList (auction:Auction) =[

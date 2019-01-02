@@ -72,7 +72,8 @@ type User =
 type BidId = BidId of Guid
 with
   override this.ToString()=match this with BidId bId->bId.ToString("N")
-  static member OfJson json = BidId.tryParse <!> ofJson json >>= (Result.ofOption "Invalid bid id")
+  static member OfJson json = BidId.tryParse <!> ofJson json >>= (Option.toResultWith <|
+                                                                  InvalidValue(typeof<BidId>, json, "Invalid bid id"))
   static member ToJson (b:BidId) = toJson (string b)
   static member New()= Guid.NewGuid() |> BidId
 //Module BidId
@@ -243,7 +244,7 @@ type Errors =
   | AuctionNotFound of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
   | BidCurrencyConversion of BidId * Currency
-  | InvalidUserData of DecodeError
+  | InvalidUserData of String
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
   static member ToJson (x: Errors) =
