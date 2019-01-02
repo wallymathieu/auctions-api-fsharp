@@ -84,13 +84,21 @@ module OfJson=
     | x -> Error (sprintf "Expected bid, found %A" x)
 
 module ToJson=
-  let auction (x:Auction, bids, maybeAmountAndWinner) : JsonValue =
+  let auctionList (auction:Auction) =[
+      "id" .= auction.id
+      "startsAt" .= auction.startsAt
+      "title" .= auction.title
+      "expiry" .= auction.expiry
+      "currency" .= auction.currency
+    ]
+  let auction auction = auctionList auction |> jobj
+  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) : JsonValue =
     let (winner,winnerPrice) =
             match maybeAmountAndWinner with
             | None -> ("","")
             | Some (amount, winner)->
                 (winner.ToString(), amount.ToString())
-    let discloseBidders =Auction.biddersAreOpen x
+    let discloseBidders =Auction.biddersAreOpen auction
     let bid (x: Bid) :JsonValue =
       let userId = string x.user
       jobj [
@@ -98,24 +106,19 @@ module ToJson=
         "bidder" .= (if discloseBidders then userId else SHA512.ofString userId)
       ]
     let bids = (List.map bid bids |> List.toArray |> JArray)
-    jobj [
-      "id" .= x.id
-      "startsAt" .= x.startsAt
-      "title" .= x.title
-      "expiry" .= x.expiry
-      "currency" .= x.currency
+    auctionList auction @ [
       "bids", bids
       "winner" .= winner
       "winnerPrice" .= winnerPrice
-    ]
+    ] |> jobj
 
 let webApp (agent : AuctionDelegator) =
 
-  let overview =
-    GET >=> fun (next:HttpFunc) ctx -> task {
-              let! r = agent.GetAuctions()
-              return! (json (r |>List.toArray)) next ctx
-            }
+  let overview = GET >=> fun (next:HttpFunc) ctx -> task {
+    let! auctionList =  agent.GetAuctions()
+    let jArray = auctionList |> List.map ToJson.auction |> List.toArray |> JArray
+    return! json jArray next ctx
+  }
 
   let details id  = GET >=> fun next ctx -> task{
     let id = AuctionId id

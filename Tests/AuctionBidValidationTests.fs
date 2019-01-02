@@ -4,21 +4,29 @@ open Auctions.Domain
 open System
 open Xunit
 
-module ``Auction Bid tests`` = 
+module ``Auction Bid tests`` =
   let validBid = { id = BidId.New()
                    auction =auctionId
                    user=buyer
                    amount =Amount.parse "SEK10"
-                   at = DateTime(2008,12,1)
-                 } 
-  let bidWithSameUser = { validBid with user=seller } 
-  let bidAfterAuctionEnded = { validBid with at = DateTime(2009,1,2) } 
+                   at = auction.startsAt.AddHours(1.0)
+                 }
+  let bidWithSameUser = { validBid with user=seller }
+  let bidAfterAuctionEnded = { validBid with at = auction.expiry.AddHours(1.0) }
+  let bidBeforeAuctionStarted = { validBid with at = auction.startsAt.AddHours(-1.0) }
   let validateBid = fun b-> Auction.validateBid b auction
   [<Fact>]
-  let ``valid bid``() = 
+  let ``valid bid``() =
     Assert.Equal( Ok(), validateBid validBid )
 
   [<Fact>]
-  let ``seller bidding on auction``() = 
+  let ``seller bidding on auction``() =
     Assert.Equal( Error (SellerCannotPlaceBids (UserId "x1",auctionId)), validateBid bidWithSameUser )
 
+  [<Fact>]
+  let ``bid after auction has ended``() =
+    Assert.Equal( Error (AuctionHasEnded auctionId), validateBid bidAfterAuctionEnded )
+
+  [<Fact>]
+  let ``bid before auction has started``() =
+    Assert.Equal( Error (AuctionHasNotStarted auctionId), validateBid bidBeforeAuctionStarted )
