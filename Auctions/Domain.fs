@@ -35,18 +35,21 @@ with
   static member value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
   static member inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
 
-type UserId = string
+[<Struct>]
+type UserId = UserId of string
+with
+  override this.ToString()=match this with UserId uId->uId
 
-type User = 
+type User =
   | BuyerOrSeller of id : UserId * name : string
   | Support of id : UserId
-  
-  override this.ToString() = 
+
+  override this.ToString() =
     match this with
-    | BuyerOrSeller(id, name) -> sprintf "BuyerOrSeller|%s|%s" (id) name
-    | Support(id) -> sprintf "Support|%s" (id)
-  
-  static member getId user = 
+    | BuyerOrSeller(id, name) -> sprintf "BuyerOrSeller|%O|%s" id name
+    | Support(id) -> sprintf "Support|%O" id
+
+  static member getId user =
     match user with
     | BuyerOrSeller(id, _) -> id
     | Support id -> id
@@ -54,10 +57,10 @@ type User =
   static member Regex = System.Text.RegularExpressions.Regex("(?<type>\w*)\|(?<id>[^|]*)(\|(?<name>.*))?")
   static member tryParse user =
     let m = User.Regex.Match(user)
-    if m.Success then 
+    if m.Success then
       match (m.Groups.["type"].Value, m.Groups.["id"].Value, m.Groups.["name"].Value) with
-      | "BuyerOrSeller", id, name -> Some (BuyerOrSeller(id, name))
-      | "Support", id, _ -> Some (Support(id))
+      | "BuyerOrSeller", id, name -> Some (BuyerOrSeller(UserId id, name))
+      | "Support", id, _ -> Some (Support(UserId id))
       | type', _, _ -> None
     else None
   static member __parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
@@ -65,20 +68,37 @@ type User =
                                                                   InvalidValue(typeof<Currency>, json, "Unable to interpret as user"))
   static member ToJson (x: User) = toJson (string x)
 
-type BidId = Guid
+[<Struct>]
+type BidId = BidId of Guid
+with
+  override this.ToString()=match this with BidId bId->bId.ToString("N")
+  static member OfJson json = BidId.tryParse <!> ofJson json >>= (Result.ofOption "Invalid bid id")
+  static member ToJson (b:BidId) = toJson (string b)
+  static member New()= Guid.NewGuid() |> BidId
+//Module BidId
+  static member tryParse v : BidId option= tryParse v |> Option.map BidId
+  static member unwrap (BidId bId)=bId
 
-type AuctionId = int64
+[<Struct>]
+type AuctionId = AuctionId of int64
+with
+  override this.ToString()=match this with AuctionId aId->string aId
+  static member OfJson json =AuctionId <!> ofJson json
+  static member ToJson (b:AuctionId) = toJson (string b)
+//Module AuctionId
+  static member unwrap (AuctionId aId)=aId
+
 let (|Currency|_|) = Currency.tryParse
 
-type Amount = 
+type Amount =
   { value : int64
     currency : Currency }
   override this.ToString() =
-    sprintf "%O%i" (this.currency) this.value
+    sprintf "%O%i" this.currency this.value
   static member Regex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
-  static member tryParse amount = 
+  static member tryParse amount =
     let m = Amount.Regex.Match(amount)
-    if m.Success then 
+    if m.Success then
       match (m.Groups.["currency"].Value, m.Groups.["value"].Value) with
       | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
       | type', _ -> None
@@ -87,7 +107,7 @@ type Amount =
   static member (+) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value + a2.value }
-  static member (-) (a1 : Amount, a2 : Amount) = 
+  static member (-) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
   static member OfJson json = Amount.tryParse <!> ofJson json >>= (Option.toResultWith <|
@@ -100,28 +120,28 @@ module Amount=
   let zero c= { currency=c ; value=0L}
 
 let (|Amount|_|) = Amount.tryParse
-let (|Int64|_|) = tryParse 
+let (|Int64|_|) = tryParse
 
-module Timed = 
+module Timed =
   let atNow a = (DateTime.UtcNow, a)
 
 [<AutoOpen>]
 module Auctions=
-  type TimedAscendingOptions = { 
-      /// the seller has set a minimum sale price in advance (the 'reserve' price) 
+  type TimedAscendingOptions = {
+      /// the seller has set a minimum sale price in advance (the 'reserve' price)
       /// and the final bid does not reach that price the item remains unsold
       /// If the reserve price is 0, that is the equivalent of not setting it.
       reservePrice: Amount
       /// Sometimes the auctioneer sets a minimum amount by which the next bid must exceed the current highest bid.
       /// Having min raise equal to 0 is the equivalent of not setting it.
-      minRaise: Amount 
-      /// If no competing bidder challenges the standing bid within a given time frame, 
-      /// the standing bid becomes the winner, and the item is sold to the highest bidder 
+      minRaise: Amount
+      /// If no competing bidder challenges the standing bid within a given time frame,
+      /// the standing bid becomes the winner, and the item is sold to the highest bidder
       /// at a price equal to his or her bid.
       timeFrame: TimeSpan
     }
   type SingleSealedBidOptions =
-    /// Sealed first-price auction 
+    /// Sealed first-price auction
     /// In this type of auction all bidders simultaneously submit sealed bids so that no bidder knows the bid of any
     /// other participant. The highest bidder pays the price they submitted.
     /// This type of auction is distinct from the English auction, in that bidders can only submit one bid each.
@@ -136,14 +156,14 @@ module Auctions=
      /// The auction ends when no participant is willing to bid further
      | TimedAscending of TimedAscendingOptions
      | SingleSealedBid of SingleSealedBidOptions
-     // | Swedish : same as english, but bidders are not bound by bids and the seller is free to accept or decline any bid 
+     // | Swedish : same as english, but bidders are not bound by bids and the seller is free to accept or decline any bid
      // this is a distinction compared to the English auction with open exit rule
-     // | Dutch of DutchOptions : since this presumes a different kind of model 
+     // | Dutch of DutchOptions : since this presumes a different kind of model
      // we could model this as first bid ends auction
      // the time of the bid implies the price
-    
+
     with
-    override this.ToString() = 
+    override this.ToString() =
       match this with
       | TimedAscending english -> sprintf "English|%O|%O|%d"
                                     (english.reservePrice) (english.minRaise) english.timeFrame.Ticks
@@ -154,8 +174,8 @@ module Auctions=
         None
       else
         match (typ.Split('|') |> Seq.toList) with
-        | "English"::(Amount reservePrice)::(Amount minRaise):: (Int64 timeframe) :: [] -> 
-           Some (TimedAscending { 
+        | "English"::(Amount reservePrice)::(Amount minRaise):: (Int64 timeframe) :: [] ->
+           Some (TimedAscending {
                   reservePrice=reservePrice
                   minRaise=minRaise
                   timeFrame=TimeSpan.FromTicks(timeframe) })
@@ -167,13 +187,13 @@ module Auctions=
                                                                     InvalidValue(typeof<Currency>, json, "unrecognized type"))
     static member ToJson (x:Type) = toJson (string x)
 
-type Auction = 
+type Auction =
   { id : AuctionId
     startsAt : DateTime
     title : string
     /// initial expiry
     expiry : DateTime
-    user : User 
+    user : User
     typ : Type
     currency:Currency
   }
@@ -189,7 +209,7 @@ with
     |> jfield "type"      (fun x -> x.typ)
     |> jfield "currency"  (fun x -> x.currency)
 
-type Bid = 
+type Bid =
   { id : BidId
     auction : AuctionId
     user : User
@@ -213,7 +233,7 @@ module Bid=
   let auction (bid : Bid) = bid.auction
   let bidder (bid: Bid) = bid.user
 
-type Errors = 
+type Errors =
   | UnknownAuction of AuctionId
   | UnknownBid of BidId
   | BidAlreadyExists of BidId
@@ -235,7 +255,7 @@ type Errors =
     | AuctionHasEnded a-> jobj [ "type".="AuctionHasEnded"; "auctionId" .= a]
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
-    | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= u; "auctionId" .=a]
+    | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
     | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .= c]
     | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
@@ -254,9 +274,11 @@ module Auction=
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
   let biddersAreOpen (auction : Auction) = true
 
-  let validateBid (bid : Bid) (auction : Auction)= 
+  let validateBid (bid : Bid) (auction : Auction) =
     if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
     else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
+    else if bid.at < auction.startsAt then Error(Errors.AuctionHasNotStarted auction.id)
+    else if bid.at > auction.expiry then Error(Errors.AuctionHasEnded auction.id)
     else Ok()
 
 [<AutoOpen>]
@@ -269,7 +291,7 @@ module State=
     abstract AddBid: Bid -> IState*Result<unit ,Errors>
     /// get bids for state (will return empty if in a state that does not disclose bids)
     abstract GetBids: unit -> Bid list
-    /// try to get amount and winner, will return None if no winner 
+    /// try to get amount and winner, will return None if no winner
     abstract TryGetAmountAndWinner: unit -> (Amount * User) option
     /// returns true if state has ended
     abstract HasEnded: unit -> bool
@@ -278,12 +300,12 @@ module State=
      | AwaitingStart of start: DateTime * expiry: DateTime * opt:TimedAscendingOptions
      | OnGoing of bids: Bid list * expiry: DateTime * opt:TimedAscendingOptions
      | HasEnded of bids: Bid list * expired: DateTime * opt:TimedAscendingOptions
-  with 
+  with
     interface IState with
       member state.Inc now =
         match state with
         | AwaitingStart (start,expiry, opt) as awaitingStart->
-          match (now>start, now<expiry) with 
+          match (now>start, now<expiry) with
           | true,true->
             OnGoing([],expiry, opt) :> IState
           | true,false->
@@ -297,11 +319,11 @@ module State=
             HasEnded (bids, expiry, opt) :> IState
         | HasEnded _ as ended ->
             ended :> IState
-      
+
       member state.AddBid b = // note that this is increment + mutate in one operation
         match state with
         | AwaitingStart (start,expiry, opt) as awaitingStart->
-          match (b.at>start, b.at<expiry) with 
+          match (b.at>start, b.at<expiry) with
           | true,true->
             OnGoing([b], max expiry (b.at+opt.timeFrame), opt) :>IState,Ok()
           | true,false->
@@ -317,7 +339,7 @@ module State=
               if b.amount > (highestBid.amount + opt.minRaise)
               then
                 OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt):>IState,Ok()
-              else 
+              else
                 ongoing:>IState, Error (MustPlaceBidOverHighestBid highestBid.amount)
           else
             HasEnded (bids, expiry, opt):>IState, Error (AuctionHasEnded b.auction)
@@ -328,7 +350,7 @@ module State=
         | OnGoing(bids,_,_)->bids
         | HasEnded(bids,_,_)->bids
         | AwaitingStart _ ->[]
-      member state.TryGetAmountAndWinner () = 
+      member state.TryGetAmountAndWinner () =
         match state with
         | HasEnded (bid::_ ,_ , opt) when opt.reservePrice<bid.amount -> Some (bid.amount, bid.user)
         | _ -> None
@@ -338,30 +360,30 @@ module State=
   type SingleSealedBidState =
      | AcceptingBids of bids: Map<UserId, Bid> * expiry: DateTime * opt:SingleSealedBidOptions
      | DisclosingBids of bids: Bid list * expired: DateTime * opt:SingleSealedBidOptions
-  with 
+  with
 
     interface IState with
       member state.Inc now =
         match state with
-        | AcceptingBids (bids,expiry, opt) as acceptingBids-> 
+        | AcceptingBids (bids,expiry, opt) as acceptingBids->
           match now>=expiry with
           | false -> acceptingBids :>IState
-          | true -> 
+          | true ->
             let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
             DisclosingBids(bids, expiry, opt):>IState
         | DisclosingBids _ as disclosingBids-> disclosingBids:>IState
-      
+
       member state.AddBid b =
         match state with
-        | AcceptingBids (bids,expiry, opt) as acceptingBids-> 
+        | AcceptingBids (bids,expiry, opt) as acceptingBids->
           let u=User.getId b.user
           match b.at>=expiry, bids.ContainsKey (u) with
           | false, false -> AcceptingBids (bids.Add (u,b), expiry, opt):>IState, Ok()
-          | _, true -> acceptingBids:>IState, Error AlreadyPlacedBid 
-          | true,_ -> 
+          | _, true -> acceptingBids:>IState, Error AlreadyPlacedBid
+          | true,_ ->
             let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
             DisclosingBids(bids,expiry, opt):>IState, Error (AuctionHasEnded b.auction)
-        | DisclosingBids _ as disclosingBids-> 
+        | DisclosingBids _ as disclosingBids->
           disclosingBids:>IState, Error (AuctionHasEnded b.auction)
 
       member state.GetBids () =
@@ -385,7 +407,7 @@ module State=
   type S=IState
   [<RequireQualifiedAccess>]
   module Auction=
-    let emptyState (a:Auction) : S= 
+    let emptyState (a:Auction) : S=
       match a.typ with
       | SingleSealedBid opt -> AcceptingBids(Map.empty, a.expiry, opt) :>IState
       | TimedAscending opt -> AwaitingStart(a.startsAt,a.expiry, opt) :>IState
@@ -397,17 +419,17 @@ module State=
     let inline tryGetAmountAndWinner (state:S)=state.TryGetAmountAndWinner ()
     let inline hasEnded (state:S)=state.HasEnded ()
 
-type Command = 
+type Command =
   | AddAuction of DateTime * Auction
   | PlaceBid of DateTime * Bid
-  
+
   /// the time when the command was issued
-  static member getAt command = 
+  static member getAt command =
     match command with
     | AddAuction(at, _) -> at
     | PlaceBid(at, _) -> at
-  
-  static member getAuction command = 
+
+  static member getAuction command =
     match command with
     | AddAuction(_,auction) -> auction.id
     | PlaceBid(_,bid) -> bid.auction
@@ -417,7 +439,7 @@ type Command =
     | JObject o -> monad {
         let! t = o .@ "$type"
         match t with
-        | "AddAuction" -> 
+        | "AddAuction" ->
           let create d a = AddAuction (d,a)
           return! (create <!> (o .@ "at") <*> (o .@ "auction"))
         | "PlaceBid" ->
@@ -430,7 +452,7 @@ type Command =
     match x with
     | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]
     | PlaceBid (d,b)-> jobj [ "$type" .= "PlaceBid"; "at" .= d; "bid" .= b]
-type CommandSuccess = 
+type CommandSuccess =
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
   static member ToJson (x: CommandSuccess) =
@@ -438,4 +460,15 @@ type CommandSuccess =
     | AuctionAdded (d,a)-> jobj [ "$type" .= "AuctionAdded"; "at" .= d; "auction" .= a]
     | BidAccepted (d,b)-> jobj [ "$type" .= "BidAccepted"; "at" .= d; "bid" .= b]
 
-  
+
+type Observable =
+  | Commands of Command list
+  | Results of Result<CommandSuccess, Errors> list
+  static member ToJson (x: Observable) =
+    match x with
+    | Commands commands->
+      jobj [ "$type" .= "Commands"; "commands" .= commands]
+    | Results results->
+      let mapToJson = function | Ok o-> JArray [|JString "Ok"; toJson o|] | Error e->JArray [JString "Error";toJson e]
+      let jresults = results |> List.map mapToJson |> List.toArray |> JArray
+      jobj [ "$type" .= "Results"; "results", jresults]
