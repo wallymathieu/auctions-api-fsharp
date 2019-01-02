@@ -116,13 +116,13 @@ module ToJson=
 
 let webPart (agent : AuctionDelegator) =
 
-  let overview : WebPart=fun (ctx) -> monad {
+  let overview : WebPart= GET >=> fun (ctx) -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
     let json = auctionList |> List.map ToJson.auction |> List.toArray |> JArray
     return! Json.OK json ctx
   }
 
-  let details id : WebPart= fun ctx->monad{
+  let details id : WebPart= GET >=> fun ctx->monad{
     let id = AuctionId id
     let! auctionAndBids = lift (agent.GetAuction id)
     return!
@@ -173,8 +173,8 @@ let webPart (agent : AuctionDelegator) =
         POST >=> handleCommandAsync (toPostedPlaceBid (AuctionId auctionId) user)
       )
 
-  WebPart.choose [ path "/" >=> GET >=> (OK "")
-                   path Paths.Auction.overview >=> GET >=> overview
+  WebPart.choose [ path "/" >=> (OK "")
+                   path Paths.Auction.overview >=> overview
                    path Paths.Auction.register >=> register
                    pathScan Paths.Auction.details details
                    pathScan Paths.Auction.placeBid placeBid ]
