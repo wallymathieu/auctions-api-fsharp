@@ -147,6 +147,7 @@ type AuctionDelegator(commands:Command list, onIncomingCommand:Command->Job<unit
 
   let agents : MVar<Map<AuctionId,AuctionDState.T>> = MVar()
 
+
   let userCommand cmd now (reply:IVar<Result<CommandSuccess, Errors>>) : Job<_>=
     let observeAndReply result=job{
       do! observeResult result
@@ -156,12 +157,17 @@ type AuctionDelegator(commands:Command list, onIncomingCommand:Command->Job<unit
     job{
       match cmd with
       | AddAuction(at, auction) ->
-        if auction.expiry > now then
+        let! cagents =MVar.read agents
+        match (auction.expiry > now, Map.containsKey auction.id cagents) with
+        | (true, false)->
           let! agent = AuctionAgent.create auction (Auction.emptyState auction)
           let addAgent = Map.add auction.id (AuctionDState.started auction agent)
           do! MVar.mutateFun addAgent agents
           do! observeAndReply (Ok (AuctionAdded(at, auction)))
-        else do! observeAndReply (Error (AuctionHasEnded auction.id))
+        | (false, _) ->
+          do! observeAndReply (Error (AuctionHasEnded auction.id))
+        | (_, true) ->
+          do! observeAndReply (Error (AuctionAlreadyExists auction.id))
       | PlaceBid(at, bid) ->
         let auctionId = Command.getAuction cmd
         let! a= MVar.read agents

@@ -1,4 +1,4 @@
-﻿namespace Tests
+namespace Tests
 
 open Auctions.Domain
 open Auctions
@@ -7,8 +7,15 @@ open Hopac
 open System
 open Xunit
 open System.Globalization
+open FSharpPlus
+open FsUnit.Xunit
 
 module ``Auction agent tests`` =
+  //domain specific matchers:
+  open NHamcrest.Core
+  let equalError x = CustomMatcher<obj>(sprintf "Equals Error %A" x, fun (a:obj)->match a :?> Result<CommandSuccess,Errors> with | Error err-> err= x | Ok _ -> false)
+  let equalOk x = CustomMatcher<obj>(sprintf "Equals Ok %A" x, fun (a:obj)-> match a :?> Result<CommandSuccess,Errors> with | Error _-> false | Ok ok -> ok =x)
+
   let seller = BuyerOrSeller(UserId "x1", "Seller")
 
   let auction = { id = auctionId; startsAt = DateTime(2008,11,25)
@@ -49,7 +56,7 @@ module ``Auction agent tests`` =
       do! timeOut (TimeSpan.FromSeconds 0.1)
       let! maybeAuctionAndBids = d.GetAuction auction.id
       //printfn "++++++++++++++++++++++++\n%A\n++++++++++++++++++++++++" maybeAuctionAndBids
-      Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
+      return Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
     }
     run j
   [<Fact>]
@@ -70,6 +77,29 @@ module ``Auction agent tests`` =
       do! timeOut (TimeSpan.FromSeconds 0.1)
 
       let! maybeAuctionAndBids = d.GetAuction auction.id
-      Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
+      return Assert.Equal( (Some (auction, [validBid], (Some (validBid.amount, buyer)))),maybeAuctionAndBids)
+    }
+    run j
+
+  [<Fact>]
+  let ``try to create auction in the past``() =
+    let j = job{
+      let mutable t = DateTime(2008,11,24)
+      let time () = t
+      let! d = AuctionDelegator.create ([], emptyHandler, time, fun _ -> Job.unit())
+      let! res= d.UserCommand (AddAuction (t, {auction with expiry = t.AddDays(-1.0) }))
+      return res |> should equalError (AuctionHasEnded (auction.id))
+    }
+    run j
+
+  [<Fact>]
+  let ``try to create auction when there is already an auction``() =
+    let j = job{
+      let mutable t = DateTime(2008,11,24)
+      let time () = t
+      let! d = AuctionDelegator.create ([], emptyHandler, time, fun _ -> Job.unit())
+      do! Job.Ignore <|  d.UserCommand (AddAuction (t, auction))
+      let! res= d.UserCommand (AddAuction (t, auction))
+      return res |> should equalError (AuctionAlreadyExists (auction.id))
     }
     run j
