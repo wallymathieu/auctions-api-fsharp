@@ -30,7 +30,8 @@ with
     let create sub name userType= {subject =sub ; name=name; userType=Enum.Parse userType}
     match json with
     | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
-    | x -> Error (sprintf "Expected JwtPayload, found %A" x)
+    | x -> Decode.Fail.objExpected x
+
 let authenticated f = fun (next:HttpFunc) (httpContext:HttpContext) ->
     (match httpContext.Request.Headers.TryGetValue "x-jwt-payload" with
     | (true, u) ->
@@ -43,7 +44,7 @@ let authenticated f = fun (next:HttpFunc) (httpContext:HttpContext) ->
         match payload.userType with
         | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
         | UserType.Support -> Support userId |> Ok
-        | _ -> Error "Unknown user type")
+        | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type")
       |> function | Ok user->f (UserLoggedOn(user))
                   | Error _ ->f NoSession
     | _ -> f NoSession) next httpContext
@@ -68,7 +69,8 @@ module OfJson=
     let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
     match json with
     | JObject o -> create <!> (o .@ "amount")
-    | x -> Error (sprintf "Expected bid, found %A" x)
+    | x -> Decode.Fail.objExpected x
+    |> Result.mapError string
   let addAuctionReq (user) json =
     let create id startsAt title endsAt (currency:string option) (typ:string option)
       =
@@ -81,7 +83,8 @@ module OfJson=
     match json with
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
                    <*> (o .@? "currency")<*> (o .@? "type")
-    | x -> Error (sprintf "Expected bid, found %A" x)
+    | x -> Decode.Fail.objExpected x
+    |> Result.mapError string
 
 module ToJson=
   let auctionList (auction:Auction) =[
