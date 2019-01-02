@@ -61,8 +61,8 @@ module Writers=
     let inline _status f (resp:HttpResult) = map (fun a' -> { resp with status=a' }) (f resp.status)
     //let inline _headers f (resp:HttpResult) = map (fun a' -> { resp with headers=a' }) (f resp.headers)
   module Request =
-    let inline _url f (req:HttpRequest) = map (fun a' -> { req with url=a' }) (f req.url)
-    let inline _method f (req:HttpRequest) = map (fun a' -> { req with method=a' }) (f req.method)
+    let inline _url f (req:HttpRequest) = map (fun (a':System.Uri) -> { req with rawPath=a'.AbsolutePath; rawQuery =a'.Query }) (f req.url)
+    let inline _method f (req:HttpRequest) = map (fun a' -> { req with rawMethod=string a' }) (f req.method)
     let inline _rawForm f (req:HttpRequest) = map (fun a' -> { req with rawForm=a' }) (f req.rawForm)
    module Status =
     let inline _code f status = map (fun a' -> { status with code = a' }) (f status.code)

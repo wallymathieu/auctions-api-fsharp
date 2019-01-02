@@ -1,4 +1,4 @@
-﻿module Auctions.Actors
+module Auctions.Actors
 open Auctions.Domain
 
 open System
@@ -97,10 +97,10 @@ type private Repository ()=
     auctions.Values |> Seq.toList
 
   member __.Handle = function
-    | AddAuction (_,a)->
-      if not (auctions.ContainsKey a.id) then
-        let empty =Auction.emptyState a
-        auctions.Add ( a.id, (a,empty) )
+    | AddAuction (at,auction)->
+      if auction.expiry > at && not (auctions.ContainsKey auction.id) then
+        let empty =Auction.emptyState auction
+        auctions.Add ( auction.id, (auction,empty) )
       else
         ()
     | PlaceBid (_,b)->
