@@ -273,9 +273,11 @@ module Auction=
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
   let biddersAreOpen (auction : Auction) = true
 
-  let validateBid (bid : Bid) (auction : Auction)=
+  let validateBid (bid : Bid) (auction : Auction) =
     if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
     else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
+    else if bid.at < auction.startsAt then Error(Errors.AuctionHasNotStarted auction.id)
+    else if bid.at > auction.expiry then Error(Errors.AuctionHasEnded auction.id)
     else Ok()
 
 [<AutoOpen>]

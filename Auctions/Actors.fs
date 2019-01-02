@@ -111,10 +111,10 @@ type private Repository ()=
     auctions.Values |> Seq.toList
 
   member __.Handle = function
-    | AddAuction (_,a)->
-      if not (auctions.ContainsKey a.id) then
-        let empty =Auction.emptyState a
-        auctions.Add ( a.id, (a,empty) )
+    | AddAuction (at,auction)->
+      if auction.expiry > at && not (auctions.ContainsKey auction.id) then
+        let empty =Auction.emptyState auction
+        auctions.Add ( auction.id, (auction,empty) )
       else
         ()
     | PlaceBid (_,b)->
@@ -166,14 +166,14 @@ type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResu
                                       )
                          |> Map
 
-    let userCommand cmd now (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
+    let userCommand cmd (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
       let observeAndReply result=
          observeResult result
          reply.Reply result
       async{
          match cmd with
          | AddAuction(at, auction) ->
-            match (auction.expiry > now, Map.containsKey auction.id agents) with
+            match (auction.expiry > at, Map.containsKey auction.id agents) with
             | (true, false)->
               let agent = AuctionAgent.create auction (Auction.emptyState auction)
               agents <- Map.add auction.id (AuctionDState.started auction agent) agents
@@ -240,7 +240,7 @@ type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResu
         match msg with
          | UserCommand(cmd, reply) ->
            do onIncomingCommand cmd
-           do! userCommand cmd now reply
+           do! userCommand cmd reply
            return! messageLoop()
          | GetAuction (auctionId,reply) ->
            do! getAuction auctionId now reply
