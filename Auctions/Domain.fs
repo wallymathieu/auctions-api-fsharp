@@ -453,10 +453,10 @@ type Command =
     match x with
     | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]
     | PlaceBid (d,b)-> jobj [ "$type" .= "PlaceBid"; "at" .= d; "bid" .= b]
-type CommandSuccess =
+type Event =
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
-  static member ToJson (x: CommandSuccess) =
+  static member ToJson (x: Event) =
     match x with
     | AuctionAdded (d,a)-> jobj [ "$type" .= "AuctionAdded"; "at" .= d; "auction" .= a]
     | BidAccepted (d,b)-> jobj [ "$type" .= "BidAccepted"; "at" .= d; "bid" .= b]
@@ -464,7 +464,7 @@ type CommandSuccess =
 
 type Observable =
   | Commands of Command list
-  | Results of Result<CommandSuccess, Errors> list
+  | Results of Result<Event, Errors> list
   static member ToJson (x: Observable) =
     match x with
     | Commands commands->

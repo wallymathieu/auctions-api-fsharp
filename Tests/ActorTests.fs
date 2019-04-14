@@ -11,8 +11,8 @@ open FsUnit.Xunit
 module ``Auction agent tests`` =
   //domain specific matchers:
   open NHamcrest.Core
-  let equalError x = CustomMatcher<obj>(sprintf "Equals Error %A" x, fun (a:obj)->match a :?> Result<CommandSuccess,Errors> with | Error err-> err= x | Ok _ -> false)
-  let equalOk x = CustomMatcher<obj>(sprintf "Equals Ok %A" x, fun (a:obj)-> match a :?> Result<CommandSuccess,Errors> with | Error _-> false | Ok ok -> ok =x)
+  let equalError x = CustomMatcher<obj>(sprintf "Equals Error %A" x, fun (a:obj)->match a :?> Result<Event,Errors> with | Error err-> err= x | Ok _ -> false)
+  let equalOk x = CustomMatcher<obj>(sprintf "Equals Ok %A" x, fun (a:obj)-> match a :?> Result<Event,Errors> with | Error _-> false | Ok ok -> ok =x)
 
   let seller = BuyerOrSeller(UserId "x1", "Seller")
 

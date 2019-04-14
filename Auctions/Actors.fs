@@ -132,7 +132,7 @@ module AuctionAgent=
 type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
 type DelegatorSignals =
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
-  | UserCommand of Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>
+  | UserCommand of Command * AsyncReplyChannel<Result<Event, Errors>>
   | GetAuction of AuctionId *AsyncReplyChannel<AuctionAndBidsAndMaybeWinnerAndAmount option>
   | GetAuctions of AsyncReplyChannel<Auction list>
 
@@ -166,7 +166,7 @@ type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResu
                                       )
                          |> Map
 
-    let userCommand cmd (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
+    let userCommand cmd (reply:AsyncReplyChannel<Result<Event, Errors>>)=
       let observeAndReply result=
          observeResult result
          reply.Reply result
