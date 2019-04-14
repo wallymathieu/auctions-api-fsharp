@@ -35,8 +35,7 @@ type JsonAppendToFile(fileName) =
         | Error err->failwithf "Couldn't parse line %O" err //TODO: Fix IAppendBatch interface
       let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
       return splitLines lines
-              |> Array.map map
-              |> Array.concat
+              |> Array.collect map
               |> Array.toList
               |> List.sortBy Command.getAt
     }
