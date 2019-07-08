@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp2.1</TargetFramework>
@@ -23,11 +23,15 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Giraffe" Version="3.5.0" />
-    <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.*" />
-    <DotNetCliToolReference Include="Microsoft.DotNet.Watcher.Tools" Version="2.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="2.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="2.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore" Version="2.1.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Hosting" Version="2.1.0" />
     <PackageReference Include="Fleece.FSharpData" Version="0.8.0-alpha-2" />
     <PackageReference Update="FSharp.Core" Version="4.5.4" />
-    <PackageReference Include="StackExchange.Redis" Version="2.0.519" />
     <PackageReference Include="FSharpPlus" Version="1.1.0-CI00252" />
+    <PackageReference Include="FSharp.Codecs.Redis" Version="0.1.0-alpha-1" />
+    <PackageReference Include="StackExchange.Redis" Version="2.0.601" />
   </ItemGroup>
 </Project>
