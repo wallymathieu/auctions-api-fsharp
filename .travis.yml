@@ -1,7 +1,7 @@
 sudo: false
 language: csharp
 dist: trusty
-dotnet: 2.2.301
+dotnet: 2.2.301-1 # https://dotnet.microsoft.com/download/linux-package-manager/ubuntu18-04/sdk-2.2.301
 services:
   - redis-server
 script:
