@@ -1,7 +1,7 @@
 sudo: false
 language: csharp
 dist: trusty
-dotnet: 2.1.401
+dotnet: 2.2.401
 services:
   - redis-server
 script:
