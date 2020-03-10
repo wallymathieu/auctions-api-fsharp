@@ -7,13 +7,13 @@ open FSharp.Data.GraphQL.Execution
 
 let CurrencyType =
   let enumName v=System.Enum.GetName(typeof<CurrencyCode>, v)
-  let values = System.Linq.Enumerable.Cast<CurrencyCode> ( System.Enum.GetValues(typeof<CurrencyCode>)) 
+  let values = System.Linq.Enumerable.Cast<CurrencyCode> ( System.Enum.GetValues(typeof<CurrencyCode>))
   Define.Enum<CurrencyCode>(
     name = "Currency",
     description = "Currency",
     options= (values |> Seq.map (fun v -> Define.EnumValue(enumName v,v) ) |> Seq.toList)
     )
-    
+
 let AmountType =
   let currencyCode (a:Amount) = Currency.code (a.currency)
   Define.Object<Amount>(
@@ -25,7 +25,7 @@ let AmountType =
         Define.Field("value", String, "Value of amount.", fun _ h -> string h.value)
         Define.Field("currency", CurrencyType, "The currency for the amount.", fun _ h -> currencyCode h)
     ])
-  
+
 let BidType =
   Define.Object<Bid>(
     name = "Bid",
@@ -33,7 +33,7 @@ let BidType =
     isTypeOf = (fun o -> o :? Bid),
     fieldsFn = fun () ->
     [
-        Define.Field("id", Guid, "Bid id.", fun _ h -> h.id)
+        Define.Field("id", Guid, "Bid id.", fun _ h -> BidId.unwrap h.id)
         Define.Field("amount", AmountType, "The bid amount.", fun _ h -> h.amount)
         Define.Field("auctionId", String, "The auction id.", fun _ h -> string h.auction)
         Define.Field("user", String, "User that placed the bid.", fun _ h -> string h.user)
