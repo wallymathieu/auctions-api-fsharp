@@ -1,9 +1,9 @@
 sudo: false
 language: csharp
-dist: trusty
-dotnet: 2.1.401
+dist: xenial
+dotnet: 2.1
 services:
-  - redis-server
+  - redis
 script:
   - dotnet restore
   - dotnet build
