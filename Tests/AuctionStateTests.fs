@@ -17,7 +17,7 @@ module ``Auction state tests`` =
                      |> S.inc endsAt
   [<Fact>]
   let ``bid after auction has ended``() = 
-    Assert.Equal( Error (AuctionHasEnded 1L), timedAscState |> S.addBid bid |> snd )
+    Assert.Equal(auctionId |> AuctionHasEnded |> Error, timedAscState |> S.addBid bid |> snd )
 
   [<Fact>]
   let ``english auction winner and price``() = 
@@ -47,7 +47,7 @@ module ``Auction state tests`` =
     // setup
     let (state,res) = Auction.emptyState timedAscAuction
                        |> S.addBid {bid with at=startsAt.AddHours(1.0)}
-    let nextBid = {bid with at=startsAt.AddHours(2.0); id=Guid.NewGuid()}
+    let nextBid = {bid with at=startsAt.AddHours(2.0); id=BidId.New()}
     
     // act
     let res = S.addBid nextBid state |> snd 

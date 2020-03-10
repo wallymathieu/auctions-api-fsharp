@@ -41,7 +41,7 @@ module Filters=
   let pathRegex s       :WebPart= OptionT << (F.pathRegex s)
   let pathScan (pf : PrintfFormat<_,_,_,_,'t>) (h : 't ->  WebPart) : WebPart =
     OptionT<< (F.pathScan pf (fun t ctx->OptionT.run ((h t) ctx))) // looks kind of weird, but perhaps OK
-  
+
 module RequestErrors=
   module RE = Suave.RequestErrors
   let BAD_REQUEST s= OptionT<< (RE.BAD_REQUEST s )
@@ -49,7 +49,7 @@ module RequestErrors=
   let METHOD_NOT_ALLOWED s= OptionT<< (RE.METHOD_NOT_ALLOWED s )
   let FORBIDDEN s= OptionT<< (RE.FORBIDDEN s )
   let NOT_FOUND s= OptionT<< (RE.NOT_FOUND s )
-  let UNAUTHORIZED s = OptionT<< (RE.UNAUTHORIZED s ) 
+  let UNAUTHORIZED s = OptionT<< (RE.UNAUTHORIZED s )
 open FSharpPlus.Lens
 module Writers=
   open Suave
@@ -61,8 +61,8 @@ module Writers=
     let inline _status f (resp:HttpResult) = map (fun a' -> { resp with status=a' }) (f resp.status)
     //let inline _headers f (resp:HttpResult) = map (fun a' -> { resp with headers=a' }) (f resp.headers)
   module Request =
-    let inline _url f (req:HttpRequest) = map (fun a' -> { req with url=a' }) (f req.url)
-    let inline _method f (req:HttpRequest) = map (fun a' -> { req with method=a' }) (f req.method)
+    let inline _url f (req:HttpRequest) = map (fun (a':System.Uri) -> { req with rawPath=a'.AbsolutePath; rawQuery =a'.Query }) (f req.url)
+    let inline _method f (req:HttpRequest) = map (fun a' -> { req with rawMethod=string a' }) (f req.method)
     let inline _rawForm f (req:HttpRequest) = map (fun a' -> { req with rawForm=a' }) (f req.rawForm)
    module Status =
     let inline _code f status = map (fun a' -> { status with code = a' }) (f status.code)
@@ -71,17 +71,20 @@ module Writers=
   let setHeader k v = OptionT << W.setHeader k v
   let setHeaderValue k v = OptionT << W.setHeaderValue k v
   let setMimeType t = OptionT << W.setMimeType t
+module Request=
+  let getBody (ctx : Suave.Http.HttpContext)=
+    ctx.request.rawForm |> System.Text.Encoding.UTF8.GetString
 
 module Json=
   open FSharp.Data
   open Successful
   open RequestErrors
   open Writers
-  let inline OK v : WebPart= 
-    OK (string (toJson v))
+  let inline OK (v:JsonValue) : WebPart=
+    OK (string v)
     >=> setMimeType "application/json; charset=utf-8"
-  let inline BAD_REQUEST v : WebPart= 
-    BAD_REQUEST (string (toJson v))
+  let inline BAD_REQUEST (v:JsonValue) : WebPart=
+    BAD_REQUEST (string v)
     >=> setMimeType "application/json; charset=utf-8"
 
   let inline ``OK_or_BAD_REQUEST`` (result) : WebPart=
@@ -89,6 +92,7 @@ module Json=
     | Ok v -> OK v
     | Error err -> BAD_REQUEST err
 
-  let inline getBody (ctx : Suave.Http.HttpContext)= 
-    ctx.request.rawForm |> System.Text.Encoding.UTF8.GetString |> parseJson
+  let inline getBody (ctx : Suave.Http.HttpContext) =
+    let body = Request.getBody ctx
+    try Ok (JsonValue.Parse body) with e -> Error <| string e
 

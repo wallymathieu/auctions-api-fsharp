@@ -6,6 +6,7 @@ open Auctions.Suave.Writers
 open Auctions.Suave.Filters
 open Auctions.Suave.Successful
 open Auctions.Suave.RequestErrors
+open Auctions.Security.Cryptography
 
 open Fleece
 open Fleece.FSharpData
@@ -16,26 +17,44 @@ open Auctions.Domain
 open Auctions.Actors
 open Auctions
 open FSharpPlus.Data
-(* Fake auth in order to simplify web testing *)
+open System.Text
+(* Assuming front proxy verification of auth in order to simplify web testing *)
 
-type Session = 
+type Session =
   | NoSession
   | UserLoggedOn of User
-
+type UserType=
+  | BuyerOrSeller=0
+  | Support=1
+type JwtPayload = { subject:string; name:string; userType:UserType }
+with
+  static member OfJson json:ParseResult<JwtPayload> =
+    let create sub name userType= {subject =sub ; name=name; userType=Enum.Parse userType}
+    match json with
+    | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
+    | x -> Decode.Fail.objExpected x
 let authenticated f = //
   let context apply (a : Suave.Http.HttpContext) = apply a a
-  context (fun x -> 
-    match x.request.header "x-fake-auth" with
-    | Choice1Of2 u -> 
-        User.tryParse u |> function | Some user->
-                                        f (UserLoggedOn(user))
-                                    | None ->f NoSession
+  context (fun x ->
+    match x.request.header "x-jwt-payload" with
+    | Choice1Of2 u ->
+      Convert.FromBase64String u
+      |>Encoding.UTF8.GetString
+      |> parseJson
+      |> Result.bind( fun (payload:JwtPayload)->
+        let userId = UserId payload.subject
+        match payload.userType with
+        | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
+        | UserType.Support -> Support userId |> Ok
+        | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type")
+      |> function | Ok user->f (UserLoggedOn(user))
+                  | Error _ ->f NoSession
     | Choice2Of2 _ -> f NoSession)
 
-module Paths = 
+module Paths =
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
-  
-  module Auction = 
+
+  module Auction =
     /// /auctions
     let overview = "/auctions"
     /// /auction
@@ -46,177 +65,131 @@ module Paths =
     let placeBid : Int64Path = "/auction/%d/bid"
 
 (* Json API *)
-
-type BidReq = {amount : Amount}
-with 
-  static member OfJson json:ParseResult<BidReq> =
-    let create a = {amount =a}
+module OfJson=
+  let bidReq (auctionId, user, at) json =
+    let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
     match json with
     | JObject o -> create <!> (o .@ "amount")
-    | x -> Error (sprintf "Expected bid, found %A" x)
-
-type AddAuctionReq = {
-  id : AuctionId
-  startsAt : DateTime
-  title : string
-  endsAt : DateTime
-  currency : string
-  typ:string
-}
-with 
-  static member OfJson json:ParseResult<AddAuctionReq> =
-    let create id startsAt title endsAt (currency:string option) (typ:string option)= {id =id;startsAt=startsAt;title=title; endsAt=endsAt;currency=Option.defaultValue "" currency; typ=Option.defaultValue "" typ}
+    | x -> Decode.Fail.objExpected x
+    |> Result.mapError string
+  let addAuctionReq (user) json =
+    let create id startsAt title endsAt (currency:string option) (typ:string option)
+      =
+        let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
+        let defaultTyp = TimedAscending { reservePrice=Amount.zero currency; minRaise =Amount.zero currency;
+          timeFrame =TimeSpan.FromSeconds(0.0) }
+        let typ = typ |> Option.bind Type.tryParse
+                      |> Option.defaultValue defaultTyp
+        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
     match json with
-    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")<*> (o .@? "currency")<*> (o .@? "type")
-    | x -> Error (sprintf "Expected bid, found %A" x)
+    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
+                   <*> (o .@? "currency")<*> (o .@? "type")
+    | x -> Decode.Fail.objExpected x
+    |> Result.mapError string
 
-type BidJsonResult = { 
-  amount:Amount
-  bidder:string
-}
-with 
-  static member ToJson (x: BidJsonResult) :JsonValue =
-    jobj [ 
-      "amount" .= x.amount
-      "bidder" .= x.bidder
+module ToJson=
+  let auctionList (auction:Auction) =[
+      "id" .= auction.id
+      "startsAt" .= auction.startsAt
+      "title" .= auction.title
+      "expiry" .= auction.expiry
+      "currency" .= auction.currency
     ]
-type AuctionJsonResult = {
-  id : AuctionId
-  startsAt : DateTime
-  title : string
-  expiry : DateTime
-  currency : Currency
-  bids : BidJsonResult array
-  winner : string
-  winnerPrice : string
-}
- with 
-  static member ToJson (x: AuctionJsonResult) :JsonValue =
-    jobj [ 
-      "id" .= x.id
-      "startsAt" .= x.startsAt
-      "title" .= x.title
-      "expiry" .= x.expiry
-      "currency" .= x.currency
-      "bids" .= x.bids
-      "winner" .= x.winner
-      "winnerPrice" .= x.winnerPrice
-    ]
-
-module JsonResult=
-  let getAuctionResult (auction,bids,maybeAmountAndWinner) =
+  let auction auction = auctionList auction |> jobj
+  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) : JsonValue =
+    let (winner,winnerPrice) =
+            match maybeAmountAndWinner with
+            | None -> ("","")
+            | Some (amount, winner)->
+                (winner.ToString(), amount.ToString())
     let discloseBidders =Auction.biddersAreOpen auction
-    let mapBid (b:Bid) :BidJsonResult = { 
-      amount=b.amount
-      bidder= if discloseBidders 
-              then string b.user 
-              else string <| b.user.GetHashCode() // here you might want bidder number
-    }
+    let bid (x: Bid) :JsonValue =
+      let userId = string x.user
+      jobj [
+        "amount" .= x.amount
+        "bidder" .= (if discloseBidders then userId else SHA512.ofString userId)
+      ]
+    let bids = (List.map bid bids |> List.toArray |> JArray)
+    auctionList auction @ [
+      "bids", bids
+      "winner" .= winner
+      "winnerPrice" .= winnerPrice
+    ] |> jobj
 
-    let (winner,winnerPrice) = 
-              match maybeAmountAndWinner with
-              | None -> ("","")
-              | Some (amount, winner)->
-                  (winner.ToString(), amount.ToString())
-    { id=auction.id; startsAt=auction.startsAt; title=auction.title;expiry=auction.expiry; currency=auction.currency
-      bids=bids |> List.map mapBid |> List.toArray
-      winner = winner
-      winnerPrice = winnerPrice
-    }
+let webPart (agent : AuctionDelegator) =
 
-  let toPostedAuction user = 
-      Json.getBody 
-        >> Result.map (fun (a:AddAuctionReq) -> 
-        let currency= Currency.tryParse a.currency |> Option.defaultValue Currency.VAC
-        
-        let typ = Type.tryParse a.typ |> Option.defaultValue (TimedAscending { 
-                                                                            reservePrice=Amount.zero currency 
-                                                                            minRaise =Amount.zero currency
-                                                                            timeFrame =TimeSpan.FromSeconds(0.0)
-                                                                          })
-        { user = user
-          id=a.id
-          startsAt=a.startsAt
-          expiry=a.endsAt
-          title=a.title
-          currency=currency
-          typ=typ
-        }
-        |> Timed.atNow
-        |> AddAuction)
-        >> Result.mapError InvalidUserData
+  let overview : WebPart= GET >=> fun (ctx) -> monad {
+    let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
+    let json = auctionList |> List.map ToJson.auction |> List.toArray |> JArray
+    return! Json.OK json ctx
+  }
 
-
-  let toPostedPlaceBid id user = 
-    Json.getBody 
-      >> Result.map (fun (a:BidReq) -> 
-      let d = DateTime.UtcNow
-      (d, 
-       { user = user; id= BidId.NewGuid();
-         amount=a.amount;auction=id
-         at = d })
-      |> PlaceBid)
-      >> Result.mapError InvalidUserData
-
-let webPart (agent : AuctionDelegator) = 
-
-  let overview = 
-    GET >=> fun (ctx) ->
-            monad {
-              let! auctionList =lift ( agent.GetAuctions())
-              return! Json.OK auctionList ctx
-            }
-
-  let getAuctionResult id : Async<Result<AuctionJsonResult,Errors>>=
-      monad {
-        let! auctionAndBids = agent.GetAuction id
-        match auctionAndBids with
-        | Some v-> return Ok <| JsonResult.getAuctionResult v
-        | None -> return Error (UnknownAuction id)
-      }
-
-  let details id : WebPart= GET >=> (fun ctx->monad{ 
-      let! auctionAndBids = lift (agent.GetAuction id)
-      return! 
-         match auctionAndBids with
-         | Some v-> Json.OK (JsonResult.getAuctionResult v) ctx
-         | None -> NOT_FOUND (sprintf "Could not find auction with id %o" id) ctx
-  })
+  let details id : WebPart= GET >=> fun ctx->monad{
+    let id = AuctionId id
+    let! auctionAndBids = lift (agent.GetAuction id)
+    return!
+       match auctionAndBids with
+       | Some v-> Json.OK (ToJson.auctionAndBidsAndMaybeWinnerAndAmount v) ctx
+       | None -> NOT_FOUND (sprintf "Could not find auction with id %O" id) ctx
+  }
 
   /// handle command and add result to repository
-  let handleCommandAsync 
-    (maybeC:_->Result<Command,_>) :WebPart = 
+  let handleCommandAsync
+    (tryGetCommand:_->Result<Command,_>) :WebPart =
     fun ctx -> monad {
-      match agent.UserCommand <!> (maybeC ctx) with
-      | Ok asyncR->
-          match! lift asyncR with
-          | Ok v->return! Json.OK v ctx
-          | Error e-> return! Json.BAD_REQUEST e ctx
-      | Error c'->return! Json.BAD_REQUEST c' ctx
+      let command = tryGetCommand ctx
+      match agent.UserCommand <!> command with
+      | Ok asyncResult->
+          match! lift asyncResult with
+          | Ok commandSuccess->
+            return! Json.OK (toJson commandSuccess) ctx
+          | Error e-> return! Json.BAD_REQUEST (toJson e) ctx
+      | Error c'->return! Json.BAD_REQUEST (toJson c') ctx
     }
 
   /// register auction
-  let register = 
-    authenticated (function 
+  let register =
+    let toPostedAuction user =
+        Json.getBody
+          >> Result.bind (OfJson.addAuctionReq (user))
+          >> Result.map (Timed.atNow >>AddAuction)
+          >> Result.mapError InvalidUserData
+
+    authenticated (function
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user ->
-        POST >=> handleCommandAsync (JsonResult.toPostedAuction user)
+        POST >=> handleCommandAsync (toPostedAuction user)
       )
 
   /// place bid
-  let placeBid (id : AuctionId) = 
-    authenticated (function 
+  let placeBid auctionId =
+    let toPostedPlaceBid id user =
+      Json.getBody
+        >> Result.bind (OfJson.bidReq (id,user,DateTime.UtcNow) )
+        >> Result.map (Timed.atNow >>PlaceBid)
+        >> Result.mapError InvalidUserData
+
+    authenticated (function
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user ->
-        POST >=> handleCommandAsync (JsonResult.toPostedPlaceBid id user)
+        POST >=> handleCommandAsync (toPostedPlaceBid (AuctionId auctionId) user)
       )
-  
+
   WebPart.choose [ path "/" >=> (OK "")
                    path Paths.Auction.overview >=> overview
                    path Paths.Auction.register >=> register
                    pathScan Paths.Auction.details details
                    pathScan Paths.Auction.placeBid placeBid ]
 
-//curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-fake-auth: BuyerOrSeller|a1|Seller"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
-//curl  -X POST -d '{ "amount":"VAC10" }' -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
-//curl  -X GET -H "x-fake-auth: BuyerOrSeller|a1|Test"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions 
+module WebHook=
+  open FSharp.Data.HttpRequestHeaders
+  open FSharp.Data.HttpContentTypes
+  let isError (code:int) = code >=300 || code<200
+  /// Send payload to webhook
+  let inline ofUri (uri:Uri) payload=async{
+    let! res = Http.AsyncRequest(
+                string uri,
+                headers = [ Accept Json ; ContentType Json],
+                body = (toJson payload |> string |>  TextRequest))
+    if (isError res.StatusCode ) then failwithf "Status code: %d, response: %O" res.StatusCode res.Body
+  }

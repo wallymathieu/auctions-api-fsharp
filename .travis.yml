@@ -1,15 +1,14 @@
 sudo: false
-language: csharp 
-dist: trusty
-dotnet: 2.1.401
+language: csharp
+dist: xenial
+dotnet: 2.2
 services:
-  - redis-server 
-script: 
+  - redis-server
+script:
   - dotnet restore
   - dotnet build
   - dotnet test Tests
 branches:
-  only: 
+  only:
     - master
-    - static_constraints
-
+    - hopac
