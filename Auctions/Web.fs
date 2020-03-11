@@ -39,7 +39,7 @@ type UserType=
 type JwtPayload = { subject:string; name:string; userType:UserType }
 with
   static member OfJson json:ParseResult<JwtPayload> =
-    let create sub name userType= {subject =sub ; name=name; userType=Enum.Parse userType}
+    let create sub name userType= {subject =sub ; name=name; userType =parse userType}
     match json with
     | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
     | x -> Decode.Fail.objExpected x
