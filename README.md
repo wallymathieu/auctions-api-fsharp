@@ -15,7 +15,7 @@ A more complete implementation could have supervisors, circuit breakers, retries
 
 ### High level overview of command and query flow
 
-```
+```md
 signal -> delegator -> mailbox.[x]
 
 command ------[handle]---> mailbox.[x] --[observe result]-\
@@ -35,7 +35,7 @@ connection string to redis or file to persist commands in.
 
 ```bash
 dotnet restore
-dotnet run --project Auctions --redis CONN --json FILE --web-hook URI
+dotnet run --project App --redis CONN --json FILE --web-hook URI
 ```
 
 To try out the auction API you can then curl the service:
