@@ -4,20 +4,9 @@
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
-    <DebugType>embedded</DebugType>
-  </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
     <Compile Include="Program.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Fleece.FSharpData" Version="0.8.0-alpha-2" />
-    <PackageReference Include="Hopac" Version="0.3.23" />
-    <PackageReference Update="FSharp.Core" Version="4.7.0" />
-    <PackageReference Include="Suave" Version="2.5.2" />
-    <PackageReference Include="FSharpPlus" Version="1.1.0-RC3" />
-    <PackageReference Include="FSharp.Codecs.Redis" Version="0.1.0-RC3" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Auctions\Auctions.fsproj" />
