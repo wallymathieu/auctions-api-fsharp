@@ -4,6 +4,7 @@ open System
 
 open Auctions.Web
 open Auctions.Actors
+open Auctions.Environment
 open Auctions
 open FSharpPlus
 open FSharpPlus.Data
@@ -17,15 +18,6 @@ type CmdArgs =
     Json : string option
     WebHook : Uri option
   }
-module Env=
-  let envArgs (prefix:string) =
-    let mangle (str:string) = Regex.replace "_" "-" str
-    Seq.cast<DictEntry>( Environment.GetEnvironmentVariables())
-    |> Seq.map(fun kv-> (string kv.Key, string kv.Value) )
-    |> Seq.filter( fun (key, value) -> key.StartsWith(prefix, StringComparison.InvariantCultureIgnoreCase)
-                                       && not <| String.IsNullOrEmpty value)
-    |> Seq.collect( fun (key, value) -> [ "--"+ (mangle (key.Substring(0, prefix.Length))).ToLowerInvariant(); value ])
-    |> Seq.toList
 
 [<EntryPoint>]
 let main argv =
@@ -42,7 +34,7 @@ let main argv =
         Json = None
         WebHook = None
       }
-    let envArgs = Env.envArgs "AUCTIONS_"
+    let envArgs = Env.vars () |> Env.envArgs "AUCTIONS_"
     let rec parseArgs b args =
       match args with
       | [] -> b
