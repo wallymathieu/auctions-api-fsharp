@@ -13,6 +13,7 @@
     <Compile Include="JsonAppendToFile.fs" />
     <Compile Include="Actors.fs" />
     <Compile Include="Web.fs" />
+    <Compile Include="Environment.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Fleece.FSharpData" Version="0.8.0-alpha-2" />
