@@ -21,6 +21,6 @@
     <PackageReference Include="Suave" Version="2.5.2" />
     <PackageReference Include="FSharpPlus" Version="1.1.0" />
     <PackageReference Include="FSharp.Codecs.Redis" Version="0.1.0-RC3" />
-    <PackageReference Include="jose-jwt" Version="2.5.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.5.1" />
   </ItemGroup>
 </Project>

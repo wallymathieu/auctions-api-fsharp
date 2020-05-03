@@ -18,7 +18,10 @@ open Auctions.Actors
 open Auctions
 open FSharpPlus.Data
 open System.Text
-open Jose
+open System.IdentityModel.Tokens.Jwt
+open Microsoft.IdentityModel.Tokens
+open System.Security.Cryptography.X509Certificates
+open System.Runtime.InteropServices
 
 type Session =
   | NoSession
@@ -43,20 +46,41 @@ module JwtPayload=
 let context apply (a : Suave.Http.HttpContext) = apply a a
 let (|Bearer|_|) (s:string) =
   let bearer = "Bearer " in if s.StartsWith bearer then Some <| s.Substring(bearer.Length) else None
-let authenticatedWithJwt key alg f = //
+let authenticatedWithJwt (file:string, key:string, issuers:string list) f = //
+  let storageFlags=
+    // https://github.com/dotnet/aspnetcore/blob/master/src/Identity/ApiAuthorization.IdentityServer/src/Configuration/ConfigureSigningCredentials.cs
+    let unsafeEphemeralKeySet =  enum<X509KeyStorageFlags> 32
+    if RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
+      unsafeEphemeralKeySet
+    elif RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
+      X509KeyStorageFlags.PersistKeySet
+    else
+      X509KeyStorageFlags.DefaultKeySet
+  let cert = new X509Certificate2(file, key, storageFlags)
+  let credentials= SigningCredentials(X509SecurityKey(cert), "RS256")
+  let vp = TokenValidationParameters()
+  vp.IssuerSigningKeys <- [credentials.Key]
+  vp.ValidIssuers <- issuers
+  let jwth = JwtSecurityTokenHandler()
+  let (|ValidToken|_|) (token:string)=
+    try
+      if jwth.CanReadToken token then
+        let t =ref Unchecked.defaultof<SecurityToken>
+        jwth.ValidateToken(token, vp, t) |> ignore
+        let jwtToken = t.Value :?> JwtSecurityToken
+        Some jwtToken
+      else None
+    with | _ -> None // decoding failed
   context (fun x ->
     match x.request.header "Authorization" with
     | Choice1Of2 u ->
       match u with
-      | Bearer token->
-        try
-          JWT.Decode(token= token, key= key, alg= alg) // you will want to check exp, nbf in a real scenario
-          |> parseJson
-          |> Result.bind JwtPayload.decode
-          |> function | Ok user->f (UserLoggedOn(user))
-                      | Error _ ->f NoSession
-        with // decoding failed
-        | _ ->f NoSession
+      | Bearer (ValidToken jwtToken)->
+        jwtToken.RawData
+        |> parseJson
+        |> Result.bind JwtPayload.decode
+        |> function | Ok user->f (UserLoggedOn(user))
+                    | Error _ ->f NoSession
       | _ ->f NoSession
     | Choice2Of2 _ -> f NoSession)
 

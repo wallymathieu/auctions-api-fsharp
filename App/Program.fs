@@ -1,7 +1,6 @@
 ﻿module Auctions.Program
 open Suave
 open System
-open Jose
 
 open Auctions.Web
 open Auctions.Actors
@@ -18,8 +17,9 @@ type CmdArgs =
     Redis : string option
     Json : string option
     WebHook : Uri option
-    JwtAlg : JwsAlgorithm option
+    JwtPfx : string option
     JwtKey : string option
+    Issuers : string list
   }
 
 [<EntryPoint>]
@@ -28,8 +28,6 @@ let main argv =
   let args =
     let (|Port|_|) : _-> UInt16 option = tryParse
     let (|IPAddress|_|) :_->System.Net.IPAddress option = tryParse
-    let (|JwsAlgorithm|_|) (s:string) : JwsAlgorithm option =
-      match Enum.TryParse<JwsAlgorithm> s with | true,v->Some v | _ -> None
     let (|Uri|_|) (uri:string) :System.Uri option = try System.Uri uri |> Some with | _ -> None
     //default bind to 127.0.0.1:8083
     let defaultArgs =
@@ -38,8 +36,9 @@ let main argv =
         Redis = None
         Json = None
         WebHook = None
-        JwtAlg = None
+        JwtPfx = None
         JwtKey = None
+        Issuers = []
       }
     let envArgs = Env.vars () |> Env.envArgs "AUCTIONS_"
     let rec parseArgs b args =
@@ -49,8 +48,9 @@ let main argv =
       | "--port" :: Port p :: xs -> parseArgs { b with Port = p } xs
       | "--redis" :: conn :: xs -> parseArgs { b with Redis = Some conn } xs
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
-      | "--jwt-alg" :: JwsAlgorithm alg :: xs -> parseArgs { b with JwtAlg = Some alg } xs
+      | "--jwt-pfx" :: file :: xs -> parseArgs { b with JwtPfx = Some file } xs
       | "--jwt-key" :: key :: xs -> parseArgs { b with JwtKey = Some key } xs
+      | "--jwt-issuers" :: issuers :: xs -> parseArgs { b with Issuers = issuers.Split(';') |> Array.map String.trimWhiteSpaces |> List.ofArray } xs
       | "--web-hook" :: Uri url :: xs -> parseArgs { b with WebHook = Some url } xs
       | invalidArgs ->
         printfn "error: invalid arguments %A" invalidArgs
@@ -59,6 +59,9 @@ let main argv =
         printfn "    --port                 PORT        port (Default: %i)" defaultArgs.Port
         printfn "    --redis                CONN        redis connection string"
         printfn "    --json                 FILE        path to filename to store commands"
+        printfn "    --jwt-pfx              FILE        path to filename to with pfx"
+        printfn "    --jwt-key              PASSWORD    the password for the pfx file"
+        printfn "    --jwt-issuers          ISSUER[S]   list of jwt issuers separated by ;"
         printfn "    --web-hook             URI         web hook to receive commands and command results"
         exit 1
 
@@ -94,7 +97,11 @@ let main argv =
     Domain.Results [result] |> observer
   // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
   Domain.Commands [] |> observer
-  let authenticated = match args.JwtAlg,args.JwtKey with | Some alg,Some key -> authenticatedWithJwt key alg | _-> proxyAuthenticated
+  let authenticated =
+    match args.JwtPfx,args.JwtKey with
+    | Some file,Some key ->
+      authenticatedWithJwt (file, key, args.Issuers)
+    | _-> proxyAuthenticated
   let agent = AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart authenticated agent)
