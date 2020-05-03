@@ -18,7 +18,7 @@ open Auctions.Actors
 open Auctions
 open FSharpPlus.Data
 open System.Text
-(* Assuming front proxy verification of auth in order to simplify web testing *)
+open Jose
 
 type Session =
   | NoSession
@@ -33,20 +33,42 @@ with
     match json with
     | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
     | x -> Decode.Fail.objExpected x
-let authenticated f = //
-  let context apply (a : Suave.Http.HttpContext) = apply a a
+module JwtPayload=
+  let decode (payload:JwtPayload)=
+    let userId = UserId payload.subject
+    match payload.userType with
+    | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
+    | UserType.Support -> Support userId |> Ok
+    | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type"
+let context apply (a : Suave.Http.HttpContext) = apply a a
+let (|Bearer|_|) (s:string) =
+  let bearer = "Bearer " in if s.StartsWith bearer then Some <| s.Substring(bearer.Length) else None
+let authenticatedWithJwt key alg f = //
+  context (fun x ->
+    match x.request.header "Authorization" with
+    | Choice1Of2 u ->
+      match u with
+      | Bearer token->
+        try
+          JWT.Decode(token= token, key= key, alg= alg) // you will want to check exp, nbf in a real scenario
+          |> parseJson
+          |> Result.bind JwtPayload.decode
+          |> function | Ok user->f (UserLoggedOn(user))
+                      | Error _ ->f NoSession
+        with // decoding failed
+        | _ ->f NoSession
+      | _ ->f NoSession
+    | Choice2Of2 _ -> f NoSession)
+
+/// Assuming front proxy verification of auth in order to simplify web testing
+let proxyAuthenticated f = //
   context (fun x ->
     match x.request.header "x-jwt-payload" with
     | Choice1Of2 u ->
       Convert.FromBase64String u
       |>Encoding.UTF8.GetString
       |> parseJson
-      |> Result.bind( fun (payload:JwtPayload)->
-        let userId = UserId payload.subject
-        match payload.userType with
-        | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
-        | UserType.Support -> Support userId |> Ok
-        | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type")
+      |> Result.bind JwtPayload.decode
       |> function | Ok user->f (UserLoggedOn(user))
                   | Error _ ->f NoSession
     | Choice2Of2 _ -> f NoSession)
@@ -116,7 +138,7 @@ module ToJson=
       "winnerPrice" .= winnerPrice
     ] |> jobj
 
-let webPart (agent : AuctionDelegator) =
+let webPart authenticated (agent : AuctionDelegator) =
 
   let overview : WebPart= GET >=> fun (ctx) -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT

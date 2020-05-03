@@ -21,6 +21,7 @@
     <Compile Include="AuctionBidValidationTests.fs" />
     <Compile Include="ActorTests.fs" />
     <Compile Include="EnvironmentTest.fs" />
+    <Compile Include="StringTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
