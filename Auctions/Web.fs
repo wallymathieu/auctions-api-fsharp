@@ -18,9 +18,6 @@ open Auctions.Actors
 open Auctions
 open FSharpPlus.Data
 open System.Text
-open System.IdentityModel.Tokens.Jwt
-open Microsoft.IdentityModel.Tokens
-open System.Security.Cryptography.X509Certificates
 open System.Runtime.InteropServices
 
 type Session =
@@ -44,58 +41,66 @@ module JwtPayload=
     | UserType.Support -> Support userId |> Ok
     | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type"
 let context apply (a : Suave.Http.HttpContext) = apply a a
-let (|Bearer|_|) (s:string) =
-  let bearer = "Bearer " in if s.StartsWith bearer then Some <| s.Substring(bearer.Length) else None
-let authenticatedWithJwt (file:string, key:string, issuers:string list) f = //
-  let storageFlags=
-    // https://github.com/dotnet/aspnetcore/blob/master/src/Identity/ApiAuthorization.IdentityServer/src/Configuration/ConfigureSigningCredentials.cs
-    let unsafeEphemeralKeySet =  enum<X509KeyStorageFlags> 32
-    if RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
-      unsafeEphemeralKeySet
-    elif RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
-      X509KeyStorageFlags.PersistKeySet
-    else
-      X509KeyStorageFlags.DefaultKeySet
-  let cert = new X509Certificate2(file, key, storageFlags)
-  let credentials= SigningCredentials(X509SecurityKey(cert), "RS256")
-  let vp = TokenValidationParameters()
-  vp.IssuerSigningKeys <- [credentials.Key]
-  vp.ValidIssuers <- issuers
-  let jwth = JwtSecurityTokenHandler()
-  let (|ValidToken|_|) (token:string)=
-    try
-      if jwth.CanReadToken token then
-        let t =ref Unchecked.defaultof<SecurityToken>
-        jwth.ValidateToken(token, vp, t) |> ignore
-        let jwtToken = t.Value :?> JwtSecurityToken
-        Some jwtToken
-      else None
-    with | _ -> None // decoding failed
-  context (fun x ->
-    match x.request.header "Authorization" with
-    | Choice1Of2 u ->
-      match u with
-      | Bearer (ValidToken jwtToken)->
-        jwtToken.RawData
+module Security=
+  open System.IdentityModel.Tokens.Jwt
+  open Microsoft.IdentityModel.Tokens
+  open System.Security.Cryptography.X509Certificates
+  let (|Bearer|_|) (s:string) =
+    let bearer = "Bearer " in if s.StartsWith bearer then Some <| s.Substring(bearer.Length) else None
+  module Key=
+    let fromFile (file:string, key:string) =
+      let storageFlags=
+        // https://github.com/dotnet/aspnetcore/blob/master/src/Identity/ApiAuthorization.IdentityServer/src/Configuration/ConfigureSigningCredentials.cs
+        let unsafeEphemeralKeySet =  enum<X509KeyStorageFlags> 32
+        if RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
+          unsafeEphemeralKeySet
+        elif RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
+          X509KeyStorageFlags.PersistKeySet
+        else
+          X509KeyStorageFlags.DefaultKeySet
+      let cert = new X509Certificate2(file, key, storageFlags)
+      SigningCredentials(X509SecurityKey(cert), "RS256").Key
+    let fromString (s:string)=
+      SymmetricSecurityKey(Encoding.UTF8.GetBytes s) :> SecurityKey
+  let authenticatedWithJwt (signingKey:SecurityKey, issuers:string list) f = //
+    let vp = TokenValidationParameters()
+    vp.IssuerSigningKeys <- [signingKey]
+    vp.ValidIssuers <- issuers
+    let jwth = JwtSecurityTokenHandler()
+    let (|ValidToken|_|) (token:string)=
+      try
+        if jwth.CanReadToken token then
+          let t =ref Unchecked.defaultof<SecurityToken>
+          jwth.ValidateToken(token, vp, t) |> ignore
+          let jwtToken = t.Value :?> JwtSecurityToken
+          Some jwtToken
+        else None
+      with | _ -> None // decoding failed
+    context (fun x ->
+      match x.request.header "Authorization" with
+      | Choice1Of2 u ->
+        match u with
+        | Bearer (ValidToken jwtToken)->
+          jwtToken.RawData
+          |> parseJson
+          |> Result.bind JwtPayload.decode
+          |> function | Ok user->f (UserLoggedOn(user))
+                      | Error _ ->f NoSession
+        | _ ->f NoSession
+      | Choice2Of2 _ -> f NoSession)
+
+  /// Assuming front proxy verification of auth in order to simplify web testing
+  let proxyAuthenticated f = //
+    context (fun x ->
+      match x.request.header "x-jwt-payload" with
+      | Choice1Of2 u ->
+        Convert.FromBase64String u
+        |>Encoding.UTF8.GetString
         |> parseJson
         |> Result.bind JwtPayload.decode
         |> function | Ok user->f (UserLoggedOn(user))
                     | Error _ ->f NoSession
-      | _ ->f NoSession
-    | Choice2Of2 _ -> f NoSession)
-
-/// Assuming front proxy verification of auth in order to simplify web testing
-let proxyAuthenticated f = //
-  context (fun x ->
-    match x.request.header "x-jwt-payload" with
-    | Choice1Of2 u ->
-      Convert.FromBase64String u
-      |>Encoding.UTF8.GetString
-      |> parseJson
-      |> Result.bind JwtPayload.decode
-      |> function | Ok user->f (UserLoggedOn(user))
-                  | Error _ ->f NoSession
-    | Choice2Of2 _ -> f NoSession)
+      | Choice2Of2 _ -> f NoSession)
 
 module Paths =
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>

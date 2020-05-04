@@ -18,7 +18,7 @@ type CmdArgs =
     Json : string option
     WebHook : Uri option
     JwtPfx : string option
-    JwtKey : string option
+    JwtPfxKey : string option
     Issuers : string list
   }
 
@@ -37,7 +37,7 @@ let main argv =
         Json = None
         WebHook = None
         JwtPfx = None
-        JwtKey = None
+        JwtPfxKey = None
         Issuers = []
       }
     let envArgs = Env.vars () |> Env.envArgs "AUCTIONS_"
@@ -49,7 +49,7 @@ let main argv =
       | "--redis" :: conn :: xs -> parseArgs { b with Redis = Some conn } xs
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
       | "--jwt-pfx" :: file :: xs -> parseArgs { b with JwtPfx = Some file } xs
-      | "--jwt-key" :: key :: xs -> parseArgs { b with JwtKey = Some key } xs
+      | "--jwt-pfx-key" :: key :: xs -> parseArgs { b with JwtPfxKey = Some key } xs
       | "--jwt-issuers" :: issuers :: xs -> parseArgs { b with Issuers = issuers.Split(';') |> Array.map String.trimWhiteSpaces |> List.ofArray } xs
       | "--web-hook" :: Uri url :: xs -> parseArgs { b with WebHook = Some url } xs
       | invalidArgs ->
@@ -60,7 +60,7 @@ let main argv =
         printfn "    --redis                CONN        redis connection string"
         printfn "    --json                 FILE        path to filename to store commands"
         printfn "    --jwt-pfx              FILE        path to filename to with pfx"
-        printfn "    --jwt-key              PASSWORD    the password for the pfx file"
+        printfn "    --jwt-pfx-key          PASSWORD    the password for the pfx file"
         printfn "    --jwt-issuers          ISSUER[S]   list of jwt issuers separated by ;"
         printfn "    --web-hook             URI         web hook to receive commands and command results"
         exit 1
@@ -98,10 +98,11 @@ let main argv =
   // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
   Domain.Commands [] |> observer
   let authenticated =
-    match args.JwtPfx,args.JwtKey with
-    | Some file,Some key ->
-      authenticatedWithJwt (file, key, args.Issuers)
-    | _-> proxyAuthenticated
+    match args.JwtPfx, args.JwtPfxKey with
+    | Some file, Some key ->
+      let secKey=Security.Key.fromFile (file,key)
+      Security.authenticatedWithJwt (secKey, args.Issuers)
+    | _-> Security.proxyAuthenticated
   let agent = AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart authenticated agent)
