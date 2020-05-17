@@ -9,9 +9,8 @@ open Auctions.Suave.RequestErrors
 open Auctions.Security.Cryptography
 
 open Fleece
-open Fleece.FSharpData
-open Fleece.FSharpData.Operators
-open FSharp.Data
+open Fleece.SystemTextJson
+open Fleece.SystemTextJson.Operators
 
 open Auctions.Domain
 open Auctions.Actors
@@ -182,6 +181,7 @@ let webPart (agent : AuctionDelegator) =
                    pathScan Paths.Auction.placeBid placeBid ]
 
 module WebHook=
+  open FSharp.Data
   open FSharp.Data.HttpRequestHeaders
   open FSharp.Data.HttpContentTypes
   let isError (code:int) = code >=300 || code<200

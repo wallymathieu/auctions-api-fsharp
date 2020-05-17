@@ -3,7 +3,7 @@ open FSharpPlus
 open FSharpPlus.Operators
 open FSharpPlus.Data
 open Fleece
-open Fleece.FSharpData
+open Fleece.SystemTextJson
 
 /// The base monad in Suave is SuaveTask<HttpContext>
 type SuaveTask<'a> = OptionT<Async<'a option>>
@@ -76,7 +76,6 @@ module Request=
     ctx.request.rawForm |> System.Text.Encoding.UTF8.GetString
 
 module Json=
-  open FSharp.Data
   open Successful
   open RequestErrors
   open Writers

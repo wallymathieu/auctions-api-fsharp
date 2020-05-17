@@ -4,21 +4,22 @@ open Auctions.Domain
 open System.IO
 open System
 open Fleece
-open Fleece.FSharpData
-open FSharp.Data
+open Fleece.SystemTextJson
+open System.Text.Json
 
-type JsonAppendToFile(fileName) = 
+type JsonAppendToFile(fileName) =
   let notNull= not << isNull
   let fileDoesNotExist = not << File.Exists
   do
     if fileDoesNotExist fileName then File.WriteAllText(fileName, "")
 
   interface IAppendBatch with
-    member __.Batch cs = async{ 
+    member __.Batch cs = async{
       use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
       use w = new StreamWriter(fs)
+      use utf8w=new Utf8JsonWriter(fs)
       let json = toJson cs
-      json.WriteTo (w, JsonSaveOptions.DisableFormatting)
+      json.getValue().WriteTo (utf8w)
       do! w.WriteLineAsync()
       do! fs.FlushAsync()
       return ()
@@ -27,8 +28,8 @@ type JsonAppendToFile(fileName) =
       use fs = File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.Read)
       use r = new StreamReader(fs)
       let! lines = r.ReadToEndAsync()
-      let map line=
-        let p = FSharp.Data.JsonValue.Parse line
+      let map (line:string)=
+        let p = JsonValue.Parse( line)
         let k: Command array ParseResult = ofJson p
         match k with
         | Ok line ->line
