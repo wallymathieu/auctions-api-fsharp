@@ -1,8 +1,9 @@
-module Auctions.Program
+﻿module Auctions.Program
 open System
 
 open Auctions.Web
 open Auctions.Actors
+open Auctions.Environment
 open Auctions
 open FSharpPlus
 open FSharpPlus.Data
@@ -39,15 +40,6 @@ let configureLogging (loggerBuilder : ILoggingBuilder) =
     loggerBuilder.AddFilter(fun lvl -> lvl.Equals LogLevel.Error)
                  .AddConsole()
                  .AddDebug() |> ignore
-module Env=
-  let envArgs (prefix:string) =
-    let mangle (str:string) = Regex.Replace(str, "_", "-")
-    Seq.cast<DictEntry>( Environment.GetEnvironmentVariables())
-    |> Seq.map(fun kv-> (string kv.Key, string kv.Value) )
-    |> Seq.filter( fun (key, value) -> key.StartsWith(prefix, StringComparison.InvariantCultureIgnoreCase)
-                                       && not <| String.IsNullOrEmpty value)
-    |> Seq.collect( fun (key, value) -> [ "--"+ (mangle (key.Substring(0, prefix.Length))).ToLowerInvariant(); value ])
-    |> Seq.toList
 
 [<EntryPoint>]
 let main argv =
@@ -62,7 +54,7 @@ let main argv =
     let (|IPAddress|_|) :_->System.Net.IPAddress option = tryParse
     let (|Uri|_|) (uri:string) :System.Uri option = try System.Uri uri |> Some with | _ -> None
     //default bind to 127.0.0.1:8083
-    let envArgs = Env.envArgs "AUCTIONS_"
+    let envArgs = Env.vars () |> Env.envArgs "AUCTIONS_"
     let rec parseArgs b args =
       match args with
       | [] -> b
