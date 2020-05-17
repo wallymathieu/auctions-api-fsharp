@@ -65,6 +65,7 @@ module Paths =
 
 (* Json API *)
 module OfJson=
+  type Typ = Domain.Auctions.Type
   let bidReq (auctionId, user, at) json =
     let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
     match json with
@@ -77,7 +78,7 @@ module OfJson=
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
         let defaultTyp = TimedAscending { reservePrice=Amount.zero currency; minRaise =Amount.zero currency;
           timeFrame =TimeSpan.FromSeconds(0.0) }
-        let typ = typ |> Option.bind Type.tryParse
+        let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
         { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
     match json with

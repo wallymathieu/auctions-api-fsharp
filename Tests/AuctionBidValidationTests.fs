@@ -3,12 +3,13 @@
 open Auctions.Domain
 open System
 open Xunit
+open FSharpPlus
 
 module ``Auction Bid tests`` =
   let validBid = { id = BidId.New()
                    auction =auctionId
                    user=buyer
-                   amount =Amount.parse "SEK10"
+                   amount =parse "SEK10"
                    at = auction.startsAt.AddHours(1.0)
                  }
   let bidWithSameUser = { validBid with user=seller }

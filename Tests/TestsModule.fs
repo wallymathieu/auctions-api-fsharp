@@ -22,11 +22,6 @@ let auctionOfTyp typ : Auction =
 
 let auction : Auction = auctionOfTyp (SingleSealedBid Vickrey)
 
-module User=
-  let parse = User.__parse
-module Amount=
-  let parse = Amount.__parse
-
 let sek a =
   { value = a
     currency = Currency CurrencyCode.SEK }
@@ -44,13 +39,13 @@ let buyer2 = BuyerOrSeller(UserId "x3", "Buyer")
 let bid1 = { id = BidId.New()
              auction =auctionId
              user=buyer1
-             amount =Amount.parse "SEK10"
+             amount =parse "SEK10"
              at = startsAt.AddHours(1.0)
            }
 let bid2 = { id = BidId.New()
              auction =auctionId
              user=buyer2
-             amount =Amount.parse "SEK12"
+             amount =parse "SEK12"
              at = startsAt.AddHours(2.0)
            }
 
