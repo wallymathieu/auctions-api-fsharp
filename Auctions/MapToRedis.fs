@@ -7,11 +7,12 @@ open FSharpPlus
 open FSharpPlus.Data
 open FSharp.Codecs.Redis
 open FSharp.Codecs.Redis.Operators
+type Typ = Domain.Auctions.Type
 module DateTime=
   let ticks (d:DateTime)=d.Ticks
 open Redis
-let tryParseUser (u:RedisValue) =match string u |> User.tryParse with | Some v -> Ok v | None -> Decode.Fail.invalidValue u "InvalidUser"
-let tryParseType (t:RedisValue) =match string t |> Type.tryParse with | Some v -> Ok v | None -> Decode.Fail.invalidValue t "InvalidType"
+let tryParseUser (u:RedisValue) : Result<User,_> = match string u |> tryParse with | Some v -> Ok v | None -> Decode.Fail.invalidValue u "InvalidUser"
+let tryParseType (t:RedisValue) : Result<Typ,_> = match string t |> tryParse with | Some v -> Ok v | None -> Decode.Fail.invalidValue t "InvalidType"
 let addAuctionCodec =
   fun id title expiry startsAt at typ currency user -> (DateTime at, { id=AuctionId id;title=title; expiry =DateTime expiry; startsAt=DateTime startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
   <!> rreq "Id" (snd >> Auction.getId >> AuctionId.unwrap >> Some)

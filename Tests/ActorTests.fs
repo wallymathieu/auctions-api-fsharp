@@ -22,8 +22,8 @@ module ``Auction agent tests`` =
                   user = seller
                   currency=Currency.VAC
                   typ=TimedAscending { // let's start out with english auctions
-                    reservePrice=Amount.parse "VAC0"
-                    minRaise =Amount.parse "VAC0"
+                    reservePrice=parse "VAC0"
+                    minRaise =parse "VAC0"
                     timeFrame = TimeSpan.FromSeconds(0.0)
                   }
                 }
@@ -34,7 +34,7 @@ module ``Auction agent tests`` =
   let validBid = { id = BidId.New()
                    auction =auctionId
                    user=buyer
-                   amount =Amount.parse "VAC10"
+                   amount =parse "VAC10"
                    at = DateTime(2008,12,1)
                  }
   [<Fact>]
