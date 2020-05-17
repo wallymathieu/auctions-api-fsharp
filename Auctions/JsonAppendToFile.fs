@@ -17,9 +17,8 @@ type JsonAppendToFile(fileName) =
     member __.Batch cs = async{
       use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
       use w = new StreamWriter(fs)
-      use utf8w=new Utf8JsonWriter(fs)
       let json = toJson cs
-      json.getValue().WriteTo (utf8w)
+      do! w.WriteAsync (string json)
       do! w.WriteLineAsync()
       do! fs.FlushAsync()
       return ()
@@ -28,8 +27,8 @@ type JsonAppendToFile(fileName) =
       use fs = File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.Read)
       use r = new StreamReader(fs)
       let! lines = r.ReadToEndAsync()
-      let map (line:string)=
-        let p = JsonValue.Parse( line)
+      let map line=
+        let p = JsonValue.Parse line
         let k: Command array ParseResult = ofJson p
         match k with
         | Ok line ->line
