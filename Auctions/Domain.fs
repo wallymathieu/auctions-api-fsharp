@@ -85,7 +85,7 @@ type AuctionId = AuctionId of int64
 with
   override this.ToString()=match this with AuctionId aId->string aId
   static member OfJson json =AuctionId <!> ofJson json
-  static member ToJson (b:AuctionId) = toJson (string b)
+  static member ToJson (AuctionId aId) = toJson aId
 //Module AuctionId
   static member unwrap (AuctionId aId)=aId
 
