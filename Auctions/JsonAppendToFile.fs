@@ -28,8 +28,7 @@ type JsonAppendToFile(fileName) =
       use r = new StreamReader(fs)
       let! lines = r.ReadToEndAsync()
       let map line=
-        let p = FSharp.Data.JsonValue.Parse line
-        let k: Command array ParseResult = ofJson p
+        let k: Command array ParseResult = parseJson line
         match k with
         | Ok line ->line
         | Error err->failwithf "Couldn't parse line %O" err //TODO: Fix IAppendBatch interface
