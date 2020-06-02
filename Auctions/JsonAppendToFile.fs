@@ -7,14 +7,14 @@ open Fleece
 open Fleece.FSharpData
 open FSharp.Data
 
-type JsonAppendToFile(fileName) = 
+type JsonAppendToFile(fileName) =
   let notNull= not << isNull
   let fileDoesNotExist = not << File.Exists
   do
     if fileDoesNotExist fileName then File.WriteAllText(fileName, "")
 
   interface IAppendBatch with
-    member __.Batch cs = async{ 
+    member __.Batch cs = async{
       use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
       use w = new StreamWriter(fs)
       let json = toJson cs
@@ -28,8 +28,7 @@ type JsonAppendToFile(fileName) =
       use r = new StreamReader(fs)
       let! lines = r.ReadToEndAsync()
       let map line=
-        let p = FSharp.Data.JsonValue.Parse line
-        let k: Command array ParseResult = ofJson p
+        let k: Command array ParseResult = parseJson line
         match k with
         | Ok line ->line
         | Error err->failwithf "Couldn't parse line %O" err //TODO: Fix IAppendBatch interface

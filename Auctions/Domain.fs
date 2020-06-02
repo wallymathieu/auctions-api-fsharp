@@ -55,7 +55,7 @@ type User =
     | Support id -> id
 
   static member Regex = System.Text.RegularExpressions.Regex("(?<type>\w*)\|(?<id>[^|]*)(\|(?<name>.*))?")
-  static member tryParse user =
+  static member TryParse user =
     let m = User.Regex.Match(user)
     if m.Success then
       match (m.Groups.["type"].Value, m.Groups.["id"].Value, m.Groups.["name"].Value) with
@@ -63,8 +63,8 @@ type User =
       | "Support", id, _ -> Some (Support(UserId id))
       | type', _, _ -> None
     else None
-  static member __parse user = User.tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
-  static member OfJson json = User.tryParse <!> ofJson json >>= (Option.toResultWith <|
+  static member Parse user : User= tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
+  static member OfJson json : Result<User,_> = tryParse <!> ofJson json >>= (Option.toResultWith <|
                                                                   InvalidValue(typeof<Currency>, json, "Unable to interpret as user"))
   static member ToJson (x: User) = toJson (string x)
 
@@ -72,12 +72,12 @@ type User =
 type BidId = BidId of Guid
 with
   override this.ToString()=match this with BidId bId->bId.ToString("N")
-  static member OfJson json = BidId.tryParse <!> ofJson json >>= (Option.toResultWith <|
+  static member OfJson json = BidId.TryParse <!> ofJson json >>= (Option.toResultWith <|
                                                                   InvalidValue(typeof<BidId>, json, "Invalid bid id"))
   static member ToJson (b:BidId) = toJson (string b)
   static member New()= Guid.NewGuid() |> BidId
 //Module BidId
-  static member tryParse v : BidId option= tryParse v |> Option.map BidId
+  static member TryParse v : BidId option= tryParse v |> Option.map BidId
   static member unwrap (BidId bId)=bId
 
 [<Struct>]
@@ -85,7 +85,7 @@ type AuctionId = AuctionId of int64
 with
   override this.ToString()=match this with AuctionId aId->string aId
   static member OfJson json =AuctionId <!> ofJson json
-  static member ToJson (b:AuctionId) = toJson (string b)
+  static member ToJson (AuctionId aId) = toJson aId
 //Module AuctionId
   static member unwrap (AuctionId aId)=aId
 
@@ -97,21 +97,21 @@ type Amount =
   override this.ToString() =
     sprintf "%O%i" this.currency this.value
   static member Regex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
-  static member tryParse amount =
+  static member TryParse amount =
     let m = Amount.Regex.Match(amount)
     if m.Success then
       match (m.Groups.["currency"].Value, m.Groups.["value"].Value) with
       | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
       | type', _ -> None
     else None
-  static member __parse amount = Amount.tryParse amount |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" amount)
+  static member Parse amount : Amount= tryParse amount |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" amount)
   static member (+) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value + a2.value }
   static member (-) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
-  static member OfJson json = Amount.tryParse <!> ofJson json >>= (Option.toResultWith <|
+  static member OfJson json = Amount.TryParse <!> ofJson json >>= (Option.toResultWith <|
                                                                     InvalidValue(typeof<Currency>, json, "Unable to interpret as amount"))
   static member ToJson (x: Amount) = toJson (string x)
 
@@ -120,8 +120,8 @@ module Amount=
   let value (a:Amount) = a.value
   let zero c= { currency=c ; value=0L}
 
-let (|Amount|_|) = Amount.tryParse
-let (|Int64|_|) = tryParse
+let (|Amount|_|) : string -> Amount option = tryParse
+let (|Int64|_|) : string -> int64 option = tryParse
 
 module Timed =
   let atNow a = (DateTime.UtcNow, a)
@@ -170,7 +170,7 @@ module Auctions=
                                     (english.reservePrice) (english.minRaise) english.timeFrame.Ticks
       | SingleSealedBid Blind -> sprintf "Blind"
       | SingleSealedBid Vickrey -> sprintf "Vickrey"
-    static member tryParse typ =
+    static member TryParse typ =
       if String.IsNullOrEmpty typ then
         None
       else
@@ -183,8 +183,8 @@ module Auctions=
         | ["Blind"] -> Some (SingleSealedBid Blind)
         | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
         | _ -> None
-    static member __parse typ = Type.tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
-    static member OfJson json = Type.tryParse <!> ofJson json >>= (Option.toResultWith <|
+    static member Parse typ : Type = tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
+    static member OfJson json : Result<Type,_> = tryParse <!> ofJson json >>= (Option.toResultWith <|
                                                                     InvalidValue(typeof<Currency>, json, "unrecognized type"))
     static member ToJson (x:Type) = toJson (string x)
 

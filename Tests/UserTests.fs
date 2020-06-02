@@ -3,14 +3,14 @@ open Auctions.Domain
 open System
 open Xunit
 
-type ``Can parse user``() = 
-  
+type ``Can parse user``() =
+
   [<Fact>]
-  member test.``Buyer or seller``() = 
+  member test.``Buyer or seller``() =
     let user = BuyerOrSeller(Guid.NewGuid().ToString("N")|>UserId, "seller")
-    Assert.Equal(Some user, string user |> User.tryParse )
-  
+    Assert.Equal(Some user, string user |> User.TryParse )
+
   [<Fact>]
-  member test.Support() = 
+  member test.Support() =
     let user = Guid.NewGuid().ToString("N") |> UserId |> Support
-    Assert.Equal(Some user, string user |> User.tryParse)
+    Assert.Equal(Some user, string user |> User.TryParse)
