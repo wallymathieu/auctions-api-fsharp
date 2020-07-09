@@ -14,7 +14,7 @@ open Fleece.FSharpData
 open Fleece.FSharpData.Operators
 open FSharp.Data
 open FSharp.Control.Tasks.V2
-
+open Auctions.Giraffe.Json
 (* Assuming front proxy verification of auth in order to simplify web testing *)
 
 type Session =
