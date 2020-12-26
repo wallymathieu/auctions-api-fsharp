@@ -423,16 +423,7 @@ type Command =
   | AddAuction of DateTime * Auction
   | PlaceBid of DateTime * Bid
 
-  /// the time when the command was issued
-  static member getAt command =
-    match command with
-    | AddAuction(at, _) -> at
-    | PlaceBid(at, _) -> at
 
-  static member getAuction command =
-    match command with
-    | AddAuction(_,auction) -> auction.id
-    | PlaceBid(_,bid) -> bid.auction
   static member OfJson json =
     let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
     match json with
@@ -452,18 +443,58 @@ type Command =
     match x with
     | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]
     | PlaceBid (d,b)-> jobj [ "$type" .= "PlaceBid"; "at" .= d; "bid" .= b]
-type CommandSuccess =
+
+module Command =
+  /// the time when the command was issued
+  let getAt command =
+    match command with
+    | AddAuction(at, _) -> at
+    | PlaceBid(at, _) -> at
+
+  let getAuction command =
+    match command with
+    | AddAuction(_,auction) -> auction.id
+    | PlaceBid(_,bid) -> bid.auction
+
+type Event =
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
-  static member ToJson (x: CommandSuccess) =
+  static member OfJson json =
+    let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
+    match json with
+    | JObject o -> monad {
+        let! t = o .@ "$type"
+        match t with
+        | "AuctionAdded" ->
+          let create d a = AuctionAdded (d,a)
+          return! (create <!> (o .@ "at") <*> (o .@ "auction"))
+        | "BidAccepted" ->
+          let create d b = BidAccepted (d,b)
+          return! (create <!> (o .@ "at") <*> (o .@ "bid"))
+        | x -> return! (Decode.Fail.invalidValue json (sprintf "Expected one of: 'AuctionAdded', 'BidAccepted' for $type but %s" x))
+      }
+    | x -> Decode.Fail.objExpected json
+  static member ToJson (x: Event) =
     match x with
     | AuctionAdded (d,a)-> jobj [ "$type" .= "AuctionAdded"; "at" .= d; "auction" .= a]
     | BidAccepted (d,b)-> jobj [ "$type" .= "BidAccepted"; "at" .= d; "bid" .= b]
 
 
+module Event =
+  /// the time when the command was issued
+  let getAt event =
+    match event with
+    | AuctionAdded(at, _) -> at
+    | BidAccepted(at, _) -> at
+
+  let getAuction event =
+    match event with
+    | AuctionAdded(_,auction) -> auction.id
+    | BidAccepted(_,bid) -> bid.auction
+
 type Observable =
   | Commands of Command list
-  | Results of Result<CommandSuccess, Errors> list
+  | Results of Result<Event, Errors> list
   static member ToJson (x: Observable) =
     match x with
     | Commands commands->

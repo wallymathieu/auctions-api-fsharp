@@ -9,13 +9,13 @@ let exitOnException (e:exn)=
   printfn "Failed with exception %s, %s, exit!" e.Message e.StackTrace
   exit 1
 
-module PersistCommands=
-  let create(appendBatches : (Command list -> Async<unit>) list) =
+module PersistEvents=
+  let create(appendBatches : (Event list -> Async<unit>) list) =
     let mbox = MailboxProcessor.Start(fun inbox ->
        let rec messageLoop() =
          async {
-           let! command = inbox.Receive()
-           let toAppend = [command]
+           let! event = inbox.Receive()
+           let toAppend = [event]
            for appendBatch in appendBatches do
              do! appendBatch toAppend
            return! messageLoop()}
@@ -109,7 +109,16 @@ type private Repository ()=
 
   member __.Auctions() : (Auction*S) list =
     auctions.Values |> Seq.toList
-
+  member __.Receive = function
+    | AuctionAdded (_, auction)->
+      let empty =Auction.emptyState auction
+      auctions.Add ( auction.id, (auction,empty) )
+    | BidAccepted (_, b)->
+        match auctions.TryGetValue b.auction with
+        | true, (auction,state) ->
+          let (next,_)= S.addBid b state
+          auctions.[auction.id]<- (auction,next)
+        | false, _ -> failwith "could not find auction"
   member __.Handle = function
     | AddAuction (at,auction)->
       if auction.expiry > at && not (auctions.ContainsKey auction.id) then
@@ -132,7 +141,7 @@ module AuctionAgent=
 type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
 type DelegatorSignals =
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
-  | UserCommand of Command * AsyncReplyChannel<Result<CommandSuccess, Errors>>
+  | UserCommand of Command * AsyncReplyChannel<Result<Event, Errors>>
   | GetAuction of AuctionId *AsyncReplyChannel<AuctionAndBidsAndMaybeWinnerAndAmount option>
   | GetAuctions of AsyncReplyChannel<Auction list>
 
@@ -151,11 +160,11 @@ module AuctionDState=
      | _, _ -> HasEnded()
   let started auction agent :T= (auction ,Ongoing agent)
   let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
-type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResult) =
+type AuctionDelegator(events:Event list, onIncomingCommand, now, observeResult) =
   let agent =MailboxProcessor<DelegatorSignals>.Start(fun inbox ->
     let mutable agents = let _now =now()
                          let r = Repository()
-                         List.iter r.Handle commands
+                         List.iter r.Receive events
                          r.Auctions()
                          |> List.map (fun (auction,state)->
                                         let next =S.inc _now state
@@ -166,7 +175,7 @@ type AuctionDelegator(commands:Command list, onIncomingCommand, now, observeResu
                                       )
                          |> Map
 
-    let userCommand cmd (reply:AsyncReplyChannel<Result<CommandSuccess, Errors>>)=
+    let userCommand cmd (reply:AsyncReplyChannel<Result<Event, Errors>>)=
       let observeAndReply result=
          observeResult result
          reply.Reply result
