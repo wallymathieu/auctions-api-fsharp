@@ -18,7 +18,7 @@ let addAuctionCodec =
   <!> rreq "Id" (snd >> Auction.getId >> AuctionId.unwrap >> Some)
   <*> rreq "Title" (snd >> Auction.title >> Some)
   <*> rreq "Expiry" (snd >> Auction.expiry >> DateTime.ticks >> Some)
-  <*> rreq "StartsAt" (snd >> Auction.expiry >> DateTime.ticks >> Some)
+  <*> rreq "StartsAt" (snd >> Auction.startsAt >> DateTime.ticks >> Some)
   <*> rreq "At" (fst >> DateTime.ticks >> Some)
   <*> rreqWith (tryParseType, (string>>implicit)) "Typ" (snd >> Auction.typ >> Some)
   <*> rreq "Currency" (snd >> Auction.currency >> Currency.value >> Some)
