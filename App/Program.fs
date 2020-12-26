@@ -65,7 +65,7 @@ let main argv =
   let observers = seq {
     if Option.isSome args.WebHook then yield WebHook.ofUri args.WebHook.Value
   }
-  let commands = monad.plus {
+  let events = monad.plus {
                   for appender in appenders do
                     yield appender.ReadAll()
                  }
@@ -75,18 +75,19 @@ let main argv =
   let batchAppend = appenders
                     |> Seq.map (fun a->a.Batch)
                     |> List.ofSeq
-  let persist = PersistCommands.create batchAppend
+  let persist = PersistEvents.create batchAppend
   let observer = Observer.create <| Seq.toList observers
   let time ()= DateTime.UtcNow
   let onIncomingCommand command=
-    persist command
+    //persist command
     Domain.Commands [command] |> observer
   let observeCommandResult result =
+    match result with Ok r -> persist r | _ -> ()
     Domain.Results [result] |> observer
   // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
   Domain.Commands [] |> observer
 
-  let agent = AuctionDelegator.create(commands, onIncomingCommand, time, observeCommandResult)
+  let agent = AuctionDelegator.create(events, onIncomingCommand, time, observeCommandResult)
   // start suave
   startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
   0

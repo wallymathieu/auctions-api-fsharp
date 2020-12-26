@@ -2,5 +2,5 @@
 open Auctions.Domain
 
 type IAppendBatch =
-  abstract Batch : Command list -> Async<unit>
-  abstract ReadAll : unit -> Async<Command list>
+  abstract Batch : Event list -> Async<unit>
+  abstract ReadAll : unit -> Async<Event list>

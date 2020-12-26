@@ -28,7 +28,7 @@ type JsonAppendToFile(fileName) =
       use r = new StreamReader(fs)
       let! lines = r.ReadToEndAsync()
       let map line=
-        let k: Command array ParseResult = parseJson line
+        let k: Event array ParseResult = parseJson line
         match k with
         | Ok line ->line
         | Error err->failwithf "Couldn't parse line %O" err //TODO: Fix IAppendBatch interface
@@ -36,5 +36,5 @@ type JsonAppendToFile(fileName) =
       return splitLines lines
               |> Array.collect map
               |> Array.toList
-              |> List.sortBy Command.getAt
+              |> List.sortBy Event.getAt
     }
