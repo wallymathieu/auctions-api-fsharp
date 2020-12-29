@@ -12,6 +12,8 @@
     <Compile Include="AppendAndReadBatchRedis.fs" />
     <Compile Include="JsonAppendToFile.fs" />
     <Compile Include="Actors.fs" />
+    <Compile Include="V1.fs" />
+    <Compile Include="V2.fs" />
     <Compile Include="Web.fs" />
     <Compile Include="Environment.fs" />
   </ItemGroup>

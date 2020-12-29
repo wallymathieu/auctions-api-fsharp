@@ -64,75 +64,55 @@ module Paths =
     /// /auction/INT/bid
     let placeBid : Int64Path = "/auction/%d/bid"
 
-(* Json API *)
-module OfJson=
-  type Typ = Domain.Auctions.Type
-  let bidReq (auctionId, user, at) json =
-    let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
-    match json with
-    | JObject o -> create <!> (o .@ "amount")
-    | x -> Decode.Fail.objExpected x
-    |> Result.mapError string
-  let addAuctionReq (user) json =
-    let create id startsAt title endsAt (currency:string option) (typ:string option)
-      =
-        let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
-        let defaultTyp = TimedAscending { reservePrice=Amount.zero currency; minRaise =Amount.zero currency;
-          timeFrame =TimeSpan.FromSeconds(0.0) }
-        let typ = typ |> Option.bind Typ.TryParse
-                      |> Option.defaultValue defaultTyp
-        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
-    match json with
-    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
-                   <*> (o .@? "currency")<*> (o .@? "type")
-    | x -> Decode.Fail.objExpected x
-    |> Result.mapError string
+type IJsonConverter=
+  abstract member OfJsonBid: auctionId:AuctionId * user:User * at:DateTime -> json:JsonValue -> Result<Bid,string>
+  abstract member OfJsonAuction: user:User -> json:JsonValue -> Result<Auction,string>
+  abstract member ToJsonAuction: auction:Auction -> JsonValue
+  abstract member ToJsonAuctionAndBidsAndMaybeWinnerAndAmount: auction:Auction * Bid list * ('a * 'b) option -> JsonValue
+  //Auction * Bid list * ('a * 'b) option -> JsonValue
 
-module ToJson=
-  let auctionList (auction:Auction) =[
-      "id" .= auction.id
-      "startsAt" .= auction.startsAt
-      "title" .= auction.title
-      "expiry" .= auction.expiry
-      "currency" .= auction.currency
-    ]
-  let auction auction = auctionList auction |> jobj
-  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) : JsonValue =
-    let (winner,winnerPrice) =
-            match maybeAmountAndWinner with
-            | None -> ("","")
-            | Some (amount, winner)->
-                (winner.ToString(), amount.ToString())
-    let discloseBidders =Auction.biddersAreOpen auction
-    let bid (x: Bid) :JsonValue =
-      let userId = string x.user
-      jobj [
-        "amount" .= x.amount
-        "bidder" .= (if discloseBidders then userId else SHA512.ofString userId)
-      ]
-    let bids = (List.map bid bids |> List.toArray |> JArray)
-    auctionList auction @ [
-      "bids", bids
-      "winner" .= winner
-      "winnerPrice" .= winnerPrice
-    ] |> jobj
+(* Json API *)
+let V1Json = { new IJsonConverter with
+               member __.OfJsonBid (auctionId, user, at) json = V1.OfJson.bidReq (auctionId, user, at) json
+               member __.OfJsonAuction s json = V1.OfJson.addAuctionReq s json
+               member __.ToJsonAuction a = V1.ToJson.auction a
+               member __.ToJsonAuctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) =
+                 V1.ToJson.auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner)
+             }
+let V2Json = { new IJsonConverter with
+               member __.OfJsonBid (auctionId, user, at) json = V2.OfJson.bidReq (auctionId, user, at) json
+               member __.OfJsonAuction s json = V2.OfJson.addAuctionReq s json
+               member __.ToJsonAuction a = V2.ToJson.auction a
+               member __.ToJsonAuctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) =
+                 V2.ToJson.auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner)
+             }
+let versioned f = fun ctx ->
+  let version (ctx : Suave.Http.HttpContext) = //
+    match ctx.request.header "x-version" with
+    | Choice1Of2 "1" -> Some V1Json
+    | Choice1Of2 "2" -> Some V2Json
+    | Choice2Of2 _   -> Some V2Json
+    | _              -> None
+
+  match version ctx with
+  | Some jsonC -> f jsonC ctx
+  | None -> BAD_REQUEST "Invalid version" ctx
 
 let webPart (agent : AuctionDelegator) =
-
-  let overview : WebPart= GET >=> fun (ctx) -> monad {
+  let overview : WebPart= GET >=> versioned (fun jsonC ctx -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
-    let json = auctionList |> List.map ToJson.auction |> List.toArray |> JArray
+    let json = auctionList |> List.map jsonC.ToJsonAuction |> List.toArray |> JArray
     return! Json.OK json ctx
-  }
+  })
 
-  let details id : WebPart= GET >=> fun ctx->monad{
+  let details id : WebPart= GET >=> versioned (fun jsonC ctx -> monad{
     let id = AuctionId id
     let! auctionAndBids = lift (agent.GetAuction id)
     return!
        match auctionAndBids with
-       | Some v-> Json.OK (ToJson.auctionAndBidsAndMaybeWinnerAndAmount v) ctx
+       | Some v -> Json.OK (jsonC.ToJsonAuctionAndBidsAndMaybeWinnerAndAmount v) ctx
        | None -> NOT_FOUND (sprintf "Could not find auction with id %O" id) ctx
-  }
+  })
 
   /// handle command and add result to repository
   let handleCommandAsync
@@ -144,8 +124,8 @@ let webPart (agent : AuctionDelegator) =
           match! lift asyncResult with
           | Ok commandSuccess->
             return! Json.OK (toJson commandSuccess) ctx
-          | Error e-> return! Json.BAD_REQUEST (toJson e) ctx
-      | Error c'->return! Json.BAD_REQUEST (toJson c') ctx
+          | Error e -> return! Json.BAD_REQUEST (toJson e) ctx
+      | Error c' -> return! Json.BAD_REQUEST (toJson c') ctx
     }
 
   /// register auction
