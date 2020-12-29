@@ -66,7 +66,7 @@ module Paths =
 
 (* Json API *)
 module OfJson=
-  type Typ = Domain.Auctions.Type
+  type Typ = Domain.Type
   let bidReq (auctionId, user, at) json =
     let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
     match json with
@@ -142,8 +142,8 @@ let webPart (agent : AuctionDelegator) =
       match agent.UserCommand <!> command with
       | Ok asyncResult->
           match! lift asyncResult with
-          | Ok commandSuccess->
-            return! Json.OK (toJson commandSuccess) ctx
+          | Ok events->
+            return! Json.OK (toJson <| V2.Event events) ctx
           | Error e-> return! Json.BAD_REQUEST (toJson e) ctx
       | Error c'->return! Json.BAD_REQUEST (toJson c') ctx
     }

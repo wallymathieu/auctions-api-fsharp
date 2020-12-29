@@ -7,6 +7,8 @@
     <Compile Include="Security.Cryptography.fs" />
     <Compile Include="Suave.fs" />
     <Compile Include="Domain.fs" />
+    <Compile Include="V1.fs" />
+    <Compile Include="V2.fs" />
     <Compile Include="AppendBatch.fs" />
     <Compile Include="MapToRedis.fs" />
     <Compile Include="AppendAndReadBatchRedis.fs" />
