@@ -23,7 +23,7 @@ module PersistMbox=
 
     mbox.Error.Add exitOnException
 
-    fun command -> mbox.Post(command)
+    mbox.Post
 
 module Observer=
   let create<'t>(observers : ('t-> Async<unit>) list) =
@@ -38,7 +38,7 @@ module Observer=
 
     mbox.Error.Add exitOnException
 
-    fun (input:'t) -> mbox.Post(input)
+    mbox.Post
 
 type AuctionEnded = (Amount * User) option
 
@@ -235,7 +235,7 @@ type AuctionDelegator(auctions: (Auction*S) list, onIncomingCommand, now, observ
     agent.Error.Add exitOnException
   member __.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
   member __.WakeUp () = agent.PostAndAsyncReply WakeUp
-  member __.GetAuctions ()= agent.PostAndAsyncReply(fun reply -> GetAuctions(reply))
+  member __.GetAuctions ()= agent.PostAndAsyncReply(GetAuctions)
   member __.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
 module AuctionDelegator=
   let create r = AuctionDelegator r
