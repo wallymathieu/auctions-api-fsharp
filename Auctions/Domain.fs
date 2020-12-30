@@ -4,9 +4,6 @@ open System
 open System.ComponentModel
 
 open FSharp.Data
-open Fleece
-open Fleece.FSharpData
-open Fleece.FSharpData.Operators
 
 open FSharpPlus
 open FSharpPlus.Data
@@ -26,14 +23,11 @@ with
     let unwrap (Currency c) = c
     Enum.GetName (typeof<CurrencyCode>, unwrap x)
 
-  static member OfJson json = Currency.tryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                       InvalidValue(typeof<Currency>, json, "Unable to interpret as currency"))
-  static member ToJson (x: Currency) = toJson (string x)
-//module Currency=
-  static member tryParse c : Currency option= tryParse c |> Option.map Currency
-  static member VAC = Currency CurrencyCode.VAC
-  static member value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
-  static member inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
+module Currency=
+  let tryParse c : Currency option= tryParse c |> Option.map Currency
+  let VAC = Currency CurrencyCode.VAC
+  let value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
+  let inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
 
 [<Struct>]
 type UserId = UserId of string
@@ -64,17 +58,11 @@ type User =
       | type', _, _ -> None
     else None
   static member Parse user : User= tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
-  static member OfJson json : Result<User,_> = tryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                  InvalidValue(typeof<Currency>, json, "Unable to interpret as user"))
-  static member ToJson (x: User) = toJson (string x)
 
 [<Struct>]
 type BidId = BidId of Guid
 with
   override this.ToString()=match this with BidId bId->bId.ToString("N")
-  static member OfJson json = BidId.TryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                  InvalidValue(typeof<BidId>, json, "Invalid bid id"))
-  static member ToJson (b:BidId) = toJson (string b)
   static member New()= Guid.NewGuid() |> BidId
 //Module BidId
   static member TryParse v : BidId option= tryParse v |> Option.map BidId
@@ -84,8 +72,6 @@ with
 type AuctionId = AuctionId of int64
 with
   override this.ToString()=match this with AuctionId aId->string aId
-  static member OfJson json =AuctionId <!> ofJson json
-  static member ToJson (AuctionId aId) = toJson aId
 //Module AuctionId
   static member unwrap (AuctionId aId)=aId
 
@@ -111,9 +97,6 @@ type Amount =
   static member (-) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
-  static member OfJson json = Amount.TryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                    InvalidValue(typeof<Currency>, json, "Unable to interpret as amount"))
-  static member ToJson (x: Amount) = toJson (string x)
 
 module Amount=
   let currency (a:Amount) = a.currency
@@ -152,41 +135,39 @@ module Auctions=
     /// rather than his or her own
     |Vickrey
 
-  type Type=
-     /// also known as an open ascending price auction
-     /// The auction ends when no participant is willing to bid further
-     | TimedAscending of TimedAscendingOptions
-     | SingleSealedBid of SingleSealedBidOptions
-     // | Swedish : same as english, but bidders are not bound by bids and the seller is free to accept or decline any bid
-     // this is a distinction compared to the English auction with open exit rule
-     // | Dutch of DutchOptions : since this presumes a different kind of model
-     // we could model this as first bid ends auction
-     // the time of the bid implies the price
+/// Type of auction
+type Type=
+   /// also known as an open ascending price auction
+   /// The auction ends when no participant is willing to bid further
+   | TimedAscending of TimedAscendingOptions
+   | SingleSealedBid of SingleSealedBidOptions
+   // | Swedish : same as english, but bidders are not bound by bids and the seller is free to accept or decline any bid
+   // this is a distinction compared to the English auction with open exit rule
+   // | Dutch of DutchOptions : since this presumes a different kind of model
+   // we could model this as first bid ends auction
+   // the time of the bid implies the price
 
-    with
-    override this.ToString() =
-      match this with
-      | TimedAscending english -> sprintf "English|%O|%O|%d"
-                                    (english.reservePrice) (english.minRaise) english.timeFrame.Ticks
-      | SingleSealedBid Blind -> sprintf "Blind"
-      | SingleSealedBid Vickrey -> sprintf "Vickrey"
-    static member TryParse typ =
-      if String.IsNullOrEmpty typ then
-        None
-      else
-        match (typ.Split('|') |> Seq.toList) with
-        | "English"::(Amount reservePrice)::(Amount minRaise):: (Int64 timeframe) :: [] ->
-           Some (TimedAscending {
-                  reservePrice=reservePrice
-                  minRaise=minRaise
-                  timeFrame=TimeSpan.FromTicks(timeframe) })
-        | ["Blind"] -> Some (SingleSealedBid Blind)
-        | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
-        | _ -> None
-    static member Parse typ : Type = tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
-    static member OfJson json : Result<Type,_> = tryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                    InvalidValue(typeof<Currency>, json, "unrecognized type"))
-    static member ToJson (x:Type) = toJson (string x)
+  with
+  override this.ToString() =
+    match this with
+    | TimedAscending english -> sprintf "English|%O|%O|%d"
+                                  (english.reservePrice) (english.minRaise) english.timeFrame.Ticks
+    | SingleSealedBid Blind -> sprintf "Blind"
+    | SingleSealedBid Vickrey -> sprintf "Vickrey"
+  static member TryParse typ =
+    if String.IsNullOrEmpty typ then
+      None
+    else
+      match (typ.Split('|') |> Seq.toList) with
+      | "English"::(Amount reservePrice)::(Amount minRaise):: (Int64 timeframe) :: [] ->
+         Some (TimedAscending {
+                reservePrice=reservePrice
+                minRaise=minRaise
+                timeFrame=TimeSpan.FromTicks(timeframe) })
+      | ["Blind"] -> Some (SingleSealedBid Blind)
+      | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
+      | _ -> None
+  static member Parse typ : Type = tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
 
 type Auction =
   { id : AuctionId
@@ -198,17 +179,6 @@ type Auction =
     typ : Type
     currency:Currency
   }
-with
-  static member JsonObjCodec =
-    fun id startsAt title expiry user typ currency -> { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
-    |> withFields
-    |> jfield "id"      (fun x -> x.id)
-    |> jfield "startsAt" (fun x -> x.startsAt)
-    |> jfield "title"    (fun x -> x.title)
-    |> jfield "expiry"  (fun x -> x.expiry)
-    |> jfield "user"      (fun x -> x.user)
-    |> jfield "type"      (fun x -> x.typ)
-    |> jfield "currency"  (fun x -> x.currency)
 
 type Bid =
   { id : BidId
@@ -217,15 +187,6 @@ type Bid =
     amount : Amount
     at : DateTime
   }
-with
-  static member JsonObjCodec =
-    fun id auction user amount at-> { id =id; auction =auction; user = user; amount=amount; at=at }
-    |> withFields
-    |> jfield "id"      (fun x -> x.id)
-    |> jfield "auction" (fun x -> x.auction)
-    |> jfield "user"    (fun x -> x.user)
-    |> jfield "amount"  (fun x -> x.amount)
-    |> jfield "at"      (fun x -> x.at)
 
 [<RequireQualifiedAccess>]
 module Bid=
@@ -247,20 +208,6 @@ type Errors =
   | InvalidUserData of String
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
-  static member ToJson (x: Errors) =
-    match x with
-    | UnknownAuction a-> jobj [ "type".="UnknownAuction"; "auctionId" .= a] //NOTE: Duplicate
-    | UnknownBid b-> jobj [ "type".="UnknownBid"; "bidId" .= b]
-    | BidAlreadyExists b-> jobj [ "type".="BidAlreadyExists"; "bidId" .= b]
-    | AuctionAlreadyExists a-> jobj [ "type".="AuctionAlreadyExists"; "auctionId" .= a]
-    | AuctionHasEnded a-> jobj [ "type".="AuctionHasEnded"; "auctionId" .= a]
-    | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
-    | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
-    | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
-    | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .= c]
-    | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
-    | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
-    | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
 
 [<RequireQualifiedAccess>]
 module Auction=
@@ -423,6 +370,109 @@ module State=
 type Command =
   | AddAuction of DateTime * Auction
   | PlaceBid of DateTime * Bid
+
+module Command =
+  /// the time when the command was issued
+  let getAt command =
+    match command with
+    | AddAuction(at, _) -> at
+    | PlaceBid(at, _) -> at
+
+  let getAuction command =
+    match command with
+    | AddAuction(_,auction) -> auction.id
+    | PlaceBid(_,bid) -> bid.auction
+
+type Event =
+  | AuctionAdded of DateTime * Auction
+  | BidAccepted of DateTime * Bid
+
+module Event =
+  /// the time when the event was sent
+  let getAt event =
+    match event with
+    | AuctionAdded(at, _) -> at
+    | BidAccepted(at, _) -> at
+
+  let getAuction event =
+    match event with
+    | AuctionAdded(_,auction) -> auction.id
+    | BidAccepted(_,bid) -> bid.auction
+
+type Observable =
+  | Commands of Command list
+  | Results of Result<Event, Errors> list
+
+
+open Fleece
+open Fleece.FSharpData
+open Fleece.FSharpData.Operators
+
+type Currency with
+  static member OfJson json = Currency.tryParse <!> ofJson json >>= (Option.toResultWith <|
+                                                                      InvalidValue(typeof<Currency>, json, "Unable to interpret as currency"))
+  static member ToJson (x: Currency) = toJson (string x)
+
+type User with
+  static member OfJson json : Result<User,_> = tryParse <!> ofJson json >>= (Option.toResultWith <|
+                                                                 InvalidValue(typeof<Currency>, json, "Unable to interpret as user"))
+  static member ToJson (x: User) = toJson (string x)
+
+type BidId with
+  static member OfJson json = BidId.TryParse <!> ofJson json >>= (Option.toResultWith <|
+                                                                 InvalidValue(typeof<BidId>, json, "Invalid bid id"))
+  static member ToJson (b: BidId) = toJson (string b)
+
+type AuctionId with
+  static member OfJson json =AuctionId <!> ofJson json
+  static member ToJson (AuctionId aId) = toJson aId
+
+type Amount with
+  static member OfJson json = Amount.TryParse <!> ofJson json >>= (Option.toResultWith <|
+                                                                   InvalidValue(typeof<Currency>, json, "Unable to interpret as amount"))
+  static member ToJson (x: Amount) = toJson (string x)
+
+type Type with
+  static member OfJson json : Result<Type,_> = tryParse <!> ofJson json >>= (Option.toResultWith <|
+                                                                 InvalidValue(typeof<Currency>, json, "unrecognized type"))
+  static member ToJson (x: Type) = toJson (string x)
+type Errors with
+  static member ToJson (x: Errors) =
+    match x with
+    | UnknownAuction a-> jobj [ "type".="UnknownAuction"; "auctionId" .= a] //NOTE: Duplicate
+    | UnknownBid b-> jobj [ "type".="UnknownBid"; "bidId" .= b]
+    | BidAlreadyExists b-> jobj [ "type".="BidAlreadyExists"; "bidId" .= b]
+    | AuctionAlreadyExists a-> jobj [ "type".="AuctionAlreadyExists"; "auctionId" .= a]
+    | AuctionHasEnded a-> jobj [ "type".="AuctionHasEnded"; "auctionId" .= a]
+    | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
+    | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
+    | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
+    | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .= c]
+    | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
+    | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
+    | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
+
+type Auction with
+  static member JsonObjCodec =
+    fun id startsAt title expiry user typ currency -> { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
+    |> withFields
+    |> jfield "id"        (fun x -> x.id)
+    |> jfield "startsAt"  (fun x -> x.startsAt)
+    |> jfield "title"     (fun x -> x.title)
+    |> jfield "expiry"    (fun x -> x.expiry)
+    |> jfield "user"      (fun x -> x.user)
+    |> jfield "type"      (fun x -> x.typ)
+    |> jfield "currency"  (fun x -> x.currency)
+type Bid with
+  static member JsonObjCodec =
+    fun id auction user amount at-> { id =id; auction =auction; user = user; amount=amount; at=at }
+    |> withFields
+    |> jfield "id"      (fun x -> x.id)
+    |> jfield "auction" (fun x -> x.auction)
+    |> jfield "user"    (fun x -> x.user)
+    |> jfield "amount"  (fun x -> x.amount)
+    |> jfield "at"      (fun x -> x.at)
+type Command with
   static member OfJson json =
     match json with
     | JObject o -> monad {
@@ -442,21 +492,7 @@ type Command =
     | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]
     | PlaceBid (d,b)-> jobj [ "$type" .= "PlaceBid"; "at" .= d; "bid" .= b]
 
-  /// the time when the command was issued
-  static member getAt command =
-    match command with
-    | AddAuction(at, _) -> at
-    | PlaceBid(at, _) -> at
-
-  static member getAuction command =
-    match command with
-    | AddAuction(_,auction) -> auction.id
-    | PlaceBid(_,bid) -> bid.auction
-
-type Event =
-  | AuctionAdded of DateTime * Auction
-  | BidAccepted of DateTime * Bid
-
+type Event with
   static member OfJson json =
     match json with
     | JObject o -> monad {
@@ -476,27 +512,13 @@ type Event =
     | AuctionAdded (d,a)-> jobj [ "$type" .= "AuctionAdded"; "at" .= d; "auction" .= a]
     | BidAccepted (d,b)-> jobj [ "$type" .= "BidAccepted"; "at" .= d; "bid" .= b]
 
-
-module Event =
-  /// the time when the command was issued
-  let getAt event =
-    match event with
-    | AuctionAdded(at, _) -> at
-    | BidAccepted(at, _) -> at
-
-  let getAuction event =
-    match event with
-    | AuctionAdded(_,auction) -> auction.id
-    | BidAccepted(_,bid) -> bid.auction
-
-type Observable =
-  | Commands of Command list
-  | Results of Result<Event, Errors> list
-  static member ToJson (x: Observable) =
+type Observable with
+  static member ToJson (x:Observable) =
     match x with
     | Commands commands->
       jobj [ "$type" .= "Commands"; "commands" .= commands]
     | Results results->
-      let mapToJson = function | Ok o-> JArray [|JString "Ok"; toJson o|] | Error e->JArray [JString "Error";toJson e]
+      let mapToJson = function | Ok o-> JArray [|JString "Ok"; toJson  o |] | Error e->JArray [JString "Error";toJson e]
       let jresults = results |> List.map mapToJson |> List.toArray |> JArray
       jobj [ "$type" .= "Results"; "results", jresults]
+

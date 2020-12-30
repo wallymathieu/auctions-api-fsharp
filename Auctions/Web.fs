@@ -66,7 +66,7 @@ module Paths =
 
 (* Json API *)
 module OfJson=
-  type Typ = Domain.Auctions.Type
+  type Typ = Domain.Type
   let bidReq (auctionId, user, at) json =
     let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
     match json with
