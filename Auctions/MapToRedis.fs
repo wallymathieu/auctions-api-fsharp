@@ -7,7 +7,7 @@ open FSharpPlus
 open FSharpPlus.Data
 open FSharp.Codecs.Redis
 open FSharp.Codecs.Redis.Operators
-type Typ = Domain.Auctions.Type
+type Typ = Domain.Type
 module DateTime=
   let ticks (d:DateTime)=d.Ticks
 open Redis

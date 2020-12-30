@@ -1,6 +1,6 @@
 ﻿namespace Auctions
 open Auctions.Domain
 
-type IAppendBatch =
-  abstract Batch : Event list -> Async<unit>
-  abstract ReadAll : unit -> Async<Event list>
+type IAppendBatch<'T> =
+  abstract Batch : 'T list -> Async<unit>
+  abstract ReadAll : unit -> Async<'T list>

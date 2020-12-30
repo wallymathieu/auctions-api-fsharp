@@ -382,7 +382,25 @@ module Command =
     match command with
     | AddAuction(_,auction) -> auction.id
     | PlaceBid(_,bid) -> bid.auction
-
+  let foldToMap commands =
+    let folder auctions =
+          function
+          | AddAuction (at,auction)->
+            if auction.expiry > at && not (Map.containsKey auction.id auctions) then
+              let empty =Auction.emptyState auction
+              Map.add auction.id (auction,empty) auctions
+            else
+              auctions
+          | PlaceBid (_,b)->
+              match auctions.TryGetValue b.auction with
+              | true, (auction,state) ->
+                match Auction.validateBid b auction with
+                | Ok _ ->
+                  let (next,_)= S.addBid b state
+                  Map.add auction.id (auction, next) auctions
+                | Error _ -> auctions
+              | false, _ -> auctions
+    (Map.empty, commands) ||> List.fold folder
 type Event =
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
@@ -399,10 +417,22 @@ module Event =
     | AuctionAdded(_,auction) -> auction.id
     | BidAccepted(_,bid) -> bid.auction
 
+  let foldToMap events =
+    let folder auctions =
+          function
+          | AuctionAdded (_, auction)->
+            let empty =Auction.emptyState auction
+            Map.add auction.id (auction,empty) auctions
+          | BidAccepted (_, b)->
+              match Map.tryFind b.auction auctions with
+              | Some (auction,state) ->
+                let (next, _)= S.addBid b state
+                Map.add auction.id (auction, next) auctions
+              | None -> failwith "could not find auction"
+    (Map.empty, events) ||> List.fold folder
 type Observable =
   | Commands of Command list
   | Results of Result<Event, Errors> list
-
 
 open Fleece
 open Fleece.FSharpData
