@@ -423,10 +423,7 @@ module State=
 type Command =
   | AddAuction of DateTime * Auction
   | PlaceBid of DateTime * Bid
-
-
   static member OfJson json =
-    let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
     match json with
     | JObject o -> monad {
         let! t = o .@ "$type"
@@ -445,14 +442,13 @@ type Command =
     | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]
     | PlaceBid (d,b)-> jobj [ "$type" .= "PlaceBid"; "at" .= d; "bid" .= b]
 
-module Command =
   /// the time when the command was issued
-  let getAt command =
+  static member getAt command =
     match command with
     | AddAuction(at, _) -> at
     | PlaceBid(at, _) -> at
 
-  let getAuction command =
+  static member getAuction command =
     match command with
     | AddAuction(_,auction) -> auction.id
     | PlaceBid(_,bid) -> bid.auction
@@ -460,8 +456,8 @@ module Command =
 type Event =
   | AuctionAdded of DateTime * Auction
   | BidAccepted of DateTime * Bid
+
   static member OfJson json =
-    let create id startsAt title expiry user typ currency= { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
     match json with
     | JObject o -> monad {
         let! t = o .@ "$type"
