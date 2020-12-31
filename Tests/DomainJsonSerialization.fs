@@ -4,6 +4,8 @@ open Auctions.Domain
 
 open System
 open Xunit
+open FsCheck
+open FsCheck.Xunit
 open Fleece.FSharpData
 
 let sampleLines = """
@@ -26,3 +28,25 @@ let ``Can deserialize existing commands``() =
   let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
   splitLines sampleLines
             |> Array.iter parseLine
+
+[<Property>]
+let ``serialized bids are the same as the input bids`` (bid: Bid) =
+  let json = toJson bid |> string
+  let deserialized = parseJson json
+  (Ok bid) = deserialized
+[<Property>]
+let ``serialized auctions are the same as the input auctions`` (auction: Auction) =
+  let json = toJson auction |> string
+  let deserialized = parseJson json
+  (Ok auction) = deserialized
+[<Property>]
+let ``serialized commands are the same as the input commands`` (command: Command) =
+  let json = toJson auction |> string
+  let deserialized = parseJson json
+  (Ok command) = deserialized
+[<Property>]
+let ``serialized events are the same as the input commands`` (event: Event) =
+  let json = toJson auction |> string
+  let deserialized = parseJson json
+  (Ok event) = deserialized
+
