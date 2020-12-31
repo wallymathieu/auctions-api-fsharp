@@ -382,6 +382,8 @@ module Command =
     match command with
     | AddAuction(_,auction) -> auction.id
     | PlaceBid(_,bid) -> bid.auction
+
+  /// Fold to map of auction that contains both the auction and state
   let foldToMap commands =
     let folder auctions =
           function
@@ -417,6 +419,7 @@ module Event =
     | AuctionAdded(_,auction) -> auction.id
     | BidAccepted(_,bid) -> bid.auction
 
+  /// Fold to map of auction that contains both the auction and state
   let foldToMap events =
     let folder auctions =
           function
