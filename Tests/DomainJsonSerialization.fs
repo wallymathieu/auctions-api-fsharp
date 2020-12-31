@@ -1,8 +1,10 @@
 module Tests.DomainJsonSerialization
-
-open Auctions.Domain
-
 open System
+
+open System.Globalization
+open Auctions.Domain
+open Auctions
+
 open Xunit
 open FsCheck
 open FsCheck.Xunit
@@ -28,25 +30,66 @@ let ``Can deserialize existing commands``() =
   let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
   splitLines sampleLines
             |> Array.iter parseLine
+[<Fact>]
+let ``Bid can be deserialized correctly``() =
+  let bidJson = """{"id":"8f6e4c445ee443a49006a0f8f3a04ba1","auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}"""
+  let b : Bid ParseResult = parseJson bidJson
+  match b with
+  | Ok bid->
+    Assert.Equal (BidId <| Guid.Parse "8f6e4c445ee443a49006a0f8f3a04ba1", bid.id)
+    Assert.Equal (AuctionId <| 1L, bid.auction)
+    Assert.Equal (BuyerOrSeller (UserId "a2","Buyer"), bid.user)
+    Assert.Equal (Amount.Parse "VAC11", bid.amount)
+    let expectedAt = DateTime.ParseExact ("2020-05-17T08:05:59.171Z", [| "yyyy-MM-ddTHH:mm:ss.fffZ"; |], null, DateTimeStyles.RoundtripKind)
+    Assert.Equal (expectedAt, bid.at)
+  | Error e -> failwith "%A" e
+[<Fact>]
+let ``Auction can be deserialized correctly``() =
+  let bidJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}"""
+  let a : Auction ParseResult = parseJson bidJson
+  match a with
+  | Ok auction->
+    Assert.Equal (AuctionId <| 2L, auction.id)
+    Assert.Equal (BuyerOrSeller (UserId "a1","Test"), auction.user)
+    let expectedAt = DateTime.ParseExact ("2018-12-01T10:00:00.000Z", [| "yyyy-MM-ddTHH:mm:ss.fffZ"; |], null, DateTimeStyles.RoundtripKind)
+    Assert.Equal (expectedAt, auction.startsAt)
+    Assert.Equal ("Some auction", auction.title)
+    Assert.Equal (Currency.VAC, auction.currency)
+    Assert.Equal (Type.Parse "English|VAC0|VAC0|0", auction.typ)
+  | Error e -> failwith "%A" e
+
+let inline roundtripEq (isEq: 'a -> 'a -> bool) p =
+    let actual = p |> toJson |> ofJson
+    let ok =
+        match actual with
+        | Ok actual -> isEq actual p
+        | _ -> false
+    if not ok then printfn "Got %A from %A" actual p
+    ok
+
+let inline roundtrip p = roundtripEq (=) p
 
 [<Property>]
-let ``serialized bids are the same as the input bids`` (bid: Bid) =
-  let json = toJson bid |> string
-  let deserialized = parseJson json
-  (Ok bid) = deserialized
+let ``serialized datetime is the same as the input`` (d: DateTime) = roundtrip d
 [<Property>]
-let ``serialized auctions are the same as the input auctions`` (auction: Auction) =
-  let json = toJson auction |> string
-  let deserialized = parseJson json
-  (Ok auction) = deserialized
+let ``serialized Currency is the same as the input`` (u: Currency) = roundtrip u
+(*[<Property>]
+let ``serialized User is the same as the input`` (NonNull id) (NonNull name) = roundtrip (BuyerOrSeller (UserId id,name)) *)
 [<Property>]
-let ``serialized commands are the same as the input commands`` (command: Command) =
-  let json = toJson auction |> string
-  let deserialized = parseJson json
-  (Ok command) = deserialized
+let ``serialized BidId is the same as the input`` (u: BidId) = roundtrip u
 [<Property>]
-let ``serialized events are the same as the input commands`` (event: Event) =
-  let json = toJson auction |> string
-  let deserialized = parseJson json
-  (Ok event) = deserialized
+let ``serialized AuctionId is the same as the input`` (u: AuctionId) = roundtrip u
+[<Property>]
+let ``serialized Amount is the same as the input`` (PositiveInt u) c = roundtrip ({ value =int64 u; currency=c })
+(*[<Property>]
+let ``serialized Type is the same as the input`` (u: Type) = roundtrip u *)
+(*[<Property>]
+let ``serialized bids are the same as the input bids`` id a user (PositiveInt u) c (PositiveInt at)=
+  roundtrip { id=id; auction=a; user=user; amount={ value =int64 u; currency=c }; at=DateTime (int64 at) } *)
+(*[<Property>]
+let ``serialized auctions are the same as the input auctions`` (auction: Auction) = roundtrip auction *)
+(*[<Property>]
+let ``serialized commands are the same as the input commands`` (command: Command) = roundtrip command *)
+(*[<Property>]
+let ``serialized events are the same as the input commands`` (event: Event) = roundtrip event *)
 
