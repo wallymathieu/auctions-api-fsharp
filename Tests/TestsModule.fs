@@ -61,30 +61,24 @@ let tee on something=
   on something
   something
 
+module String =
+  let isNotNullOrEmpty s = not <| String.IsNullOrEmpty s
+  let isNotNewlineOrSpace s = isNotNullOrEmpty s && Regex.IsMatch (s, "^[^\n\r\t ]+$")
+  let isNotVerticalBarNewlineOrSpace s = isNotNullOrEmpty s && Regex.IsMatch (s, "^[^|\n\r\t ]+$")
 
 module Arb =
-    let nonNullAndNotNewlineOrSpace =
-        Arb.from<string>
-        |> Arb.filter (fun s -> s <> null && Regex.IsMatch (s, "^[^\n\r\t ]+$"))
-    let nonNullAndNotVerticalBarOrNewLineOrSpace =
-        nonNullAndNotNewlineOrSpace |> Arb.filter (fun s -> Regex.IsMatch (s, "^[^|]+$"))
-
-
-type NonNullAndNotVerticalBarOrNewLineOrSpace = NonNullAndNotVerticalBarOrNewLineOrSpace of string with
-  static member op_Explicit(NonNullAndNotVerticalBarOrNewLineOrSpace i) = i
-type NonNullAndNotNewlineOrSpace = NonNullAndNotNewlineOrSpace of string with
-  static member op_Explicit(NonNullAndNotNewlineOrSpace i) = i
-
-type ArbitraryModifiers =
-    static member NonNullAndNotVerticalBarOrNewLineOrSpace() =
-        Arb.nonNullAndNotVerticalBarOrNewLineOrSpace
-        |> Arb.convert NonNullAndNotVerticalBarOrNewLineOrSpace string
-    static member NonNullAndNotNewlineOrSpace() =
-        Arb.nonNullAndNotNewlineOrSpace
-        |> Arb.convert NonNullAndNotNewlineOrSpace string
-
-Arb.register<ArbitraryModifiers>() |> ignore
-
+  let nonNullAndNotNewlineOrSpace =
+    Arb.from<string> |> Arb.filter String.isNotNewlineOrSpace
+  let nonNullAndNotVerticalBarOrNewLineOrSpace =
+    Arb.from<string> |> Arb.filter String.isNotVerticalBarNewlineOrSpace
+  let buyerOrSeller =
+    Arb.from<string*string>
+    |> Arb.filter( fun (a,b)-> String.isNotVerticalBarNewlineOrSpace a && String.isNotNewlineOrSpace b)
+    |> Arb.convert (fun (a,b)-> (BuyerOrSeller (UserId a,b))) (function | BuyerOrSeller (UserId a,b)->a,b)
+  let support =
+    Arb.from<string>
+    |> Arb.filter String.isNotVerticalBarNewlineOrSpace
+    |> Arb.convert (fun a -> (Support (UserId a))) (function | Support (UserId a)->a)
 let inline (?=?) left right = left = right |@ sprintf "%A = %A" left right
 
-let fsCheck s x = Check.One({Config.QuickThrowOnFailure with Name = s}, x)
+let fsCheck x = Check.One({Config.QuickThrowOnFailure with Name = "";  }, x)

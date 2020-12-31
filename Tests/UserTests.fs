@@ -18,15 +18,13 @@ type ``Can parse user``() =
 
   [<Fact>]
   member test.``Support roundtrip``() =
-    let roundtrip (u) =
-      let orig = UserId u |> Support
+    let roundtrip orig =
       let parsed = orig |> string |> User.TryParse
       Some orig ?=? parsed
-    fsCheck "roundtrip" (Prop.forAll Arb.nonNullAndNotVerticalBarOrNewLineOrSpace roundtrip)
+    fsCheck (Prop.forAll Arb.support roundtrip)
   [<Fact>]
   member test.``Buyer or seller roundtrip``() =
-    let roundtrip (NonNullAndNotVerticalBarOrNewLineOrSpace u) (NonNullAndNotNewlineOrSpace name)=
-      let orig = BuyerOrSeller (UserId u, name)
+    let roundtrip orig =
       let parsed = orig |> string |> User.TryParse
       Some orig ?=? parsed
-    fsCheck "roundtrip" roundtrip
+    fsCheck (Prop.forAll Arb.buyerOrSeller roundtrip)

@@ -73,8 +73,12 @@ let inline roundtrip p = roundtripEq (=) p
 let ``serialized datetime is the same as the input`` (d: DateTime) = roundtrip d
 [<Property>]
 let ``serialized Currency is the same as the input`` (u: Currency) = roundtrip u
-(*[<Property>]
-let ``serialized User is the same as the input`` (NonNull id) (NonNull name) = roundtrip (BuyerOrSeller (UserId id,name)) *)
+[<Fact>]
+let ``serialized Buyer or seller User is the same as the input``() =
+  fsCheck (Prop.forAll Arb.buyerOrSeller roundtrip)
+[<Fact>]
+let ``serialized Support User is the same as the input``() =
+  fsCheck (Prop.forAll Arb.support roundtrip)
 [<Property>]
 let ``serialized BidId is the same as the input`` (u: BidId) = roundtrip u
 [<Property>]
