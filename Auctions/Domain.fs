@@ -533,7 +533,7 @@ type Command with
       create
       <!> jreq "at" (function PlaceBid (d,_)-> Some d | _ -> None)
       <*> jreq "bid" (function PlaceBid (_,a)-> Some a | _ -> None)
-    jchoice [(tag "$type" "AddAuction" auctionCodec); (tag "$type" "PlaceBid" bidCodec)]
+    (tag "$type" "AddAuction" auctionCodec) <|> (tag "$type" "PlaceBid" bidCodec)
 
 type Event with
   static member JsonObjCodec =
@@ -547,7 +547,7 @@ type Event with
       create
       <!> jreq "at" (function BidAccepted (d,_)-> Some d | _ -> None)
       <*> jreq "bid" (function BidAccepted (_,a)-> Some a | _ -> None)
-    jchoice [(tag "$type" "AuctionAdded" auctionCodec); (tag "$type" "BidAccepted" bidCodec)]
+    (tag "$type" "AuctionAdded" auctionCodec) <|> (tag "$type" "BidAccepted" bidCodec)
 
 type Observable with
   static member ToJson (x:Observable) =
@@ -558,4 +558,3 @@ type Observable with
       let mapToJson = function | Ok o-> JArray [|JString "Ok"; toJson  o |] | Error e->JArray [JString "Error";toJson e]
       let jresults = results |> List.map mapToJson |> List.toArray |> JArray
       jobj [ "$type" .= "Results"; "results", jresults]
-
