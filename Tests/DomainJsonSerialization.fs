@@ -5,6 +5,7 @@ open System.Globalization
 open Auctions.Domain
 open Auctions
 
+open FSharp.Data
 open Xunit
 open FsCheck
 open FsCheck.Xunit
@@ -19,20 +20,31 @@ let sampleLines = """
 [{"$type":"PlaceBid","at":"2020-05-17T08:06:53.148Z","bid":{"id":"34edc64399b442be89598e1d9f577350","auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:06:53.147Z"}}]
 [{"$type":"PlaceBid","at":"2020-05-17T08:06:57.773Z","bid":{"id":"da03e144d59d4cc2bbb484aee951cc31","auction":1,"user":"BuyerOrSeller|a1|Test","amount":"VAC11","at":"2020-05-17T08:06:57.773Z"}}]
 """
-
-[<Fact>]
-let ``Can deserialize existing commands``() =
+let parseCommands lines =
   let parseLine line=
     let k : Command array ParseResult = parseJson line
     match k with
-    | Ok _ ->()
+    | Ok line -> line
     | Error err->failwithf "Couldn't parse line due to error: %O, for line %s" err line
   let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
-  splitLines sampleLines
-            |> Array.iter parseLine
+  splitLines lines |> Array.map parseLine
 [<Fact>]
-let ``Bid can be deserialized correctly``() =
-  let bidJson = """{"id":"8f6e4c445ee443a49006a0f8f3a04ba1","auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}"""
+let ``Can deserialize existing commands``() = parseCommands sampleLines |> ignore
+[<Fact>]
+let ``commands sample json can be deserialized and serialized to the same json``() =
+  let parseLine line=
+    let k : Command array ParseResult = parseJson line
+    match k with
+    | Ok commands ->
+      let j = toJson commands
+      Assert.Equal (line, j.ToString JsonSaveOptions.DisableFormatting)
+    | Error err -> failwithf "Couldn't parse line due to error: %O, for line %s" err line
+  let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
+  splitLines sampleLines |> Array.iter parseLine
+
+let bidJson = """{"id":"8f6e4c445ee443a49006a0f8f3a04ba1","auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}"""
+[<Fact>]
+let ``Bid sample json can be deserialized correctly``() =
   let b : Bid ParseResult = parseJson bidJson
   match b with
   | Ok bid->
@@ -42,11 +54,20 @@ let ``Bid can be deserialized correctly``() =
     Assert.Equal (Amount.Parse "VAC11", bid.amount)
     let expectedAt = DateTime.ParseExact ("2020-05-17T08:05:59.171Z", [| "yyyy-MM-ddTHH:mm:ss.fffZ"; |], null, DateTimeStyles.RoundtripKind)
     Assert.Equal (expectedAt, bid.at)
-  | Error e -> failwith "%A" e
+  | Error e -> failwithf "Error %A" e
 [<Fact>]
-let ``Auction can be deserialized correctly``() =
-  let bidJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}"""
-  let a : Auction ParseResult = parseJson bidJson
+let ``Bid sample json can be deserialized and serialized to the same json``() =
+  let b : Bid ParseResult = parseJson bidJson
+  match b with
+  | Ok bid->
+    let j = toJson bid
+    Assert.Equal (bidJson, j.ToString JsonSaveOptions.DisableFormatting)
+  | Error e -> failwithf "Error %A" e
+
+let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}"""
+[<Fact>]
+let ``Auction sample json can be deserialized correctly``() =
+  let a : Auction ParseResult = parseJson auctionJson
   match a with
   | Ok auction->
     Assert.Equal (AuctionId <| 2L, auction.id)
@@ -56,7 +77,15 @@ let ``Auction can be deserialized correctly``() =
     Assert.Equal ("Some auction", auction.title)
     Assert.Equal (Currency.VAC, auction.currency)
     Assert.Equal (Type.Parse "English|VAC0|VAC0|0", auction.typ)
-  | Error e -> failwith "%A" e
+  | Error e -> failwithf "Error %A" e
+[<Fact>]
+let ``Auction sample json can be deserialized and serialized to the same json``() =
+  let a : Auction ParseResult = parseJson auctionJson
+  match a with
+  | Ok auction->
+    let j = toJson auction
+    Assert.Equal (auctionJson, j.ToString JsonSaveOptions.DisableFormatting)
+  | Error e -> failwithf "Error %A" e
 
 let inline roundtripEq (isEq: 'a -> 'a -> bool) p =
     let actual = p |> toJson |> ofJson
