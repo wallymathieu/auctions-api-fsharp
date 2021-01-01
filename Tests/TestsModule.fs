@@ -63,8 +63,13 @@ let tee on something=
 
 module String =
   let isNotNullOrEmpty s = not <| String.IsNullOrEmpty s
-  let isNotNewlineOrSpace s = isNotNullOrEmpty s && Regex.IsMatch (s, "^[^\n\r\t ]+$")
-  let isNotVerticalBarNewlineOrSpace s = isNotNullOrEmpty s && Regex.IsMatch (s, "^[^|\n\r\t ]+$")
+  let doesNotContainNewline (s:string) = not <| s.Contains "\n"
+  let isNotNewlineOrSpace s = isNotNullOrEmpty s && Regex.IsMatch (s, "^[^ \f\n\r\t\v]+$")
+                              && doesNotContainNewline s
+
+  let isNotVerticalBarNewlineOrSpace s = isNotNullOrEmpty s && Regex.IsMatch (s, "^[^| \f\n\r\t\v]+$")
+                                         // seems that ending with a newline is matched by the Regex engine
+                                         && doesNotContainNewline s
 
 module Arb =
   let nonNullAndNotNewlineOrSpace =
