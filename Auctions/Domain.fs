@@ -1,6 +1,8 @@
 ﻿module Auctions.Domain
 
 open System
+open System.Collections.Generic
+open System.Collections.ObjectModel
 open System.ComponentModel
 
 open FSharp.Data
@@ -98,7 +100,7 @@ type Amount =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value - a2.value }
 
-module Amount=
+module Amount =
   let currency (a:Amount) = a.currency
   let value (a:Amount) = a.value
   let zero c= { currency=c ; value=0L}
@@ -437,7 +439,6 @@ type Observable =
   | Commands of Command list
   | Results of Result<Event, Errors> list
 
-open Fleece
 open Fleece.FSharpData
 open Fleece.FSharpData.Operators
 
@@ -505,45 +506,48 @@ type Bid with
     |> jfield "user"    (fun x -> x.user)
     |> jfield "amount"  (fun x -> x.amount)
     |> jfield "at"      (fun x -> x.at)
+
+let inline tag prop value codec =
+    let matchPropValue o =
+         match IReadOnlyDictionary.tryGetValue prop o with
+         | Some a when (ofJson a) = Ok value -> Ok o
+         | Some a -> Decode.Fail.invalidValue a value
+         | None -> Decode.Fail.propertyNotFound prop o
+    Codec.ofConcrete codec
+    |> Codec.compose (
+                        matchPropValue,
+                        IReadOnlyDictionary.union (Dict.toIReadOnlyDictionary (dict [prop, toJson value]))
+                     )
+    |> Codec.toConcrete
+
+
 type Command with
-  static member OfJson json =
-    match json with
-    | JObject o -> monad {
-        let! t = o .@ "$type"
-        match t with
-        | "AddAuction" ->
-          let create d a = AddAuction (d,a)
-          return! (create <!> (o .@ "at") <*> (o .@ "auction"))
-        | "PlaceBid" ->
-          let create d b = PlaceBid (d,b)
-          return! (create <!> (o .@ "at") <*> (o .@ "bid"))
-        | x -> return! (Decode.Fail.invalidValue json (sprintf "Expected one of: 'AddAuction', 'PlaceBid' for $type but %s" x))
-      }
-    | x -> Decode.Fail.objExpected json
-  static member ToJson (x: Command) =
-    match x with
-    | AddAuction (d,a)-> jobj [ "$type" .= "AddAuction"; "at" .= d; "auction" .= a]
-    | PlaceBid (d,b)-> jobj [ "$type" .= "PlaceBid"; "at" .= d; "bid" .= b]
+  static member JsonObjCodec =
+    let auctionCodec =
+      let create d a = AddAuction (d,a)
+      create
+      <!> jreq "at" (function AddAuction (d,_) -> Some d | _ -> None)
+      <*> jreq "auction" (function AddAuction (_,a) -> Some a | _ -> None)
+    let bidCodec =
+      let create d b = PlaceBid (d,b)
+      create
+      <!> jreq "at" (function PlaceBid (d,_)-> Some d | _ -> None)
+      <*> jreq "bid" (function PlaceBid (_,a)-> Some a | _ -> None)
+    jchoice [(tag "$type" "AddAuction" auctionCodec); (tag "$type" "PlaceBid" bidCodec)]
 
 type Event with
-  static member OfJson json =
-    match json with
-    | JObject o -> monad {
-        let! t = o .@ "$type"
-        match t with
-        | "AuctionAdded" ->
-          let create d a = AuctionAdded (d,a)
-          return! (create <!> (o .@ "at") <*> (o .@ "auction"))
-        | "BidAccepted" ->
-          let create d b = BidAccepted (d,b)
-          return! (create <!> (o .@ "at") <*> (o .@ "bid"))
-        | x -> return! (Decode.Fail.invalidValue json (sprintf "Expected one of: 'AuctionAdded', 'BidAccepted' for $type but %s" x))
-      }
-    | x -> Decode.Fail.objExpected json
-  static member ToJson (x: Event) =
-    match x with
-    | AuctionAdded (d,a)-> jobj [ "$type" .= "AuctionAdded"; "at" .= d; "auction" .= a]
-    | BidAccepted (d,b)-> jobj [ "$type" .= "BidAccepted"; "at" .= d; "bid" .= b]
+  static member JsonObjCodec =
+    let auctionCodec =
+      let create d a = AuctionAdded (d,a)
+      create
+      <!> jreq "at" (function AuctionAdded (d,_)-> Some d | _ -> None)
+      <*> jreq "auction" (function AuctionAdded (_,a)-> Some a | _ -> None)
+    let bidCodec =
+      let create d b = BidAccepted (d,b)
+      create
+      <!> jreq "at" (function BidAccepted (d,_)-> Some d | _ -> None)
+      <*> jreq "bid" (function BidAccepted (_,a)-> Some a | _ -> None)
+    jchoice [(tag "$type" "AuctionAdded" auctionCodec); (tag "$type" "BidAccepted" bidCodec)]
 
 type Observable with
   static member ToJson (x:Observable) =

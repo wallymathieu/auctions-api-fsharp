@@ -25,7 +25,7 @@ let parseCommands lines =
     let k : Command array ParseResult = parseJson line
     match k with
     | Ok line -> line
-    | Error err->failwithf "Couldn't parse line due to error: %O, for line %s" err line
+    | Error err->failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
   let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
   splitLines lines |> Array.map parseLine
 [<Fact>]
@@ -38,7 +38,7 @@ let ``commands sample json can be deserialized and serialized to the same json``
     | Ok commands ->
       let j = toJson commands
       Assert.Equal (line, j.ToString JsonSaveOptions.DisableFormatting)
-    | Error err -> failwithf "Couldn't parse line due to error: %O, for line %s" err line
+    | Error err -> failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
   let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
   splitLines sampleLines |> Array.iter parseLine
 
