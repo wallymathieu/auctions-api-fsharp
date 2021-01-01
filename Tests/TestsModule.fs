@@ -70,20 +70,39 @@ module String =
   let isNotVerticalBarNewlineOrSpace s = isNotNullOrEmpty s && Regex.IsMatch (s, "^[^| \f\n\r\t\v]+$")
                                          // seems that ending with a newline is matched by the Regex engine
                                          && doesNotContainNewline s
+module Gen =
+    /// Generate currency with currency codes that exists in the enumeration
+    let currency =
+      Gen.elements (Seq.cast<CurrencyCode> (Enum.GetValues typeof<CurrencyCode>)) |> Gen.map Currency
 
 module Arb =
   let nonNullAndNotNewlineOrSpace =
     Arb.from<string> |> Arb.filter String.isNotNewlineOrSpace
   let nonNullAndNotVerticalBarOrNewLineOrSpace =
     Arb.from<string> |> Arb.filter String.isNotVerticalBarNewlineOrSpace
+  /// Generate amounts with known currency codes and positive integers as values
+  let amount =
+    let positiveInt = Arb.toGen Arb.from<PositiveInt>
+    let toAmount (c, PositiveInt i) = { value=int64 i;currency=c }
+    let ofAmount { value=i;currency=c } = (c, PositiveInt (int i))
+    Arb.fromGenShrink (Gen.zip Gen.currency positiveInt, Arb.shrink) |> Arb.convert toAmount ofAmount
+
+  /// Arbitrary buyer or sellers with restricted values for userId and usernames
   let buyerOrSeller =
+    let filter (userId,username) = String.isNotVerticalBarNewlineOrSpace userId && String.isNotNewlineOrSpace username
+    let toBuyerOrSeller (userId,username) = BuyerOrSeller (UserId userId,username)
+    let ofBuyerOrSeller = function | BuyerOrSeller (UserId userId,username) -> userId,username
     Arb.from<string*string>
-    |> Arb.filter( fun (a,b)-> String.isNotVerticalBarNewlineOrSpace a && String.isNotNewlineOrSpace b)
-    |> Arb.convert (fun (a,b)-> (BuyerOrSeller (UserId a,b))) (function | BuyerOrSeller (UserId a,b)->a,b)
+    |> Arb.filter filter
+    |> Arb.convert toBuyerOrSeller ofBuyerOrSeller
+  /// Arbitrary support users with restricted values for userId
   let support =
+    let toSupport userId = Support (UserId userId)
+    let ofSupport = function | Support (UserId userId) -> userId
     Arb.from<string>
     |> Arb.filter String.isNotVerticalBarNewlineOrSpace
-    |> Arb.convert (fun a -> (Support (UserId a))) (function | Support (UserId a)->a)
+    |> Arb.convert toSupport ofSupport
+
 let inline (?=?) left right = left = right |@ sprintf "%A = %A" left right
 
 let fsCheck x = Check.One({Config.QuickThrowOnFailure with Name = "";  }, x)
