@@ -516,7 +516,7 @@ let inline tag prop value codec =
     Codec.ofConcrete codec
     |> Codec.compose (
                         matchPropValue,
-                        IReadOnlyDictionary.union (Dict.toIReadOnlyDictionary (dict [prop, toJson value]))
+                        fun x -> if x.Count=0 then x else IReadOnlyDictionary.union (Dict.toIReadOnlyDictionary (dict [prop, toJson value])) x
                      )
     |> Codec.toConcrete
 
