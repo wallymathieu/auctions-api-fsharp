@@ -1,7 +1,5 @@
 ﻿module Auctions.Program
 open Suave
-open System
-
 open Auctions.Web
 open Auctions.Actors
 open Auctions.Environment
@@ -9,10 +7,7 @@ open Auctions.Domain
 open Auctions
 open FSharpPlus
 open FSharpPlus.Data
-open FSharpPlus.Operators
 type DictEntry = System.Collections.DictionaryEntry
-open Fleece
-open Fleece.FSharpData
 
 type CmdArgs =
   { IP : System.Net.IPAddress
@@ -20,14 +15,14 @@ type CmdArgs =
     Redis : string option
     Json : string option
     Event : bool
-    WebHook : Uri option
+    WebHook : System.Uri option
   }
 
 [<EntryPoint>]
 let main argv =
   // parse arguments
   let args =
-    let (|Port|_|) : _-> UInt16 option = tryParse
+    let (|Port|_|) : _-> System.UInt16 option = tryParse
     let (|IPAddress|_|) :_->System.Net.IPAddress option = tryParse
     let (|Uri|_|) (uri:string) :System.Uri option = try System.Uri uri |> Some with | _ -> None
     //default bind to 127.0.0.1:8083
@@ -92,16 +87,16 @@ let main argv =
   let persistEvents = PersistMbox.create batchAppendEvents
   let persistCommands = PersistMbox.create batchAppendCommands
   let observer = Observer.create <| Seq.toList observers
-  let time ()= DateTime.UtcNow
+  let time ()= System.DateTime.UtcNow
   let onIncomingCommand command=
     //persist command
     persistCommands command
-    Domain.Commands [command] |> observer
+    Commands [command] |> observer
   let observeCommandResult result =
-    match result with Ok r -> persistEvents r | _ -> ()
-    Domain.Results [result] |> observer
+    iter persistEvents result
+    Results [result] |> observer
   // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
-  Domain.Commands [] |> observer
+  Commands [] |> observer
   let auctionAndStates = if args.Event then Event.foldToMap events else Command.foldToMap commands
                          |> Map.values |> Seq.toList
   let agent = AuctionDelegator.create(auctionAndStates, onIncomingCommand, time, observeCommandResult)
