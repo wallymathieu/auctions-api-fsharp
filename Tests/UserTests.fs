@@ -2,6 +2,7 @@
 open Auctions.Domain
 open System
 open Xunit
+open FsCheck
 
 type ``Can parse user``() =
 
@@ -14,3 +15,16 @@ type ``Can parse user``() =
   member test.Support() =
     let user = Guid.NewGuid().ToString("N") |> UserId |> Support
     Assert.Equal(Some user, string user |> User.TryParse)
+
+  [<Fact>]
+  member test.``Support roundtrip``() =
+    let roundtrip orig =
+      let parsed = orig |> string |> User.TryParse
+      Some orig ?=? parsed
+    fsCheck (Prop.forAll Arb.support roundtrip)
+  [<Fact>]
+  member test.``Buyer or seller roundtrip``() =
+    let roundtrip orig =
+      let parsed = orig |> string |> User.TryParse
+      Some orig ?=? parsed
+    fsCheck (Prop.forAll Arb.buyerOrSeller roundtrip)
