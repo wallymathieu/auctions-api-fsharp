@@ -1,15 +1,8 @@
 ﻿module Auctions.Domain
 
 open System
-open System.Collections.Generic
-open System.Collections.ObjectModel
-open System.ComponentModel
-
-open FSharp.Data
-
 open FSharpPlus
 open FSharpPlus.Data
-open FSharpPlus.Operators
 
 type CurrencyCode =
   /// virtual auction currency
@@ -196,6 +189,7 @@ module Bid=
   let amount (bid : Bid) = bid.amount
   let auction (bid : Bid) = bid.auction
   let bidder (bid: Bid) = bid.user
+  let at (bid: Bid) = bid.at
 
 type Errors =
   | UnknownAuction of AuctionId
@@ -506,7 +500,7 @@ type Bid with
     |> jfield "user"    (fun x -> x.user)
     |> jfield "amount"  (fun x -> x.amount)
     |> jfield "at"      (fun x -> x.at)
-
+/// tag Json codec with property and value inside the Json encoded by the codec
 let inline tag prop value codec =
     let matchPropValue o =
          match IReadOnlyDictionary.tryGetValue prop o with
@@ -516,10 +510,11 @@ let inline tag prop value codec =
     Codec.ofConcrete codec
     |> Codec.compose (
                         matchPropValue,
-                        fun x -> if x.Count=0 then x else IReadOnlyDictionary.union (Dict.toIReadOnlyDictionary (dict [prop, toJson value])) x
+                        fun encoded ->
+                          if encoded.Count=0 then encoded // we have not encoded anything so no need to tag it
+                          else IReadOnlyDictionary.union (Dict.toIReadOnlyDictionary (dict [prop, toJson value])) encoded
                      )
     |> Codec.toConcrete
-
 
 type Command with
   static member JsonObjCodec =
