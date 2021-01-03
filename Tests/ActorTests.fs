@@ -9,6 +9,7 @@ open Xunit
 open FsUnit.Xunit
 
 module ``Auction agent tests`` =
+  open TestData
   //domain specific matchers:
   open NHamcrest.Core
   let equalError x = CustomMatcher<obj>(sprintf "Equals Error %A" x, fun (a:obj)->match a :?> Result<Event,Errors> with | Error err-> err= x | Ok _ -> false)

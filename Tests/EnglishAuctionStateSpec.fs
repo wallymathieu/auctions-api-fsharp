@@ -4,6 +4,7 @@ open AuctionStateSpecs
 open Xunit
 open System
 open FSharpPlus
+open TestData
 let timedAscAuction = auctionOfTyp (TimedAscending { // let's start out with english auctions
     reservePrice= parse "SEK0"
     minRaise =parse "SEK0"

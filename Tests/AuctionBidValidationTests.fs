@@ -4,7 +4,7 @@ open Auctions.Domain
 open System
 open Xunit
 open FSharpPlus
-
+open TestData
 module ``Auction Bid tests`` =
   let validBid = { id = BidId.New()
                    auction =auctionId
