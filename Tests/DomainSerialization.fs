@@ -7,7 +7,9 @@ open Auctions.Domain
 open Xunit
 open FsCheck
 open FsCheck.Xunit
+open Fleece
 open Fleece.FSharpData
+open Fleece.FSharpData.Operators
 
 let sampleJsonLines = """
 [{"$type":"AddAuction","at":"2020-05-17T08:05:54.943Z","auction":{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}}]
@@ -20,7 +22,7 @@ let sampleJsonLines = """
 """
 let parseCommands lines =
   let parseLine line=
-    let k : Result<Command array,_> = ofJsonText line
+    let k : Command array ParseResult = parseJson line
     match k with
     | Ok line -> line
     | Error err->failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
@@ -35,7 +37,7 @@ module Json =
   [<Fact>]
   let ``commands sample json can be deserialized and serialized to the same json``() =
     let parseLine line=
-      let k : Result<Command array,_> = ofJsonText line
+      let k : Command array ParseResult = parseJson line
       match k with
       | Ok commands ->
         let j = toJsonValue commands
@@ -47,7 +49,7 @@ module Json =
   let bidJson = """{"id":"8f6e4c445ee443a49006a0f8f3a04ba1","auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}"""
   [<Fact>]
   let ``Bid sample json can be deserialized correctly``() =
-    let b : Result<Bid,_> = ofJsonText bidJson
+    let b : Bid ParseResult = parseJson bidJson
     match b with
     | Ok bid->
       Assert.Equal (BidId <| Guid.Parse "8f6e4c445ee443a49006a0f8f3a04ba1", bid.id)
@@ -59,7 +61,7 @@ module Json =
     | Error e -> failwithf "Error %A" e
   [<Fact>]
   let ``Bid sample json can be deserialized and serialized to the same json``() =
-    let b : Result<Bid,_> = ofJsonText bidJson
+    let b : Bid ParseResult = parseJson bidJson
     match b with
     | Ok bid->
       let j = toJsonValue bid
@@ -69,7 +71,7 @@ module Json =
   let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}"""
   [<Fact>]
   let ``Auction sample json can be deserialized correctly``() =
-    let a : Result<Auction,_> = ofJsonText auctionJson
+    let a : Auction ParseResult = parseJson auctionJson
     match a with
     | Ok auction->
       Assert.Equal (AuctionId <| 2L, auction.id)
@@ -82,7 +84,7 @@ module Json =
     | Error e -> failwithf "Error %A" e
   [<Fact>]
   let ``Auction sample json can be deserialized and serialized to the same json``() =
-    let a : Result<Auction,_> = ofJsonText auctionJson
+    let a : Auction ParseResult = parseJson auctionJson
     match a with
     | Ok auction->
       let j = toJsonValue auction
@@ -150,4 +152,3 @@ module Redis =
          Assert.Equal (at1,at2)
          Assert.Equal (auction1,auction2)
        | _, _ -> Assert.True ((command = deserialized), sprintf "Expected:\n%A\nto equal:\n%A" command deserialized)
-
