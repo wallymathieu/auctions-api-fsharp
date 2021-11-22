@@ -80,11 +80,11 @@ module Json=
   open Successful
   open RequestErrors
   open Writers
-  let inline OK (v:JsonValue) : WebPart=
-    OK (string v)
+  let inline OK v : WebPart=
+    OK (toJsonText v)
     >=> setMimeType "application/json; charset=utf-8"
-  let inline BAD_REQUEST (v:JsonValue) : WebPart=
-    BAD_REQUEST (string v)
+  let inline BAD_REQUEST v : WebPart=
+    BAD_REQUEST (toJsonText v)
     >=> setMimeType "application/json; charset=utf-8"
 
   let inline ``OK_or_BAD_REQUEST`` (result) : WebPart=

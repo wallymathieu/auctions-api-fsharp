@@ -432,7 +432,7 @@ module Event =
 type Observable =
   | Commands of Command list
   | Results of Result<Event, Errors> list
-
+open Fleece
 open Fleece.FSharpData
 open Fleece.FSharpData.Operators
 
@@ -502,17 +502,18 @@ type Bid with
     |> jfield "at"      (fun x -> x.at)
 /// tag Json codec with property and value inside the Json encoded by the codec
 let inline tag prop value codec =
-    let matchPropValue o =
-         match IReadOnlyDictionary.tryGetValue prop o with
-         | Some a when (ofJson a) = Ok value -> Ok o
-         | Some a -> Decode.Fail.invalidValue a value
-         | None -> Decode.Fail.propertyNotFound prop o
+    let matchPropValue (o:PropertyList<_>) =
+         match o.[prop] with
+         | a::_ when (ofJson a) = Ok value -> Ok o
+         | a::_ -> Decode.Fail.invalidValue a value
+         | [] -> Decode.Fail.propertyNotFound prop (o |> map (fun x -> x :> IEncoding))
     Codec.ofConcrete codec
     |> Codec.compose (
-                        matchPropValue,
+                        matchPropValue
+                        <->
                         fun encoded ->
-                          if encoded.Count=0 then encoded // we have not encoded anything so no need to tag it
-                          else IReadOnlyDictionary.union (Dict.toIReadOnlyDictionary (dict [prop, toJson value])) encoded
+                          if Seq.isEmpty encoded then encoded // we have not encoded anything so no need to tag it
+                          else Helpers.multiMap ( dict ( (toList encoded) @ ( [prop, toJson value])))
                      )
     |> Codec.toConcrete
 

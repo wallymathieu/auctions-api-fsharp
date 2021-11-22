@@ -43,6 +43,6 @@ type JsonAppendToFile<'T>(fileName, toJson, parseJson, getAt:'T -> DateTime) =
     member __.ReadAll() = JsonAppendToFile.readAll parseJson getAt fileName
 
 type JsonAppendEventToFile(fileName) =
-  inherit JsonAppendToFile<Event> (fileName, toJson, parseJson, Event.getAt)
+  inherit JsonAppendToFile<Event> (fileName, toJsonValue, ofJsonText, Event.getAt)
 type JsonAppendCommandToFile(fileName) =
-  inherit JsonAppendToFile<Command> (fileName, toJson, parseJson, Command.getAt)
+  inherit JsonAppendToFile<Command> (fileName, toJsonValue, ofJsonText, Command.getAt)
