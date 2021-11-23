@@ -31,6 +31,26 @@ let parseCommands lines =
 
 module Json =
   open FSharp.Data
+  let rec areJsonEqual (expected: JsonValue, actual: JsonValue)=
+    match expected,actual with
+    | JsonValue.String e, JsonValue.String a -> e = a
+    | JsonValue.Boolean e, JsonValue.Boolean a -> e = a
+    | JsonValue.Float e, JsonValue.Float a -> e = a
+    | JsonValue.Number e, JsonValue.Number a -> e = a
+    | JsonValue.Null, JsonValue.Null -> true
+    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length && e.Length = 0 -> true
+    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length -> Array.zip e a |> Array.map areJsonEqual |> Array.reduce (&)
+    | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length && e.Length = 0 -> true
+    | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length -> let orderByFirst = Array.sortBy fst
+                                                                         let eq ((efst,esnd), (afst,asnd)) =
+                                                                           efst = afst && areJsonEqual (esnd, asnd)
+                                                                         in Array.zip (orderByFirst e) (orderByFirst a)
+                                                                            |> Array.map eq |> Array.reduce (&)
+    | _ -> false
+  let assertJsonEqual (expected: JsonValue, actual: JsonValue)=
+    if areJsonEqual (expected, actual) then () else failwithf "The actual value %O is not equal to expected %O" actual expected
+
+
 
   [<Fact>]
   let ``Can deserialize existing commands``() = parseCommands sampleJsonLines |> ignore
@@ -41,7 +61,7 @@ module Json =
       match k with
       | Ok commands ->
         let j = toJsonValue commands
-        Assert.Equal (line, j.ToString JsonSaveOptions.DisableFormatting)
+        assertJsonEqual (JsonValue.Parse line, j)
       | Error err -> failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
     let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
     splitLines sampleJsonLines |> Array.iter parseLine
@@ -65,7 +85,7 @@ module Json =
     match b with
     | Ok bid->
       let j = toJsonValue bid
-      Assert.Equal (bidJson, j.ToString JsonSaveOptions.DisableFormatting)
+      assertJsonEqual (JsonValue.Parse bidJson, j)
     | Error e -> failwithf "Error %A" e
 
   let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}"""
@@ -88,7 +108,7 @@ module Json =
     match a with
     | Ok auction->
       let j = toJsonValue auction
-      Assert.Equal (auctionJson, j.ToString JsonSaveOptions.DisableFormatting)
+      assertJsonEqual (JsonValue.Parse auctionJson, j)
     | Error e -> failwithf "Error %A" e
 
   let inline roundtripEq (isEq: 'a -> 'a -> bool) p =
