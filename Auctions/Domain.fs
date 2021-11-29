@@ -513,7 +513,7 @@ let inline tag prop value codec =
                         <->
                         fun encoded ->
                           if Seq.isEmpty encoded then encoded // we have not encoded anything so no need to tag it
-                          else Helpers.multiMap ( dict ( (toList encoded) @ ( [prop, toJson value])))
+                          else PropertyList (List.toArray ((toList encoded) @ [prop, toJson value]))
                      )
     |> Codec.toConcrete
 

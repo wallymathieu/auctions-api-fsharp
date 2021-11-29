@@ -39,13 +39,13 @@ module Json =
     | JsonValue.Number e, JsonValue.Number a -> e = a
     | JsonValue.Null, JsonValue.Null -> true
     | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length && e.Length = 0 -> true
-    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length -> Array.zip e a |> Array.map areJsonEqual |> Array.reduce (&)
+    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length -> Array.zip e a |> Array.map areJsonEqual |> Array.reduce (&&)
     | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length && e.Length = 0 -> true
     | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length -> let orderByFirst = Array.sortBy fst
                                                                          let eq ((efst,esnd), (afst,asnd)) =
                                                                            efst = afst && areJsonEqual (esnd, asnd)
                                                                          in Array.zip (orderByFirst e) (orderByFirst a)
-                                                                            |> Array.map eq |> Array.reduce (&)
+                                                                            |> Array.map eq |> Array.reduce (&&)
     | _ -> false
   let assertJsonEqual (expected: JsonValue, actual: JsonValue)=
     if areJsonEqual (expected, actual) then () else failwithf "The actual value %O is not equal to expected %O" actual expected
