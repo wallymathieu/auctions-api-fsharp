@@ -2,15 +2,15 @@ module Auctions.Actors
 open Auctions.Domain
 
 open System
-open System.Collections.Generic
 open FSharpPlus
 
 let exitOnException (e:exn)=
   printfn "Failed with exception %s, %s, exit!" e.Message e.StackTrace
   exit 1
 
-module PersistEvents=
-  let create(appendBatches : (Event list -> Async<unit>) list) =
+module PersistMbox=
+  /// Create persist messagebox
+  let create(appendBatches : ('T list -> Async<unit>) list) =
     let mbox = MailboxProcessor.Start(fun inbox ->
        let rec messageLoop() =
          async {
@@ -23,7 +23,7 @@ module PersistEvents=
 
     mbox.Error.Add exitOnException
 
-    fun command -> mbox.Post(command)
+    mbox.Post
 
 module Observer=
   let create<'t>(observers : ('t-> Async<unit>) list) =
@@ -38,7 +38,7 @@ module Observer=
 
     mbox.Error.Add exitOnException
 
-    fun (input:'t) -> mbox.Post(input)
+    mbox.Post
 
 type AuctionEnded = (Amount * User) option
 
@@ -102,39 +102,6 @@ type AuctionAgent(auction, state:S) =
     return Option.isSome res
   }
 
-/// repository that takes commands and translate them to auctions and auction states
-/// assumption is that it's used in a single threaded sync manner
-type private Repository ()=
-  let auctions=Dictionary<AuctionId,Auction*S>()
-
-  member __.Auctions() : (Auction*S) list =
-    auctions.Values |> Seq.toList
-  member __.Receive = function
-    | AuctionAdded (_, auction)->
-      let empty =Auction.emptyState auction
-      auctions.Add ( auction.id, (auction,empty) )
-    | BidAccepted (_, b)->
-        match auctions.TryGetValue b.auction with
-        | true, (auction,state) ->
-          let (next,_)= S.addBid b state
-          auctions.[auction.id]<- (auction,next)
-        | false, _ -> failwith "could not find auction"
-  member __.Handle = function
-    | AddAuction (at,auction)->
-      if auction.expiry > at && not (auctions.ContainsKey auction.id) then
-        let empty =Auction.emptyState auction
-        auctions.Add ( auction.id, (auction,empty) )
-      else
-        ()
-    | PlaceBid (_,b)->
-        match auctions.TryGetValue b.auction with
-        | true, (auction,state) ->
-          match Auction.validateBid b auction with
-          | Ok _ ->
-            let (next,_)= S.addBid b state
-            auctions.[auction.id]<- (auction,next)
-          | Error _ -> ()
-        | false, _ -> ()
 module AuctionAgent=
   let create auction state = AuctionAgent (auction, state)
 
@@ -160,12 +127,10 @@ module AuctionDState=
      | _, _ -> HasEnded()
   let started auction agent :T= (auction ,Ongoing agent)
   let ended auction endedAuction bids:T=(auction,Ended (endedAuction,bids))
-type AuctionDelegator(events:Event list, onIncomingCommand, now, observeResult) =
+type AuctionDelegator(auctions: (Auction*S) list, onIncomingCommand, now, observeResult) =
   let agent =MailboxProcessor<DelegatorSignals>.Start(fun inbox ->
     let mutable agents = let _now =now()
-                         let r = Repository()
-                         List.iter r.Receive events
-                         r.Auctions()
+                         auctions
                          |> List.map (fun (auction,state)->
                                         let next =S.inc _now state
                                         auction.id,
@@ -270,7 +235,7 @@ type AuctionDelegator(events:Event list, onIncomingCommand, now, observeResult) 
     agent.Error.Add exitOnException
   member __.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
   member __.WakeUp () = agent.PostAndAsyncReply WakeUp
-  member __.GetAuctions ()= agent.PostAndAsyncReply(fun reply -> GetAuctions(reply))
+  member __.GetAuctions ()= agent.PostAndAsyncReply(GetAuctions)
   member __.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
 module AuctionDelegator=
   let create r = AuctionDelegator r
