@@ -7,6 +7,7 @@ open Auctions.Domain
 open Xunit
 open FsCheck
 open FsCheck.Xunit
+open Fleece
 open Fleece.FSharpData
 
 let sampleJsonLines = """
@@ -20,7 +21,7 @@ let sampleJsonLines = """
 """
 let parseCommands lines =
   let parseLine line=
-    let k : Command array ParseResult = parseJson line
+    let k : Command array ParseResult = ofJsonText line
     match k with
     | Ok line -> line
     | Error err->failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
@@ -29,17 +30,37 @@ let parseCommands lines =
 
 module Json =
   open FSharp.Data
+  let rec areJsonEqual (expected: JsonValue, actual: JsonValue)=
+    match expected,actual with
+    | JsonValue.String e, JsonValue.String a -> e = a
+    | JsonValue.Boolean e, JsonValue.Boolean a -> e = a
+    | JsonValue.Float e, JsonValue.Float a -> e = a
+    | JsonValue.Number e, JsonValue.Number a -> e = a
+    | JsonValue.Null, JsonValue.Null -> true
+    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length && e.Length = 0 -> true
+    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length -> Array.zip e a |> Array.map areJsonEqual |> Array.reduce (&&)
+    | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length && e.Length = 0 -> true
+    | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length -> let orderByFirst = Array.sortBy fst
+                                                                         let eq ((efst,esnd), (afst,asnd)) =
+                                                                           efst = afst && areJsonEqual (esnd, asnd)
+                                                                         in Array.zip (orderByFirst e) (orderByFirst a)
+                                                                            |> Array.map eq |> Array.reduce (&&)
+    | _ -> false
+  let assertJsonEqual (expected: JsonValue, actual: JsonValue)=
+    if areJsonEqual (expected, actual) then () else failwithf "The actual value %O is not equal to expected %O" actual expected
+
+
 
   [<Fact>]
   let ``Can deserialize existing commands``() = parseCommands sampleJsonLines |> ignore
   [<Fact>]
   let ``commands sample json can be deserialized and serialized to the same json``() =
     let parseLine line=
-      let k : Command array ParseResult = parseJson line
+      let k : Command array ParseResult = ofJsonText line
       match k with
       | Ok commands ->
-        let j = toJson commands
-        Assert.Equal (line, j.ToString JsonSaveOptions.DisableFormatting)
+        let j = toJsonValue commands
+        assertJsonEqual (JsonValue.Parse line, j)
       | Error err -> failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
     let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
     splitLines sampleJsonLines |> Array.iter parseLine
@@ -47,7 +68,7 @@ module Json =
   let bidJson = """{"id":"8f6e4c445ee443a49006a0f8f3a04ba1","auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}"""
   [<Fact>]
   let ``Bid sample json can be deserialized correctly``() =
-    let b : Bid ParseResult = parseJson bidJson
+    let b : Bid ParseResult = ofJsonText bidJson
     match b with
     | Ok bid->
       Assert.Equal (BidId <| Guid.Parse "8f6e4c445ee443a49006a0f8f3a04ba1", bid.id)
@@ -59,17 +80,17 @@ module Json =
     | Error e -> failwithf "Error %A" e
   [<Fact>]
   let ``Bid sample json can be deserialized and serialized to the same json``() =
-    let b : Bid ParseResult = parseJson bidJson
+    let b : Bid ParseResult = ofJsonText bidJson
     match b with
     | Ok bid->
-      let j = toJson bid
-      Assert.Equal (bidJson, j.ToString JsonSaveOptions.DisableFormatting)
+      let j = toJsonValue bid
+      assertJsonEqual (JsonValue.Parse bidJson, j)
     | Error e -> failwithf "Error %A" e
 
   let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}"""
   [<Fact>]
   let ``Auction sample json can be deserialized correctly``() =
-    let a : Auction ParseResult = parseJson auctionJson
+    let a : Auction ParseResult = ofJsonText auctionJson
     match a with
     | Ok auction->
       Assert.Equal (AuctionId <| 2L, auction.id)
@@ -82,11 +103,11 @@ module Json =
     | Error e -> failwithf "Error %A" e
   [<Fact>]
   let ``Auction sample json can be deserialized and serialized to the same json``() =
-    let a : Auction ParseResult = parseJson auctionJson
+    let a : Auction ParseResult = ofJsonText auctionJson
     match a with
     | Ok auction->
-      let j = toJson auction
-      Assert.Equal (auctionJson, j.ToString JsonSaveOptions.DisableFormatting)
+      let j = toJsonValue auction
+      assertJsonEqual (JsonValue.Parse auctionJson, j)
     | Error e -> failwithf "Error %A" e
 
   let inline roundtripEq (isEq: 'a -> 'a -> bool) p =
@@ -150,4 +171,3 @@ module Redis =
          Assert.Equal (at1,at2)
          Assert.Equal (auction1,auction2)
        | _, _ -> Assert.True ((command = deserialized), sprintf "Expected:\n%A\nto equal:\n%A" command deserialized)
-

@@ -67,13 +67,13 @@ module Paths =
 (* Json API *)
 module OfJson=
   type Typ = Domain.Type
-  let bidReq (auctionId, user, at) json =
+  let bidReq (auctionId, user, at) (json:JsonValue) =
     let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
-    match json with
+    match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
-  let addAuctionReq (user) json =
+  let addAuctionReq (user) (json:JsonValue) =
     let create id startsAt title endsAt (currency:string option) (typ:string option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
@@ -82,7 +82,7 @@ module OfJson=
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
         { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
-    match json with
+    match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
                    <*> (o .@? "currency")<*> (o .@? "type")
     | x -> Decode.Fail.objExpected x
@@ -97,14 +97,14 @@ module ToJson=
       "currency" .= auction.currency
     ]
   let auction auction = auctionList auction |> jobj
-  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) : JsonValue =
+  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) =
     let (winner,winnerPrice) =
             match maybeAmountAndWinner with
             | None -> ("","")
             | Some (amount, winner)->
                 (winner.ToString(), amount.ToString())
     let discloseBidders =Auction.biddersAreOpen auction
-    let bid (x: Bid) :JsonValue =
+    let bid (x: Bid) =
       let userId = string x.user
       jobj [
         "amount" .= x.amount
