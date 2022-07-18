@@ -1,12 +1,6 @@
 module Auctions.Domain
 
 open System
-open System.ComponentModel
-open FSharp.Data
-open Fleece
-open Fleece.FSharpData
-open Fleece.FSharpData.Operators
-
 open FSharpPlus
 open FSharpPlus.Data
 
