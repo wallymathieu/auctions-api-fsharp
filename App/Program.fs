@@ -112,7 +112,7 @@ let main argv =
     Commands [command] |> observer
   let observeCommandResult result =
     iter persistEvents result
-    Results [result] |> observer
+    Domain.Results [result] |> observer
   // send empty list to observers if any, will cause the program to crash early if observers are misconfigured
   Commands [] |> observer
   let auctionAndStates = if args.Event then Event.foldToMap events else Command.foldToMap commands
