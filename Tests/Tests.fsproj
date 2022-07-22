@@ -22,6 +22,7 @@
     <Compile Include="ActorTests.fs" />
     <Compile Include="DomainSerialization.fs" />
     <Compile Include="EnvironmentTest.fs" />
+    <Compile Include="WebTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

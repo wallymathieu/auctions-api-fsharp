@@ -3,6 +3,9 @@ open System
 open FSharpPlus
 open Giraffe
 open Microsoft.AspNetCore.Http
+open Fleece
+open Fleece.FSharpData
+open FSharp.Data
 
 open Auctions.Security.Cryptography
 open Auctions.Domain
@@ -11,8 +14,6 @@ open Auctions
 open FSharpPlus.Data
 open System.Text
 open Fleece.FSharpData
-open Fleece.FSharpData.Operators
-open FSharp.Data
 open FSharp.Control.Tasks.V2
 open Auctions.Giraffe.Json
 (* Assuming front proxy verification of auth in order to simplify web testing *)
@@ -22,14 +23,22 @@ type Session =
   | UserLoggedOn of User
 
 type UserType=
-  | BuyerOrSeller=0
-  | Support=1
-type JwtPayload = { subject:string; name:string; userType:UserType }
+  | BuyerOrSeller = 0
+  | Support = 1
+type JwtPayload = { user:User }
 with
-  static member OfJson json =
-    let create sub name userType= {subject =sub ; name=name; userType =parse userType}
+  static member tryCreate (subject: string) (name: string option) (userType: String) =
+    let userId = UserId subject
+    match tryParse userType, name with
+    | Some UserType.BuyerOrSeller, Some name -> { user = BuyerOrSeller(userId, name) } |> Some
+    | Some UserType.Support,_ -> { user = Support userId } |> Some
+    | _ -> None
+
+  static member OfJson json:ParseResult<JwtPayload> =
     match json with
-    | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
+    | JObject o ->
+        JwtPayload.tryCreate <!> (o .@ "sub") <*> (o .@? "name") <*> (o .@ "u_typ")
+        >>= (function | Some user-> Ok user | None-> Decode.Fail.invalidValue json "could not interpret as user")
     | x -> Decode.Fail.objExpected x
 
 let authenticated f = fun (next:HttpFunc) (httpContext:HttpContext) ->
@@ -39,12 +48,6 @@ let authenticated f = fun (next:HttpFunc) (httpContext:HttpContext) ->
       |>Convert.FromBase64String
       |>Encoding.UTF8.GetString
       |> ofJsonText
-      |> Result.bind( fun (payload:JwtPayload)->
-        let userId = UserId payload.subject
-        match payload.userType with
-        | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
-        | UserType.Support -> Support userId |> Ok
-        | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type")
       |> function | Ok user->f (UserLoggedOn(user))
                   | Error _ ->f NoSession
     | _ -> f NoSession) next httpContext
@@ -76,7 +79,7 @@ module OfJson=
     let create id startsAt title endsAt (currency:string option) (typ:string option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
-        let defaultTyp = TimedAscending { reservePrice=Amount.zero currency; minRaise =Amount.zero currency;
+        let defaultTyp = TimedAscending { reservePrice = Amount.zero currency; minRaise = Amount.zero currency;
           timeFrame =TimeSpan.FromSeconds(0.0) }
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
