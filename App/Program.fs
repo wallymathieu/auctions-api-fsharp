@@ -101,5 +101,5 @@ let main argv =
                          |> Map.values |> Seq.toList
   let agent = AuctionDelegator.create(auctionAndStates, onIncomingCommand, time, observeCommandResult)
   // start suave
-  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
+  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent time)
   0

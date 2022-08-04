@@ -6,8 +6,7 @@ open Xunit
 open FSharpPlus
 open TestData
 module ``Auction Bid tests`` =
-  let validBid = { id = BidId.New()
-                   auction =auctionId
+  let validBid = { auction =auctionId
                    user=buyer
                    amount =parse "SEK10"
                    at = auction.startsAt.AddHours(1.0)

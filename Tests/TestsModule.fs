@@ -29,8 +29,7 @@ module TestData =
       currency = Currency CurrencyCode.SEK }
 
   let bid =
-      { id = BidId.New()
-        auction = auctionId
+      { auction = auctionId
         user = buyer
         amount = sek 100L
         at = DateTime(2016, 1, 2) }
@@ -38,14 +37,12 @@ module TestData =
   let buyer1 = BuyerOrSeller(UserId "x2", "Buyer")
   let buyer2 = BuyerOrSeller(UserId "x3", "Buyer")
 
-  let bid1 = { id = BidId.New()
-               auction =auctionId
+  let bid1 = { auction =auctionId
                user=buyer1
                amount =parse "SEK10"
                at = startsAt.AddHours(1.0)
              }
-  let bid2 = { id = BidId.New()
-               auction =auctionId
+  let bid2 = { auction =auctionId
                user=buyer2
                amount =parse "SEK12"
                at = startsAt.AddHours(2.0)

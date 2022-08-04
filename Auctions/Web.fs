@@ -68,7 +68,7 @@ module Paths =
 module OfJson=
   type Typ = Domain.Type
   let bidReq (auctionId, user, at) (json:JsonValue) =
-    let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
+    let create a = { user = user; amount=a; auction=auctionId; at = at }
     match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
@@ -117,7 +117,7 @@ module ToJson=
       "winnerPrice" .= winnerPrice
     ] |> jobj
 
-let webPart (agent : AuctionDelegator) =
+let webPart (agent : AuctionDelegator) (time:unit->DateTime) =
 
   let overview : WebPart= GET >=> fun (ctx) -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
@@ -153,7 +153,7 @@ let webPart (agent : AuctionDelegator) =
     let toPostedAuction user =
         Json.getBody
           >> Result.bind (OfJson.addAuctionReq (user))
-          >> Result.map (Timed.atNow >>AddAuction)
+          >> Result.map (Timed.at (time()) >>AddAuction)
           >> Result.mapError InvalidUserData
 
     authenticated (function
@@ -166,8 +166,8 @@ let webPart (agent : AuctionDelegator) =
   let placeBid auctionId =
     let toPostedPlaceBid id user =
       Json.getBody
-        >> Result.bind (OfJson.bidReq (id,user,DateTime.UtcNow) )
-        >> Result.map (Timed.atNow >>PlaceBid)
+        >> Result.bind (OfJson.bidReq (id, user, time()) )
+        >> Result.map (Timed.at (time()) >>PlaceBid)
         >> Result.mapError InvalidUserData
 
     authenticated (function

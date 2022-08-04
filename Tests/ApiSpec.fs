@@ -15,7 +15,7 @@ let observeCommandResult = ignore
 let time ()= System.DateTime(2022,8,4)
 
 // start suave
-let app () = OptionT.run << webPart ( AuctionDelegator.create(auctionAndStates, onIncomingCommand, time, observeCommandResult) )
+let app () = OptionT.run << webPart ( AuctionDelegator.create(auctionAndStates, onIncomingCommand, time, observeCommandResult) ) time
 let withAuthHeader (auth:string) (req:Http.HttpRequestMessage) =
   req.Headers.Add ("x-jwt-payload",auth)
   req
@@ -42,7 +42,7 @@ let ``create auction 1``() =
 
   assertStrJsonEqual("""{
       "$type": "AuctionAdded",
-      "at": "2022-08-04T15:42:09.540Z",
+      "at": "2022-08-04T00:00:00.000Z",
       "auction": {
           "id": 1,
           "startsAt": "2022-07-01T10:00:00.000Z",
@@ -71,13 +71,13 @@ let ``create auction 2``() =
 
   assertStrJsonEqual("""{
       "$type": "AuctionAdded",
-      "at": "2022-08-04T15:42:25.282Z",
+      "at": "2022-08-04T00:00:00.000Z",
       "auction": {
           "id": 2,
           "startsAt": "2021-12-01T10:00:00.000Z",
           "title": "Some auction",
           "expiry": "2022-12-18T10:00:00.000Z",
-          "user": "BuyerOrSeller|a1|Seller",
+          "user": "BuyerOrSeller|a1|Test",
           "type": "English|VAC0|VAC0|0",
           "currency": "VAC"
       }
@@ -96,13 +96,12 @@ let ``Place bid as buyer on auction 1``() =
 
   assertStrJsonEqual("""{
     "$type": "BidAccepted",
-    "at": "2022-08-04T15:43:54.895Z",
+    "at": "2022-08-04T00:00:00.000Z",
     "bid": {
-        "id": "a3b0e7f394f7457085d3788b8fb7f8ee",
         "auction": 1,
         "user": "BuyerOrSeller|a2|Buyer",
         "amount": "VAC11",
-        "at": "2022-08-04T15:43:54.837Z"
+        "at": "2022-08-04T00:00:00.000Z"
     }
 }""", res)
 
@@ -119,13 +118,12 @@ let ``Place bid as buyer on auction 2``() =
 
   assertStrJsonEqual("""{
     "$type": "BidAccepted",
-    "at": "2022-08-04T15:44:05.554Z",
+    "at": "2022-08-04T00:00:00.000Z",
     "bid": {
-        "id": "c523b4d3a9e44c25ba4f87b2927999b0",
         "auction": 2,
         "user": "BuyerOrSeller|a2|Buyer",
         "amount": "VAC11",
-        "at": "2022-08-04T15:44:05.530Z"
+        "at": "2022-08-04T00:00:00.000Z"
     }
 }""", res)
 
