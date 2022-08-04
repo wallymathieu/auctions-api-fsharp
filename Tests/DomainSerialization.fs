@@ -31,6 +31,7 @@ let parseCommands lines =
 module Json =
   open FSharp.Data
   open Json
+
   [<Fact>]
   let ``Can deserialize existing commands``() = parseCommands sampleJsonLines |> ignore
   [<Fact>]

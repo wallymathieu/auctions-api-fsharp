@@ -1,4 +1,4 @@
-﻿module Auctions.Domain
+module Auctions.Domain
 
 open System
 open FSharpPlus
@@ -421,7 +421,6 @@ type Observable =
   | Results of Result<Event, Errors> list
 open Fleece
 open Fleece.FSharpData
-open Fleece.FSharpData.Operators
 
 type Currency with
   static member OfJson json = Currency.tryParse <!> ofJson json >>= (Option.toResultWith <|
@@ -461,24 +460,22 @@ type Errors with
     | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
 
 type Auction with
-  static member JsonObjCodec =
-    fun id startsAt title expiry user typ currency -> { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency }
-    |> withFields
-    |> jfield "id"        (fun x -> x.id)
-    |> jfield "startsAt"  (fun x -> x.startsAt)
-    |> jfield "title"     (fun x -> x.title)
-    |> jfield "expiry"    (fun x -> x.expiry)
-    |> jfield "user"      (fun x -> x.user)
-    |> jfield "type"      (fun x -> x.typ)
-    |> jfield "currency"  (fun x -> x.currency)
+  static member JsonObjCodec = codec {
+    let! id = jreq "id" (fun x -> Some x.id)
+    and! startsAt = jreq "startsAt" (fun x -> Some x.startsAt)
+    and! title = jreq "title" (fun x -> Some x.title)
+    and! expiry = jreq "expiry" (fun x -> Some x.expiry)
+    and! user = jreq "user" (fun x -> Some x.user)
+    and! typ = jreq "type" (fun x -> Some x.typ)
+    and! currency = jreq "currency" (fun x -> Some x.currency)
+    return { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency } }
 type Bid with
-  static member JsonObjCodec =
-    fun auction user amount at-> { auction =auction; user = user; amount=amount; at=at }
-    |> withFields
-    |> jfield "auction" (fun x -> x.auction)
-    |> jfield "user"    (fun x -> x.user)
-    |> jfield "amount"  (fun x -> x.amount)
-    |> jfield "at"      (fun x -> x.at)
+  static member JsonObjCodec = codec {
+    let! auction = jreq "auction" (fun x -> Some x.auction)
+    and! user = jreq "user" (fun x -> Some x.user)
+    and! amount = jreq "amount" (fun x -> Some x.amount)
+    and! at = jreq "at" (fun x -> Some x.at)
+    return{ auction =auction; user = user; amount=amount; at=at } }
 /// tag Json codec with property and value inside the Json encoded by the codec
 let inline tag prop value codec =
     let matchPropValue (o:PropertyList<_>) =
@@ -486,15 +483,13 @@ let inline tag prop value codec =
          | a::_ when (ofJson a) = Ok value -> Ok o
          | a::_ -> Decode.Fail.invalidValue a value
          | [] -> Decode.Fail.propertyNotFound prop (o |> map (fun x -> x :> IEncoding))
-    Codec.ofConcrete codec
+    codec
     |> Codec.compose (
-                        matchPropValue
-                        <->
-                        fun encoded ->
-                          if Seq.isEmpty encoded then encoded // we have not encoded anything so no need to tag it
-                          else PropertyList (List.toArray ((toList encoded) @ [prop, toJson value]))
-                     )
-    |> Codec.toConcrete
+      matchPropValue
+      <->
+      fun encoded ->
+        if Seq.isEmpty encoded then encoded // we have not encoded anything so no need to tag it
+        else PropertyList (List.toArray ((toList encoded) @ [prop, toJson value])) )
 
 type Command with
   static member JsonObjCodec =

@@ -1,4 +1,4 @@
-﻿module Auctions.Web
+module Auctions.Web
 open System
 open FSharpPlus
 open Auctions.Suave
@@ -10,7 +10,6 @@ open Auctions.Security.Cryptography
 
 open Fleece
 open Fleece.FSharpData
-open Fleece.FSharpData.Operators
 open FSharp.Data
 
 open Auctions.Domain
@@ -24,14 +23,22 @@ type Session =
   | NoSession
   | UserLoggedOn of User
 type UserType=
-  | BuyerOrSeller=0
-  | Support=1
-type JwtPayload = { subject:string; name:string; userType:UserType }
+  | BuyerOrSeller = 0
+  | Support = 1
+type JwtPayload = { user:User }
 with
+  static member tryCreate (subject: string) (name: string option) (userType: String) =
+    let userId = UserId subject
+    match tryParse userType, name with
+    | Some UserType.BuyerOrSeller, Some name -> { user = BuyerOrSeller(userId, name) } |> Some
+    | Some UserType.Support,_ -> { user = Support userId } |> Some
+    | _ -> None
+
   static member OfJson json:ParseResult<JwtPayload> =
-    let create sub name userType= {subject =sub ; name=name; userType =parse userType}
     match json with
-    | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
+    | JObject o ->
+        JwtPayload.tryCreate <!> (o .@ "sub") <*> (o .@? "name") <*> (o .@ "u_typ")
+        >>= (function | Some user-> Ok user | None-> Decode.Fail.invalidValue json "could not interpret as user")
     | x -> Decode.Fail.objExpected x
 let authenticated f = //
   let context apply (a : Suave.Http.HttpContext) = apply a a
@@ -40,13 +47,7 @@ let authenticated f = //
     | Choice1Of2 u ->
       Convert.FromBase64String u
       |>Encoding.UTF8.GetString
-      |> parseJson
-      |> Result.bind( fun (payload:JwtPayload)->
-        let userId = UserId payload.subject
-        match payload.userType with
-        | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
-        | UserType.Support -> Support userId |> Ok
-        | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type")
+      |> ofJsonText
       |> function | Ok user->f (UserLoggedOn(user))
                   | Error _ ->f NoSession
     | Choice2Of2 _ -> f NoSession)
@@ -77,7 +78,7 @@ module OfJson=
     let create id startsAt title endsAt (currency:string option) (typ:string option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
-        let defaultTyp = TimedAscending { reservePrice=Amount.zero currency; minRaise =Amount.zero currency;
+        let defaultTyp = TimedAscending { reservePrice = Amount.zero currency; minRaise = Amount.zero currency;
           timeFrame =TimeSpan.FromSeconds(0.0) }
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
