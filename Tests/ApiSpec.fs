@@ -8,6 +8,8 @@ open Suave.Testing
 open Xunit
 open FsUnit.Xunit
 open Tests.TestsModule.Json
+open Suave.Http
+open System.Net.Http
 
 let auctionAndStates = []
 let onIncomingCommand = ignore
@@ -16,11 +18,12 @@ let time ()= System.DateTime(2022,8,4)
 
 // start suave
 let app () = OptionT.run << webPart ( AuctionDelegator.create(auctionAndStates, onIncomingCommand, time, observeCommandResult) ) time
-let withAuthHeader (auth:string) (req:Http.HttpRequestMessage) =
+let withAuthHeader (auth:string) (req:HttpRequestMessage) =
   req.Headers.Add ("x-jwt-payload",auth)
   req
 let reqWithAuth method resource data auth =
-  reqResp method resource "" data None DecompressionMethods.None (withAuthHeader auth) contentString
+  let contentStringAndStatusCode (m: HttpResponseMessage) = (statusCode m,contentString m)
+  reqResp method resource "" data None DecompressionMethods.None (withAuthHeader auth) contentStringAndStatusCode
 
 let runWebPart app = runWith defaultConfig app
 let firstAuctionRequest ="""{
@@ -34,13 +37,13 @@ let seller1 = "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="
 let buyer1 = "eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K"
 [<Fact>]
 let ``create auction 1``() =
-  use data = new System.Net.Http.StringContent(firstAuctionRequest)
+  use data = new StringContent(firstAuctionRequest)
   //
-  let res =
+  let statusCode,res =
         (runWebPart (app()))
         |> reqWithAuth HttpMethod.POST "/auction" (Some data) seller1
-
-  assertStrJsonEqual("""{
+  Assert.Equal (HttpStatusCode.OK, statusCode)
+  assertStrJsonEqual ("""{
       "$type": "AuctionAdded",
       "at": "2022-08-04T00:00:00.000Z",
       "auction": {
@@ -64,12 +67,12 @@ let secondAuctionRequest ="""{
 
 [<Fact>]
 let ``create auction 2``() =
-  use data = new System.Net.Http.StringContent(secondAuctionRequest)
-  let res =
+  use data = new StringContent(secondAuctionRequest)
+  let statusCode,res =
         (runWebPart (app()))
         |> reqWithAuth HttpMethod.POST "/auction" (Some data) seller1
-
-  assertStrJsonEqual("""{
+  Assert.Equal (HttpStatusCode.OK, statusCode)
+  assertStrJsonEqual ("""{
       "$type": "AuctionAdded",
       "at": "2022-08-04T00:00:00.000Z",
       "auction": {
@@ -86,15 +89,17 @@ let ``create auction 2``() =
 [<Fact>]
 let ``Place bid as buyer on auction 1``() =
   let app = app()
-  use auctionReq = new System.Net.Http.StringContent(firstAuctionRequest)
+  use auctionReq = new StringContent(firstAuctionRequest)
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new System.Net.Http.StringContent("""{ "auction":"1","amount":"VAC11" }""")
-  let res =
+
+  use bidReq = new StringContent("""{ "auction":"1","amount":"VAC11" }""")
+  let statusCode,res =
         (runWebPart app)
         |> reqWithAuth HttpMethod.POST "/auction/1/bid" (Some bidReq) buyer1
 
-  assertStrJsonEqual("""{
+  Assert.Equal (HttpStatusCode.OK, statusCode)
+  assertStrJsonEqual ("""{
     "$type": "BidAccepted",
     "at": "2022-08-04T00:00:00.000Z",
     "bid": {
@@ -108,15 +113,15 @@ let ``Place bid as buyer on auction 1``() =
 [<Fact>]
 let ``Place bid as buyer on auction 2``() =
   let app = app()
-  use auctionReq = new System.Net.Http.StringContent(secondAuctionRequest)
+  use auctionReq = new StringContent(secondAuctionRequest)
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new System.Net.Http.StringContent("""{ "amount":"VAC11" }""")
-  let res =
+  use bidReq = new StringContent("""{ "amount":"VAC11" }""")
+  let statusCode,res =
         (runWebPart app)
         |> reqWithAuth HttpMethod.POST "/auction/2/bid" (Some bidReq) buyer1
-
-  assertStrJsonEqual("""{
+  Assert.Equal (HttpStatusCode.OK, statusCode)
+  assertStrJsonEqual ("""{
     "$type": "BidAccepted",
     "at": "2022-08-04T00:00:00.000Z",
     "bid": {
@@ -130,15 +135,15 @@ let ``Place bid as buyer on auction 2``() =
 [<Fact>]
 let ``Place bid as seller on auction 1``() =
   let app = app()
-  use auctionReq = new System.Net.Http.StringContent(firstAuctionRequest)
+  use auctionReq = new StringContent(firstAuctionRequest)
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new System.Net.Http.StringContent("""{ "amount":"VAC11" }""")
-  let res =
+  use bidReq = new StringContent("""{ "amount":"VAC11" }""")
+  let statusCode,res =
         (runWebPart app)
         |> reqWithAuth HttpMethod.POST "/auction/1/bid" (Some bidReq) seller1
-
-  assertStrJsonEqual("""{
+  Assert.Equal (HttpStatusCode.BadRequest, statusCode)
+  assertStrJsonEqual ("""{
     "type": "SellerCannotPlaceBids",
     "userId": "a1",
     "auctionId": 1
@@ -146,10 +151,19 @@ let ``Place bid as seller on auction 1``() =
 
 [<Fact>]
 let ``get auctions``() =
-(*
-127.0.0.1:8083/auction/1
-x-jwt-payload: eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo=
-{
+  let app = app()
+  use auctionReq = new StringContent(firstAuctionRequest)
+  (runWebPart app)
+  |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
+  use bidReq = new StringContent("""{ "auction":"1","amount":"VAC11" }""")
+  (runWebPart app)
+  |> reqWithAuth HttpMethod.POST "/auction/1/bid" (Some bidReq) buyer1 |> ignore
+
+  let statusCode,res =
+        (runWebPart app)
+        |> reqWithAuth HttpMethod.GET "/auction/1" None seller1
+  Assert.Equal (HttpStatusCode.OK, statusCode)
+  assertStrJsonEqual ("""{
     "id": 1,
     "startsAt": "2022-07-01T10:00:00.000Z",
     "title": "Some auction",
@@ -163,7 +177,4 @@ x-jwt-payload: eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo=
     ],
     "winner": "",
     "winnerPrice": ""
-}
-*)
-  //Assert.Equal(auctionId |> AuctionHasEnded |> Error, timedAscState |> S.addBid bid |> snd )
-  ()
+}""", res)
