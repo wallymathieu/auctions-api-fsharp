@@ -48,7 +48,7 @@ module ``Auction state tests`` =
     // setup
     let (state,res) = Auction.emptyState timedAscAuction
                        |> S.addBid {bid with at=startsAt.AddHours(1.0)}
-    let nextBid = {bid with at=startsAt.AddHours(2.0); id=BidId.New()}
+    let nextBid = {bid with at=startsAt.AddHours(2.0)}
 
     // act
     let res = S.addBid nextBid state |> snd

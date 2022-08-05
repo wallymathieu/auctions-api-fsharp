@@ -1,4 +1,4 @@
-﻿module Auctions.Web
+module Auctions.Web
 open System
 open FSharpPlus
 open Auctions.Suave
@@ -27,6 +27,7 @@ type UserType=
   | Support = 1
 type JwtPayload = { user:User }
 with
+  static member getUser (payload:JwtPayload)= payload.user
   static member tryCreate (subject: string) (name: string option) (userType: String) =
     let userId = UserId subject
     match tryParse userType, name with
@@ -40,17 +41,22 @@ with
         JwtPayload.tryCreate <!> (o .@ "sub") <*> (o .@? "name") <*> (o .@ "u_typ")
         >>= (function | Some user-> Ok user | None-> Decode.Fail.invalidValue json "could not interpret as user")
     | x -> Decode.Fail.objExpected x
-let authenticated f = //
-  let context apply (a : Suave.Http.HttpContext) = apply a a
-  context (fun x ->
-    match x.request.header "x-jwt-payload" with
+let decodeXJwtPayloadHeader (headerValue:Choice<String,String>) : Result<JwtPayload,_> =
+    match headerValue with
     | Choice1Of2 u ->
       Convert.FromBase64String u
       |>Encoding.UTF8.GetString
       |> ofJsonText
+      |> Result.mapError Choice1Of2
+    | Choice2Of2 _ -> Error <| Choice2Of2 "Missing value"
+
+let authenticated f = //
+  let context apply (a : Suave.Http.HttpContext) = apply a a
+  context (fun (x : Suave.Http.HttpContext) ->
+      decodeXJwtPayloadHeader (x.request.header "x-jwt-payload")
+      |> Result.map JwtPayload.getUser
       |> function | Ok user->f (UserLoggedOn(user))
-                  | Error _ ->f NoSession
-    | Choice2Of2 _ -> f NoSession)
+                  | Error _ ->f NoSession)
 
 module Paths =
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -69,7 +75,7 @@ module Paths =
 module OfJson=
   type Typ = Domain.Type
   let bidReq (auctionId, user, at) (json:JsonValue) =
-    let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
+    let create a = { user = user; amount=a; auction=auctionId; at = at }
     match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
@@ -118,7 +124,7 @@ module ToJson=
       "winnerPrice" .= winnerPrice
     ] |> jobj
 
-let webPart (agent : AuctionDelegator) =
+let webPart (agent : AuctionDelegator) (time:unit->DateTime) =
 
   let overview : WebPart= GET >=> fun (ctx) -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
@@ -154,7 +160,7 @@ let webPart (agent : AuctionDelegator) =
     let toPostedAuction user =
         Json.getBody
           >> Result.bind (OfJson.addAuctionReq (user))
-          >> Result.map (Timed.atNow >>AddAuction)
+          >> Result.map (Timed.at (time()) >>AddAuction)
           >> Result.mapError InvalidUserData
 
     authenticated (function
@@ -167,8 +173,8 @@ let webPart (agent : AuctionDelegator) =
   let placeBid auctionId =
     let toPostedPlaceBid id user =
       Json.getBody
-        >> Result.bind (OfJson.bidReq (id,user,DateTime.UtcNow) )
-        >> Result.map (Timed.atNow >>PlaceBid)
+        >> Result.bind (OfJson.bidReq (id, user, time()) )
+        >> Result.map (Timed.at (time()) >>PlaceBid)
         >> Result.mapError InvalidUserData
 
     authenticated (function

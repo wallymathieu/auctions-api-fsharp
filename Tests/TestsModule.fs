@@ -29,8 +29,7 @@ module TestData =
       currency = Currency CurrencyCode.SEK }
 
   let bid =
-      { id = BidId.New()
-        auction = auctionId
+      { auction = auctionId
         user = buyer
         amount = sek 100L
         at = DateTime(2016, 1, 2) }
@@ -38,14 +37,12 @@ module TestData =
   let buyer1 = BuyerOrSeller(UserId "x2", "Buyer")
   let buyer2 = BuyerOrSeller(UserId "x3", "Buyer")
 
-  let bid1 = { id = BidId.New()
-               auction =auctionId
+  let bid1 = { auction =auctionId
                user=buyer1
                amount =parse "SEK10"
                at = startsAt.AddHours(1.0)
              }
-  let bid2 = { id = BidId.New()
-               auction =auctionId
+  let bid2 = { auction =auctionId
                user=buyer2
                amount =parse "SEK12"
                at = startsAt.AddHours(2.0)
@@ -106,3 +103,25 @@ module Arb =
 let inline (?=?) left right = left = right |@ sprintf "%A = %A" left right
 
 let fsCheck x = Check.One({Config.QuickThrowOnFailure with Name = "";  }, x)
+module Json =
+  open FSharp.Data
+  let rec areJsonEqual (expected: JsonValue, actual: JsonValue)=
+    match expected,actual with
+    | JsonValue.String e, JsonValue.String a -> e = a
+    | JsonValue.Boolean e, JsonValue.Boolean a -> e = a
+    | JsonValue.Float e, JsonValue.Float a -> e = a
+    | JsonValue.Number e, JsonValue.Number a -> e = a
+    | JsonValue.Null, JsonValue.Null -> true
+    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length && e.Length = 0 -> true
+    | JsonValue.Array e, JsonValue.Array a when e.Length = a.Length -> Array.zip e a |> Array.map areJsonEqual |> Array.reduce (&&)
+    | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length && e.Length = 0 -> true
+    | JsonValue.Record e, JsonValue.Record a when e.Length = a.Length -> let orderByFirst = Array.sortBy fst
+                                                                         let eq ((efst,esnd), (afst,asnd)) =
+                                                                           efst = afst && areJsonEqual (esnd, asnd)
+                                                                         in Array.zip (orderByFirst e) (orderByFirst a)
+                                                                            |> Array.map eq |> Array.reduce (&&)
+    | _ -> false
+  let assertJsonEqual (expected: JsonValue, actual: JsonValue)=
+    if areJsonEqual (expected, actual) then () else failwithf "The actual value %O is not equal to expected %O" actual expected
+  let assertStrJsonEqual  (expected: string, actual: string)=
+    assertJsonEqual (parse expected, parse actual)

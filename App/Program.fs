@@ -45,10 +45,10 @@ let main argv =
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
       | "--web-hook" :: Uri url :: xs -> parseArgs { b with WebHook = Some url } xs
       | invalidArgs ->
-        printfn "error: invalid arguments %A" invalidArgs
+        printfn $"error: invalid arguments %A{invalidArgs}"
         printfn "Usage:"
-        printfn "    --ip                   ADDRESS     ip address (Default: %O)" defaultArgs.IP
-        printfn "    --port                 PORT        port (Default: %i)" defaultArgs.Port
+        printfn $"    --ip                   ADDRESS     ip address (Default: {defaultArgs.IP})"
+        printfn $"    --port                 PORT        port (Default: %i{defaultArgs.Port})"
         printfn "    --redis                CONN        redis connection string"
         printfn "    --json                 FILE        path to filename to store commands"
         printfn "    --event                            if you want to replay events instead of commands"
@@ -101,5 +101,5 @@ let main argv =
                          |> Map.values |> Seq.toList
   let agent = AuctionDelegator.create(auctionAndStates, onIncomingCommand, time, observeCommandResult)
   // start suave
-  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent)
+  startWebServer { defaultConfig with bindings = [ HttpBinding.create HTTP args.IP args.Port ] } (OptionT.run << webPart agent time)
   0

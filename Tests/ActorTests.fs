@@ -32,8 +32,7 @@ module ``Auction agent tests`` =
   let buyer = BuyerOrSeller(UserId "x2", "Buyer")
 
   let emptyHandler= ignore
-  let validBid = { id = BidId.New()
-                   auction =auctionId
+  let validBid = { auction =auctionId
                    user=buyer
                    amount =parse "VAC10"
                    at = DateTime(2008,12,1)
