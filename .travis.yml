@@ -1,6 +1,6 @@
 sudo: false
 language: csharp
-dist: xenial
+dist: jammy
 dotnet: 7.0
 services:
   - redis
