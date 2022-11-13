@@ -482,7 +482,7 @@ let inline tag prop value codec =
          match o.[prop] with
          | a::_ when (ofJson a) = Ok value -> Ok o
          | a::_ -> Decode.Fail.invalidValue a value
-         | [] -> Decode.Fail.propertyNotFound prop (o |> map (fun x -> x :> IEncoding))
+         | [] -> Decode.Fail.propertyNotFound prop o
     codec
     |> Codec.compose (
       matchPropValue
