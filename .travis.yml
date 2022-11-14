@@ -1,7 +1,6 @@
 sudo: false
 language: csharp
 mono: none
-dist: jammy
 dotnet: 7.0
 services:
   - redis
