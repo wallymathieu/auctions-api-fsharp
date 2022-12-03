@@ -27,14 +27,17 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="FsCheck.Xunit" Version="2.16.3" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
+    <PackageReference Include="FsCheck.Xunit" Version="2.16.5" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.4.0" />
     <PackageReference Include="Suave.Testing" Version="2.2.1" />
-    <PackageReference Include="FsCheck.Xunit" Version="2.16.3" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
-    <PackageReference Include="xunit" Version="2.4.1" />
-    <PackageReference Include="FsUnit.xUnit" Version="4.1.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3" />
-    <PackageReference Update="FSharp.Core" Version="5.0.2" />
+    <PackageReference Include="FsCheck.Xunit" Version="2.16.5" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.4.0" />
+    <PackageReference Include="xunit" Version="2.4.2" />
+    <PackageReference Include="FsUnit.xUnit" Version="5.1.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Update="FSharp.Core" Version="6.0.6" />
   </ItemGroup>
 </Project>
