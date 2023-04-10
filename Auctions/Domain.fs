@@ -55,15 +55,6 @@ type User =
   static member Parse user : User= tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
 
 [<Struct>]
-type BidId = BidId of Guid
-with
-  override this.ToString()=match this with BidId bId->bId.ToString("N")
-  static member New()= Guid.NewGuid() |> BidId
-//Module BidId
-  static member TryParse v : BidId option= tryParse v |> Option.map BidId
-  static member unwrap (BidId bId)=bId
-
-[<Struct>]
 type AuctionId = AuctionId of int64
 with
   override this.ToString()=match this with AuctionId aId->string aId
@@ -102,7 +93,7 @@ let (|Amount|_|) : string -> Amount option = tryParse
 let (|Int64|_|) : string -> int64 option = tryParse
 
 module Timed =
-  let atNow a = (DateTime.UtcNow, a)
+  let at now a = (now, a)
 
 [<AutoOpen>]
 module Auctions=
@@ -176,8 +167,7 @@ type Auction =
   }
 
 type Bid =
-  { id : BidId
-    auction : AuctionId
+  { auction : AuctionId
     user : User
     amount : Amount
     at : DateTime
@@ -185,7 +175,6 @@ type Bid =
 
 [<RequireQualifiedAccess>]
 module Bid=
-  let getId (bid : Bid) = bid.id
   let amount (bid : Bid) = bid.amount
   let auction (bid : Bid) = bid.auction
   let bidder (bid: Bid) = bid.user
@@ -193,14 +182,12 @@ module Bid=
 
 type Errors =
   | UnknownAuction of AuctionId
-  | UnknownBid of BidId
-  | BidAlreadyExists of BidId
   | AuctionAlreadyExists of AuctionId
   | AuctionHasEnded of AuctionId
   | AuctionHasNotStarted of AuctionId
   | AuctionNotFound of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
-  | BidCurrencyConversion of BidId * Currency
+  | BidCurrencyConversion of Currency
   | InvalidUserData of String
   | MustPlaceBidOverHighestBid of Amount
   | AlreadyPlacedBid
@@ -220,7 +207,7 @@ module Auction=
 
   let validateBid (bid : Bid) (auction : Auction) =
     if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
-    else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.id, bid.amount.currency))
+    else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.amount.currency))
     else if bid.at < auction.startsAt then Error(Errors.AuctionHasNotStarted auction.id)
     else if bid.at > auction.expiry then Error(Errors.AuctionHasEnded auction.id)
     else Ok()
@@ -445,11 +432,6 @@ type User with
                                                                  InvalidValue(typeof<Currency>, json, "Unable to interpret as user"))
   static member ToJson (x: User) = toJson (string x)
 
-type BidId with
-  static member OfJson json = BidId.TryParse <!> ofJson json >>= (Option.toResultWith <|
-                                                                 InvalidValue(typeof<BidId>, json, "Invalid bid id"))
-  static member ToJson (b: BidId) = toJson (string b)
-
 type AuctionId with
   static member OfJson json =AuctionId <!> ofJson json
   static member ToJson (AuctionId aId) = toJson aId
@@ -467,14 +449,12 @@ type Errors with
   static member ToJson (x: Errors) =
     match x with
     | UnknownAuction a-> jobj [ "type".="UnknownAuction"; "auctionId" .= a] //NOTE: Duplicate
-    | UnknownBid b-> jobj [ "type".="UnknownBid"; "bidId" .= b]
-    | BidAlreadyExists b-> jobj [ "type".="BidAlreadyExists"; "bidId" .= b]
     | AuctionAlreadyExists a-> jobj [ "type".="AuctionAlreadyExists"; "auctionId" .= a]
     | AuctionHasEnded a-> jobj [ "type".="AuctionHasEnded"; "auctionId" .= a]
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
     | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
-    | BidCurrencyConversion (b,c)-> jobj [ "type".="BidCurrencyConversion"; "bidId" .= b; "currency" .= c]
+    | BidCurrencyConversion (c)-> jobj [ "type".="BidCurrencyConversion"; "currency" .= c]
     | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
     | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
@@ -491,19 +471,18 @@ type Auction with
     return { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency } }
 type Bid with
   static member JsonObjCodec = codec {
-    let! id = jreq "id" (fun x -> Some x.id)
-    and! auction = jreq "auction" (fun x -> Some x.auction)
+    let! auction = jreq "auction" (fun x -> Some x.auction)
     and! user = jreq "user" (fun x -> Some x.user)
     and! amount = jreq "amount" (fun x -> Some x.amount)
     and! at = jreq "at" (fun x -> Some x.at)
-    return{ id =id; auction =auction; user = user; amount=amount; at=at } }
+    return{ auction =auction; user = user; amount=amount; at=at } }
 /// tag Json codec with property and value inside the Json encoded by the codec
 let inline tag prop value codec =
     let matchPropValue (o:PropertyList<_>) =
          match o.[prop] with
          | a::_ when (ofJson a) = Ok value -> Ok o
          | a::_ -> Decode.Fail.invalidValue a value
-         | [] -> Decode.Fail.propertyNotFound prop (o |> map (fun x -> x :> IEncoding))
+         | [] -> Decode.Fail.propertyNotFound prop o
     codec
     |> Codec.compose (
       matchPropValue

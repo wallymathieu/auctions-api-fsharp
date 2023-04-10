@@ -52,10 +52,7 @@ let main argv =
       Event = false
     }
   let args =
-    let (|Port|_|) : _-> System.UInt16 option = tryParse
-    let (|IPAddress|_|) :_->System.Net.IPAddress option = tryParse
     let (|Uri|_|) (uri:string) :System.Uri option = try System.Uri uri |> Some with | _ -> None
-    //default bind to 127.0.0.1:8083
     let envArgs = Env.vars () |> Env.envArgs "AUCTIONS_"
     let rec parseArgs b args =
       match args with
@@ -65,7 +62,7 @@ let main argv =
       | "--json" :: file :: xs -> parseArgs { b with Json = Some file } xs
       | "--web-hook" :: Uri url :: xs -> parseArgs { b with WebHook = Some url } xs
       | invalidArgs ->
-        printfn "error: invalid arguments %A" invalidArgs
+        printfn $"error: invalid arguments %A{invalidArgs}"
         printfn "Usage:"
         printfn "    --redis                CONN        redis connection string"
         printfn "    --json                 FILE        path to filename to store commands"
@@ -120,7 +117,7 @@ let main argv =
   let agent = AuctionDelegator.create(auctionAndStates, onIncomingCommand, time, observeCommandResult)
   let configureApp (app : IApplicationBuilder) =
     app.UseGiraffeErrorHandler(errorHandler)
-       .UseGiraffe (Web.webApp agent)
+       .UseGiraffe (webPart agent time)
 
   WebHost.CreateDefaultBuilder()
         .Configure(Action<IApplicationBuilder> configureApp)

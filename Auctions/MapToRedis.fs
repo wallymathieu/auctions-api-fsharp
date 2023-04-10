@@ -38,9 +38,8 @@ let timeAndAuctionCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTim
   <*> rreq "Currency" (snd >> Auction.currency >> Currency.value >> Some)
   <*> rreqWith (tryParseUser, (string>>implicit)) "User" (snd >> Auction.user >> Some )
 let timeAndBidCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTime*Bid),(DateTime*Bid)> =
-  fun (id:string) auction amountValue amountCurrency at bidAt user -> (at, { id=Guid.Parse id |> BidId; auction=AuctionId auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at= Option.defaultValue at bidAt })
-  <!> rreq "Id" (snd >> Bid.getId >> string >> Some)
-  <*> rreq "Auction" (snd >> Bid.auction >> AuctionId.unwrap >> Some)
+  fun auction amountValue amountCurrency at bidAt user -> (at, { auction=AuctionId auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at= Option.defaultValue at bidAt })
+  <!> rreq "Auction" (snd >> Bid.auction >> AuctionId.unwrap >> Some)
   <*> rreq "AmountValue" (snd >> Bid.amount >> Amount.value >> Some)
   <*> rreq "AmountCurrency" (snd >> Bid.amount >> Amount.currency >> Currency.value >> Some)
   <*> rreqWith (tryParseDateTime,ofDateTime) "At" (fst >> Some)
