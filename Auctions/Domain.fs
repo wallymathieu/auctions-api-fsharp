@@ -232,50 +232,43 @@ module State=
      | OnGoing of bids: Bid list * expiry: DateTime * opt:TimedAscendingOptions
      | HasEnded of bids: Bid list * expired: DateTime * opt:TimedAscendingOptions
   with
-    interface IState with
-      member state.Inc now =
+    member state.Inc now =
         match state with
         | AwaitingStart (start,expiry, opt) as awaitingStart->
           match (now>start, now<expiry) with
           | true,true->
-            OnGoing([],expiry, opt) :> IState
+            OnGoing([],expiry, opt)
           | true,false->
-            HasEnded([],expiry, opt) :> IState
+            HasEnded([],expiry, opt)
           | false, _ ->
-            awaitingStart :> IState
+            awaitingStart
         | OnGoing (bids,expiry,opt) as ongoing->
           if now<expiry then
-            ongoing :> IState
+            ongoing
           else
-            HasEnded (bids, expiry, opt) :> IState
+            HasEnded (bids, expiry, opt)
         | HasEnded _ as ended ->
-            ended :> IState
-
-      member state.AddBid b = // note that this is increment + mutate in one operation
-        match state with
-        | AwaitingStart (start,expiry, opt) as awaitingStart->
-          match (b.at>start, b.at<expiry) with
-          | true,true->
-            OnGoing([b], max expiry (b.at+opt.timeFrame), opt) :>IState,Ok()
-          | true,false->
-            HasEnded([],expiry, opt ):>IState,Error (AuctionHasEnded b.auction)
-          | false, _ ->
-            awaitingStart :>IState,Error (AuctionHasNotStarted b.auction)
+            ended
+    member state.AddBid b=
+        let next = state.Inc b.at
+        match next with
+        | AwaitingStart _ as awaitingStart->
+            awaitingStart, Error (AuctionHasNotStarted b.auction)
         | OnGoing (bids,expiry,opt) as ongoing->
-          if b.at<expiry then
             match bids with
-            | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt):>IState,Ok()
+            | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt), Ok()
             | highestBid::_ ->
               // you cannot bid lower than the "current bid"
               if b.amount > (highestBid.amount + opt.minRaise)
               then
-                OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt):>IState,Ok()
+                OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt),Ok()
               else
-                ongoing:>IState, Error (MustPlaceBidOverHighestBid highestBid.amount)
-          else
-            HasEnded (bids, expiry, opt):>IState, Error (AuctionHasEnded b.auction)
+                ongoing, Error (MustPlaceBidOverHighestBid highestBid.amount)
         | HasEnded _ as ended ->
-            ended:>IState,Error (AuctionHasEnded b.auction)
+            ended,Error (AuctionHasEnded b.auction)
+    interface IState with
+      member state.Inc now = state.Inc now
+      member state.AddBid b = let next,err= state.AddBid b in (next:>IState, err)
       member state.GetBids () =
         match state with
         | OnGoing(bids,_,_)->bids
@@ -292,30 +285,30 @@ module State=
      | AcceptingBids of bids: Map<UserId, Bid> * expiry: DateTime * opt:SingleSealedBidOptions
      | DisclosingBids of bids: Bid list * expired: DateTime * opt:SingleSealedBidOptions
   with
-
-    interface IState with
-      member state.Inc now =
+    member state.Inc now =
         match state with
         | AcceptingBids (bids,expiry, opt) as acceptingBids->
           match now>=expiry with
-          | false -> acceptingBids :>IState
+          | false -> acceptingBids
           | true ->
             let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
-            DisclosingBids(bids, expiry, opt):>IState
-        | DisclosingBids _ as disclosingBids-> disclosingBids:>IState
-
-      member state.AddBid b =
-        match state with
+            DisclosingBids(bids, expiry, opt)
+        | DisclosingBids _ as disclosingBids-> disclosingBids
+    member state.AddBid b =
+        let next = state.Inc b.at
+        match next with
         | AcceptingBids (bids,expiry, opt) as acceptingBids->
           let u=User.getId b.user
-          match b.at>=expiry, bids.ContainsKey (u) with
-          | false, false -> AcceptingBids (bids.Add (u,b), expiry, opt):>IState, Ok()
-          | _, true -> acceptingBids:>IState, Error AlreadyPlacedBid
-          | true,_ ->
-            let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
-            DisclosingBids(bids,expiry, opt):>IState, Error (AuctionHasEnded b.auction)
+          match bids.ContainsKey u with
+          | false -> AcceptingBids (bids.Add (u,b), expiry, opt), Ok()
+          | true -> acceptingBids, Error AlreadyPlacedBid
         | DisclosingBids _ as disclosingBids->
-          disclosingBids:>IState, Error (AuctionHasEnded b.auction)
+          disclosingBids, Error (AuctionHasEnded b.auction)
+
+    interface IState with
+      member state.Inc now = state.Inc now
+
+      member state.AddBid b = let next, err = state.AddBid b in (next :> IState, err)
 
       member state.GetBids () =
         match state with
