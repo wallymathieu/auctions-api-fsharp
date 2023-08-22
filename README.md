@@ -15,17 +15,20 @@ A more complete implementation could have supervisors, circuit breakers, retries
 
 ### High level overview of command and query flow
 
-```md
-signal -> delegator -> mailbox.[x]
+```mermaid
+graph TD;
 
-command ------[handle]---> mailbox.[x] --[observe result]-\
-           |                                               v
-           |----------------[observe command]-----> observers.[...]
-           |
-           \---[persist command]--> persisters.[...]
+A[signal] --> B[delegator] --> C[auction mailbox]
+```
 
+```mermaid
+graph TD;
 
-query ----[query]---> mailbox.[y] --[return]--> Result<QueryResult,QueryError>
+B[command] -->|handle| D[auction mailbox]  --> |observe result| observers
+B -->|observe command| observers
+B --> |persist command| P[persisters]
+D --> |persist command result| P
+Q[query] --> E[auction mailbox] --> |return| Result["Result&lt;QueryResult,QueryError&gt;"]
 ```
 
 ## Running it
