@@ -253,17 +253,17 @@ module State=
         let next = state.Inc b.at
         match next with
         | AwaitingStart _ as awaitingStart->
-            awaitingStart, Error (AuctionHasNotStarted b.auction)
+          awaitingStart, Error (AuctionHasNotStarted b.auction)
         | OnGoing (bids,expiry,opt) as ongoing->
-            match bids with
-            | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt), Ok()
-            | highestBid::_ ->
-              // you cannot bid lower than the "current bid"
-              if b.amount > (highestBid.amount + opt.minRaise)
-              then
-                OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt),Ok()
-              else
-                ongoing, Error (MustPlaceBidOverHighestBid highestBid.amount)
+          match bids with
+          | [] -> OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt), Ok()
+          | highestBid::_ ->
+            // you cannot bid lower than the "current bid"
+            if b.amount > (highestBid.amount + opt.minRaise)
+            then
+              OnGoing (b::bids, max expiry (b.at+opt.timeFrame), opt),Ok()
+            else
+              ongoing, Error (MustPlaceBidOverHighestBid highestBid.amount)
         | HasEnded _ as ended ->
             ended,Error (AuctionHasEnded b.auction)
     interface IState with
@@ -276,7 +276,7 @@ module State=
         | AwaitingStart _ ->[]
       member state.TryGetAmountAndWinner () =
         match state with
-        | HasEnded (bid::_ ,_ , opt) when opt.reservePrice<bid.amount -> Some (bid.amount, bid.user)
+        | HasEnded (bid::_ ,_ , opt) when opt.reservePrice<=bid.amount -> Some (bid.amount, bid.user)
         | _ -> None
 
       member state.HasEnded () =match state with | HasEnded _ -> true | _ -> false
@@ -286,24 +286,24 @@ module State=
      | DisclosingBids of bids: Bid list * expired: DateTime * opt:SingleSealedBidOptions
   with
     member state.Inc now =
-        match state with
-        | AcceptingBids (bids,expiry, opt) as acceptingBids->
-          match now>=expiry with
-          | false -> acceptingBids
-          | true ->
-            let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
-            DisclosingBids(bids, expiry, opt)
-        | DisclosingBids _ as disclosingBids-> disclosingBids
+      match state with
+      | AcceptingBids (bids,expiry, opt) as acceptingBids->
+        match now>=expiry with
+        | false -> acceptingBids
+        | true ->
+          let bids=bids|>Map.toList|>List.map snd |> List.sortByDescending Bid.amount
+          DisclosingBids(bids, expiry, opt)
+      | DisclosingBids _ as disclosingBids-> disclosingBids
     member state.AddBid b =
-        let next = state.Inc b.at
-        match next with
-        | AcceptingBids (bids,expiry, opt) as acceptingBids->
-          let u=User.getId b.user
-          match bids.ContainsKey u with
-          | false -> AcceptingBids (bids.Add (u,b), expiry, opt), Ok()
-          | true -> acceptingBids, Error AlreadyPlacedBid
-        | DisclosingBids _ as disclosingBids->
-          disclosingBids, Error (AuctionHasEnded b.auction)
+      let next = state.Inc b.at
+      match next with
+      | AcceptingBids (bids,expiry, opt) as acceptingBids->
+        let u=User.getId b.user
+        match bids.ContainsKey u with
+        | false -> AcceptingBids (bids.Add (u,b), expiry, opt), Ok()
+        | true -> acceptingBids, Error AlreadyPlacedBid
+      | DisclosingBids _ as disclosingBids->
+        disclosingBids, Error (AuctionHasEnded b.auction)
 
     interface IState with
       member state.Inc now = state.Inc now

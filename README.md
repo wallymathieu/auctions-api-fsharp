@@ -1,4 +1,4 @@
-# auctions-site [![Build Status](https://travis-ci.org/wallymathieu/auctions-site.svg?branch=master)](https://travis-ci.org/wallymathieu/auctions-site) [![Build status](https://ci.appveyor.com/api/projects/status/wwefc0io4oh2wnrf/branch/master?svg=true)](https://ci.appveyor.com/project/wallymathieu/auctions-site/branch/master)
+# auctions-site [![Build status](https://ci.appveyor.com/api/projects/status/wwefc0io4oh2wnrf/branch/master?svg=true)](https://ci.appveyor.com/project/wallymathieu/auctions-site/branch/master)
 
 Auctions site implemented in f# with f#+, Redis, Fleece and Giraffe
 
@@ -11,22 +11,36 @@ Auctions site implemented in f# with f#+, Redis, Fleece and Giraffe
 - one dedicated mailbox for command persisters (json, redis)
 - exceptions in mailbox causes the entire program to exit with non zero exit code
 
-A more complete implementation could have supervisors, circuit breakers, retries et.c..
-
 ### High level overview of command and query flow
 
-```md
-signal -> delegator -> mailbox.[x]
+```mermaid
+graph TD;
 
-command ------[handle]---> mailbox.[x] --[observe result]-\
-           |                                               v
-           |----------------[observe command]-----> observers.[...]
-           |
-           \---[persist command]--> persisters.[...]
-
-
-query ----[query]---> mailbox.[y] --[return]--> Result<QueryResult,QueryError>
+A[signal] --> B[delegator] --> C[auction mailbox]
 ```
+
+```mermaid
+graph TD;
+
+B[command] -->|handle| D[auction mailbox]  --> |observe result| observers
+B -->|observe command| observers
+B --> |persist command| P[persisters]
+D --> |persist command result| P
+Q[query] --> E[auction mailbox] --> |return| Result["Result&lt;QueryResult,QueryError&gt;"]
+```
+
+## Business requirements
+
+A more complete implementation could have more logic dealing with the business side of running the application. Right now the code does not match a full list of requirements that you would find for implementing a real auction engine.
+
+Potential requirements are:
+
+- "Bid robot": Whenever someone else puts a bid, you specify that the robot puts a bid with an amount above that bid until your maximum price has been reached.
+- Possibility to get notifications when an auction is over if you have created the auction or posted a bid.
+- Integration with payment system in order to be able to process payment after an auction has been won. Then the question if the auction service should be "told" about won but abandoned auctions.
+- Reports with aggregated information about the auctions per week, per month and per year.
+
+Since the service provide web hooks you could implement some of these requirements in separate services. In other cases people might argue that auction notifications and bid robots are part of the auction subdomain so should be part of the bounded context (i.e. the responsibility of the service).
 
 ## Running it
 
