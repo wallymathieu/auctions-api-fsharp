@@ -412,6 +412,11 @@ module Event =
 type Observable =
   | Commands of Command list
   | Results of Result<Event, Errors> list
+
+/// ====================================================================================================
+/// JSON, not part of the domain but used for serialization
+/// ====================================================================================================
+
 open Fleece
 open Fleece.FSharpData
 
