@@ -1,4 +1,4 @@
-﻿module Auctions.Program
+module Auctions.Program
 open Suave
 open Auctions.Web
 open Auctions.Actors
@@ -82,8 +82,8 @@ let main argv =
   let commands = seq { for appender in commandAppenders do yield appender.ReadAll() }
                  |> collectAsync
 
-  let batchAppendEvents = eventAppenders |> Seq.map (fun a->a.Batch) |> List.ofSeq
-  let batchAppendCommands = commandAppenders |> Seq.map (fun a->a.Batch) |> List.ofSeq
+  let batchAppendEvents = eventAppenders |> Seq.map _.Batch |> List.ofSeq
+  let batchAppendCommands = commandAppenders |> Seq.map _.Batch |> List.ofSeq
   let persistEvents = PersistMbox.create batchAppendEvents
   let persistCommands = PersistMbox.create batchAppendCommands
   let observer = Observer.create <| Seq.toList observers

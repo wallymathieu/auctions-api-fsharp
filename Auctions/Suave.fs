@@ -1,4 +1,4 @@
-﻿module Auctions.Suave
+module Auctions.Suave
 open FSharpPlus
 open FSharpPlus.Operators
 open FSharpPlus.Data
@@ -17,7 +17,7 @@ type WebPart'<'a> = 'a -> OptionT<Async<'a option>>
 //SuaveWebPart : Suave.Http.HttpContext -> Async<Suave.Http.HttpContext option>
 type WebPart = Suave.Http.HttpContext -> OptionT<Async<Suave.Http.HttpContext option>>
 module WebPart=
-  let choose (options : WebPart'<'a> list) =fun x -> choice (List.map ( (|>) x) options)
+  let choose (options : WebPart'<'a> list) x = choice (List.map ( (|>) x) options)
 module Http=
   module H=Suave.Http
   let request apply = H.request apply

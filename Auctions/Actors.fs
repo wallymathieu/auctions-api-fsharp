@@ -1,4 +1,4 @@
-﻿module Auctions.Actors
+module Auctions.Actors
 open Auctions.Domain
 
 open System
@@ -50,7 +50,7 @@ type AgentSignals =
 
 type AuctionAgent(auction, state:S) =
   let agent = MailboxProcessor<AgentSignals>.Start(fun inbox ->
-    (let validateBid = fun b->Auction.validateBid b auction
+    (let validateBid b= Auction.validateBid b auction
      let mutable state = state
 
      let rec messageLoop() =
