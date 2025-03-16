@@ -2,6 +2,15 @@
 
 Auctions site implemented in f# with f#+, Redis, Fleece and Suave
 
+## Variants
+
+There are currently these variants that I've branched off:
+
+- [Implementation using Giraffe](https://github.com/wallymathieu/auctions-api-fsharp/tree/giraffe)
+- [Implementation using Hopac](https://github.com/wallymathieu/auctions-api-fsharp/tree/hopac)
+
+It would make sense to look at implementing the domain using different patterns than what've done here. See also the other implementations on the [auctions](https://github.com/wallymathieu/auctions) meta repository.
+
 ## Technical overview
 
 ### Assumptions
