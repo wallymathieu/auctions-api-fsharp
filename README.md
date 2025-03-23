@@ -72,15 +72,85 @@ dotnet restore
 dotnet run --project App --redis CONN --json FILE --web-hook URI
 ```
 
-To try out the auction API you can then curl the service:
+
+## API Endpoints
+
+### Authentication
+
+All write operations require authentication via the `x-jwt-payload` header. Note that the `x-jwt-payload` header is a decoded JWT and not an actual JWT, since this app is supposed to be deployed behind a front-proxy.
+
+Example JWT payload format for a buyer/seller:
+```json
+{
+  "sub": "t1",
+  "name": "Test User",
+  "u_typ": "0"
+}
+```
+
+Example JWT payload format for support:
+```json
+{
+  "sub": "s1",
+  "u_typ": "1"
+}
+```
+
+The JWT payload should be Base64 encoded when sent in the header.
+
+This means that in order to create the tokens for test you simply do:
 
 ```bash
 AUCTIONS_TOKEN_SELLER=`echo '{"sub":"a1", "name":"Seller", "u_typ":"0"}' | base64`
 # eyJzdWIiOiJhMSIsICJuYW1lIjoiU2VsbGVyIiwgInVfdHlwIjoiMCJ9Cg==
-AUCTIONS_TOKEN_BUYER=`echo '{"sub":"a2", "name":"Buyer", "u_typ":"0"}' | base64`
-# eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K
-curl  -X POST -d '{ "id":1,"startsAt":"2018-01-01T10:00:00.000Z","endsAt":"2019-01-01T10:00:00.000Z","title":"First auction", "currency":"VAC" }' -H "x-jwt-payload: $AUCTIONS_TOKEN_SELLER"  -H "Content-Type: application/json"  127.0.0.1:8083/auction
-curl  -X POST -d '{ "amount":"VAC10" }' -H "x-jwt-payload: $AUCTIONS_TOKEN_BUYER"  -H "Content-Type: application/json"  127.0.0.1:8083/auction/1/bid
-curl  -X GET -H "x-jwt-payload: $AUCTIONS_TOKEN_SELLER"  -H "Content-Type: application/json"  127.0.0.1:8083/auctions
 ```
 
+To create the buyer token you do:
+
+```bash
+AUCTIONS_TOKEN_BUYER=`echo '{"sub":"a2", "name":"Buyer", "u_typ":"0"}' | base64`
+# eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K
+```
+
+### Endpoints
+
+- `GET /auctions` - List all auctions
+- `GET /auction/:id` - Get auction details, including bids and winner information if available
+- `POST /auction` - Create a new auction
+- `POST /auction/:id/bid` - Place a bid on an auction
+
+### Example Requests
+
+#### Create an auction
+
+```bash
+curl -X POST http://localhost:8083/auction \
+  -H "Content-Type: application/json" \
+  -H "x-jwt-payload: $AUCTIONS_TOKEN_SELLER" \
+  -d '{
+    "id": 1,
+    "startsAt": "2023-01-01T10:00:00.000Z",
+    "endsAt": "2023-12-31T10:00:00.000Z",
+    "title": "Test Auction",
+    "currency": "VAC"
+  }'
+```
+
+#### Place a bid
+
+```bash
+curl -X POST http://localhost:8083/auction/1/bid \
+  -H "Content-Type: application/json" \
+  -H "x-jwt-payload: $AUCTIONS_TOKEN_BUYER" \
+  -d '{
+    "amount": "VAC10"
+  }'
+```
+
+#### View the auctions
+
+```bash
+curl  -X GET http://localhost:8083/auctions \
+  -H "Content-Type: application/json" \
+  -H "x-jwt-payload: $AUCTIONS_TOKEN_SELLER"
+```
