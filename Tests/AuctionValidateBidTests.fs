@@ -8,7 +8,7 @@ module ``Auction validate bid tests`` =
   [<Fact>]
   let ``Seller cant bid``() =
     // setup
-    let validateBid = fun b-> Auction.validateBid b auction
+    let validateBid = Auction.validateBid auction
     let d = DateTime(2016, 1, 2)
 
     // act
@@ -20,7 +20,7 @@ module ``Auction validate bid tests`` =
   [<Fact>]
   let ``Buyer can place bid``() =
     // setup
-    let validateBid = fun b-> Auction.validateBid b auction
+    let validateBid = Auction.validateBid auction
     let d = DateTime(2016, 1, 2)
 
     // act

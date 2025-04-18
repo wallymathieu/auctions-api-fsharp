@@ -14,7 +14,7 @@ module ``Auction Bid tests`` =
   let bidWithSameUser = { validBid with user=seller }
   let bidAfterAuctionEnded = { validBid with at = auction.expiry.AddHours(1.0) }
   let bidBeforeAuctionStarted = { validBid with at = auction.startsAt.AddHours(-1.0) }
-  let validateBid = fun b-> Auction.validateBid b auction
+  let validateBid = Auction.validateBid auction
   [<Fact>]
   let ``valid bid``() =
     Assert.Equal( Ok(), validateBid validBid )

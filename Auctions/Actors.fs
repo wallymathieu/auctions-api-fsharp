@@ -50,7 +50,7 @@ type AgentSignals =
 
 type AuctionAgent(auction, state:S) =
   let agent = MailboxProcessor<AgentSignals>.Start(fun inbox ->
-    (let validateBid = fun b->Auction.validateBid b auction
+    (let validateBid = Auction.validateBid auction
      let mutable state = state
 
      let rec messageLoop() =
@@ -60,7 +60,7 @@ type AuctionAgent(auction, state:S) =
          | AgentBid(bid, reply) ->
            reply.Reply(monad {
                          do! validateBid bid
-                         let (next,res)=S.addBid bid state
+                         let next,res = S.addBid bid state
                          state <- next
                          return! res
                        })
