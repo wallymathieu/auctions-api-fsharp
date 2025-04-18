@@ -353,13 +353,13 @@ type Command =
 
 module Command =
   /// the time when the command was issued
-  let getAt command =
-    match command with
+  let getAt =
+    function
     | AddAuction(at, _) -> at
     | PlaceBid(at, _) -> at
 
-  let getAuction command =
-    match command with
+  let getAuction =
+    function
     | AddAuction(_,auction) -> auction.id
     | PlaceBid(_,bid) -> bid.auction
 
@@ -367,21 +367,21 @@ module Command =
   let foldToMap commands =
     let folder auctions =
           function
-          | AddAuction (at,auction)->
+          | AddAuction (at,auction) ->
             if auction.expiry > at && not (Map.containsKey auction.id auctions) then
               let empty =Auction.emptyState auction
               Map.add auction.id (auction,empty) auctions
             else
               auctions
-          | PlaceBid (_,b)->
-              match auctions.TryGetValue b.auction with
-              | true, (auction,state) ->
-                match (auction,b) with
-                | Auction.ValidBid ->
-                  let next,_= S.addBid b state
-                  Map.add auction.id (auction, next) auctions
-                | Auction.InvalidBid _ -> auctions
-              | false, _ -> auctions
+          | PlaceBid (_,b) ->
+            match Map.tryFind b.auction auctions with
+            | Some (auction,state) ->
+              match (auction,b) with
+              | Auction.ValidBid ->
+                let next,_= S.addBid b state
+                Map.add auction.id (auction, next) auctions
+              | Auction.InvalidBid _ -> auctions
+            | None -> auctions
     (Map.empty, commands) ||> List.fold folder
 type Event =
   | AuctionAdded of DateTime * Auction
