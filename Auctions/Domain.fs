@@ -2,7 +2,6 @@ module Auctions.Domain
 
 open System
 open FSharpPlus
-open FSharpPlus.Data
 
 type CurrencyCode =
   /// virtual auction currency
@@ -22,7 +21,7 @@ module Currency=
   let tryParse c : Currency option= tryParse c |> Option.map Currency
   let VAC = Currency CurrencyCode.VAC
   let value (Currency c) = int64(LanguagePrimitives.EnumToValue c)
-  let inline ofValue (v) = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
+  let inline ofValue v = v |> int |> LanguagePrimitives.EnumOfValue<int,CurrencyCode> |> Currency
 
 [<Struct>]
 type UserId = UserId of string
@@ -35,8 +34,8 @@ type User =
 
   override this.ToString() =
     match this with
-    | BuyerOrSeller(id, name) -> sprintf "BuyerOrSeller|%O|%s" id name
-    | Support(id) -> sprintf "Support|%O" id
+    | BuyerOrSeller(id, name) -> $"BuyerOrSeller|{id}|%s{name}"
+    | Support(id) -> $"Support|{id}"
 
   static member getId user =
     match user with
@@ -47,12 +46,12 @@ type User =
   static member TryParse user =
     let m = User.Regex.Match(user)
     if m.Success then
-      match (m.Groups.["type"].Value, m.Groups.["id"].Value, m.Groups.["name"].Value) with
+      match (m.Groups["type"].Value, m.Groups["id"].Value, m.Groups["name"].Value) with
       | "BuyerOrSeller", id, name -> Some (BuyerOrSeller(UserId id, name))
       | "Support", id, _ -> Some (Support(UserId id))
-      | type', _, _ -> None
+      | _, _, _ -> None
     else None
-  static member Parse user : User= tryParse user |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" user)
+  static member Parse user : User= tryParse user |> Option.defaultWith (fun ()-> failwithf $"Unable to parse %s{user}")
 
 [<Struct>]
 type AuctionId = AuctionId of int64
@@ -67,16 +66,16 @@ type Amount =
   { value : int64
     currency : Currency }
   override this.ToString() =
-    sprintf "%O%i" this.currency this.value
+    $"{this.currency}%i{this.value}"
   static member Regex = System.Text.RegularExpressions.Regex("(?<currency>[A-Z]+)(?<value>[0-9]+)")
   static member TryParse amount =
     let m = Amount.Regex.Match(amount)
     if m.Success then
-      match (m.Groups.["currency"].Value, m.Groups.["value"].Value) with
+      match (m.Groups["currency"].Value, m.Groups["value"].Value) with
       | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
-      | type', _ -> None
+      | _, _ -> None
     else None
-  static member Parse amount : Amount= tryParse amount |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" amount)
+  static member Parse amount : Amount= tryParse amount |> Option.defaultWith (fun ()-> failwithf $"Unable to parse %s{amount}")
   static member (+) (a1 : Amount, a2 : Amount) =
       if a1.currency <> a2.currency then failwith "not defined for two different currencies"
       { a1 with value = a1.value + a2.value }
@@ -136,16 +135,15 @@ type Type=
   with
   override this.ToString() =
     match this with
-    | TimedAscending english -> sprintf "English|%O|%O|%d"
-                                  (english.reservePrice) (english.minRaise) english.timeFrame.Ticks
-    | SingleSealedBid Blind -> sprintf "Blind"
-    | SingleSealedBid Vickrey -> sprintf "Vickrey"
+    | TimedAscending english -> $"English|{english.reservePrice}|{english.minRaise}|%d{english.timeFrame.Ticks}"
+    | SingleSealedBid Blind -> "Blind"
+    | SingleSealedBid Vickrey -> "Vickrey"
   static member TryParse typ =
     if String.IsNullOrEmpty typ then
       None
     else
       match (typ.Split('|') |> Seq.toList) with
-      | "English"::(Amount reservePrice)::(Amount minRaise):: (Int64 timeframe) :: [] ->
+      | "English"::Amount reservePrice::Amount minRaise:: [ (Int64 timeframe) ] ->
          Some (TimedAscending {
                 reservePrice=reservePrice
                 minRaise=minRaise
@@ -153,7 +151,7 @@ type Type=
       | ["Blind"] -> Some (SingleSealedBid Blind)
       | ["Vickrey"] -> Some (SingleSealedBid Vickrey)
       | _ -> None
-  static member Parse typ : Type = tryParse typ |> Option.defaultWith (fun ()-> failwithf "Unable to parse %s" typ)
+  static member Parse typ : Type = tryParse typ |> Option.defaultWith (fun ()-> failwithf $"Unable to parse %s{typ}")
 
 type Auction =
   { id : AuctionId
@@ -205,12 +203,17 @@ module Auction=
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
   let biddersAreOpen (auction : Auction) = true
 
-  let validateBid (bid : Bid) (auction : Auction) =
-    if bid.user = auction.user then Error(SellerCannotPlaceBids(User.getId bid.user, auction.id))
-    else if bid.amount.currency <> auction.currency then Error(Errors.BidCurrencyConversion(bid.amount.currency))
-    else if bid.at < auction.startsAt then Error(Errors.AuctionHasNotStarted auction.id)
-    else if bid.at > auction.expiry then Error(Errors.AuctionHasEnded auction.id)
-    else Ok()
+  let (|ValidBid|InvalidBid|) (auction : Auction, bid : Bid) =
+    if bid.user = auction.user then InvalidBid(SellerCannotPlaceBids(User.getId bid.user, auction.id))
+    else if bid.amount.currency <> auction.currency then InvalidBid(Errors.BidCurrencyConversion(bid.amount.currency))
+    else if bid.at < auction.startsAt then InvalidBid(Errors.AuctionHasNotStarted auction.id)
+    else if bid.at > auction.expiry then InvalidBid(Errors.AuctionHasEnded auction.id)
+    else ValidBid
+
+  let validateBid auction bid =
+    match (auction,bid) with
+    | ValidBid -> Ok()
+    | InvalidBid err -> Error err
 
 [<AutoOpen>]
 module State=
@@ -372,11 +375,11 @@ module Command =
           | PlaceBid (_,b)->
               match auctions.TryGetValue b.auction with
               | true, (auction,state) ->
-                match Auction.validateBid b auction with
-                | Ok _ ->
-                  let (next,_)= S.addBid b state
+                match (auction,b) with
+                | Auction.ValidBid ->
+                  let next,_= S.addBid b state
                   Map.add auction.id (auction, next) auctions
-                | Error _ -> auctions
+                | Auction.InvalidBid _ -> auctions
               | false, _ -> auctions
     (Map.empty, commands) ||> List.fold folder
 type Event =
@@ -405,7 +408,7 @@ module Event =
           | BidAccepted (_, b)->
               match Map.tryFind b.auction auctions with
               | Some (auction,state) ->
-                let (next, _)= S.addBid b state
+                let next, _ = S.addBid b state
                 Map.add auction.id (auction, next) auctions
               | None -> failwith "could not find auction"
     (Map.empty, events) ||> List.fold folder
@@ -452,7 +455,7 @@ type Errors with
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
     | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
-    | BidCurrencyConversion (c)-> jobj [ "type".="BidCurrencyConversion"; "currency" .= c]
+    | BidCurrencyConversion c -> jobj [ "type".="BidCurrencyConversion"; "currency" .= c]
     | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
     | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
@@ -477,7 +480,7 @@ type Bid with
 /// tag Json codec with property and value inside the Json encoded by the codec
 let inline tag prop value codec =
     let matchPropValue (o:PropertyList<_>) =
-         match o.[prop] with
+         match o[prop] with
          | a::_ when (ofJson a) = Ok value -> Ok o
          | a::_ -> Decode.Fail.invalidValue a value
          | [] -> Decode.Fail.propertyNotFound prop o
@@ -524,5 +527,5 @@ type Observable with
       jobj [ "$type" .= "Commands"; "commands" .= commands]
     | Results results->
       let mapToJson = function | Ok o-> JArray [|JString "Ok"; toJson  o |] | Error e->JArray [JString "Error";toJson e]
-      let jresults = results |> List.map mapToJson |> List.toArray |> JArray
-      jobj [ "$type" .= "Results"; "results", jresults]
+      let jArray = results |> List.map mapToJson |> List.toArray |> JArray
+      jobj [ "$type" .= "Results"; "results", jArray]
