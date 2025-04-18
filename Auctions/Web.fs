@@ -2,7 +2,6 @@ module Auctions.Web
 open System
 open FSharpPlus
 open Auctions.Suave
-open Auctions.Suave.Writers
 open Auctions.Suave.Filters
 open Auctions.Suave.Successful
 open Auctions.Suave.RequestErrors
@@ -73,14 +72,14 @@ module Paths =
 
 (* Json API *)
 module OfJson=
-  type Typ = Domain.Type
+  type Typ = Type
   let bidReq (auctionId, user, at) (json:JsonValue) =
     let create a = { user = user; amount=a; auction=auctionId; at = at }
     match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
-  let addAuctionReq (user) (json:JsonValue) =
+  let addAuctionReq user (json:JsonValue) =
     let create id startsAt title endsAt (currency:string option) (typ:string option) (``open``:bool option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
@@ -106,7 +105,7 @@ module ToJson=
     ]
   let auction auction = auctionList auction |> jobj
   let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) =
-    let (winner,winnerPrice) =
+    let winner,winnerPrice =
             match maybeAmountAndWinner with
             | None -> ("","")
             | Some (amount, winner)->
@@ -127,7 +126,7 @@ module ToJson=
 
 let webPart (agent : AuctionDelegator) (time:unit->DateTime) =
 
-  let overview : WebPart= GET >=> fun (ctx) -> monad {
+  let overview : WebPart= GET >=> fun ctx -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
     let json = auctionList |> List.map ToJson.auction |> List.toArray |> JArray
     return! Json.OK json ctx
@@ -160,7 +159,7 @@ let webPart (agent : AuctionDelegator) (time:unit->DateTime) =
   let register =
     let toPostedAuction user =
         Json.getBody
-          >> Result.bind (OfJson.addAuctionReq (user))
+          >> Result.bind (OfJson.addAuctionReq user)
           >> Result.map (Timed.at (time()) >>AddAuction)
           >> Result.mapError InvalidUserData
 

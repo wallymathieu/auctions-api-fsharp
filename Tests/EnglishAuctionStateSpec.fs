@@ -31,7 +31,7 @@ let ``english auction winner and price``() =
 [<Fact>]
 let ``english auction Can't place bid lower than highest bid``() =
     // setup
-    let (state,res) = englishEmptyState
+    let state,_ = englishEmptyState
                        |> S.addBid {bid with at=startsAt.AddHours(1.0)}
     let nextBid = {bid with at=startsAt.AddHours(2.0)}
 

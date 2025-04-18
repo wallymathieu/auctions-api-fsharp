@@ -5,7 +5,7 @@ open System
 open FSharpPlus
 
 let exitOnException (e:exn)=
-  printfn "Failed with exception %s, %s, exit!" e.Message e.StackTrace
+  printfn $"Failed with exception %s{e.Message}, %s{e.StackTrace}, exit!"
   exit 1
 
 module PersistMbox=
@@ -93,19 +93,19 @@ type AuctionAgent(auction, state:S) =
      messageLoop()))
   do
     agent.Error.Add exitOnException
-  member __.AgentBid bid = agent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
-  member __.GetBids () = agent.PostAndAsyncReply(fun reply -> GetBids(reply))
-  member __.AuctionEnded time = agent.PostAndAsyncReply(fun reply -> HasAuctionEnded(time, reply))
-  member __.Collect time = agent.PostAndAsyncReply(fun reply -> CollectAgent(time, reply))
-  member __.HasEnded time = async{
-    let! res=__.AuctionEnded time
+  member _.AgentBid bid = agent.PostAndAsyncReply(fun reply -> AgentBid(bid, reply))
+  member _.GetBids () = agent.PostAndAsyncReply(fun reply -> GetBids(reply))
+  member _.AuctionEnded time = agent.PostAndAsyncReply(fun reply -> HasAuctionEnded(time, reply))
+  member _.Collect time = agent.PostAndAsyncReply(fun reply -> CollectAgent(time, reply))
+  member self.HasEnded time = async{
+    let! res=self.AuctionEnded time
     return Option.isSome res
   }
 
 module AuctionAgent=
   let create auction state = AuctionAgent (auction, state)
 
-type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
+type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * Bid list * AuctionEnded
 type DelegatorSignals =
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
   | UserCommand of Command * AsyncReplyChannel<Result<Event, Errors>>
@@ -119,7 +119,7 @@ type DelegatorSignals =
 module AuctionDState=
   type Running=
     | Ongoing of AuctionAgent
-    | Ended of AuctionEnded*Bid list
+    | Ended of AuctionEnded * Bid list
   type T = Auction * Running
   let (|IsOngoing|HasEnded|) state =
      match state with
@@ -148,13 +148,13 @@ type AuctionDelegator(auctions: (Auction*S) list, onIncomingCommand, now, observ
          match cmd with
          | AddAuction(at, auction) ->
             match (auction.expiry > at, Map.containsKey auction.id agents) with
-            | (true, false)->
+            | true, false ->
               let agent = AuctionAgent.create auction (Auction.emptyState auction)
               agents <- Map.add auction.id (AuctionDState.started auction agent) agents
               observeAndReply (Ok (AuctionAdded(at, auction)))
-            | (false, _) ->
+            | false, _ ->
               observeAndReply (Error (AuctionHasEnded auction.id))
-            | (_, true) ->
+            | _, true ->
               observeAndReply (Error (AuctionAlreadyExists auction.id))
          | PlaceBid(at, bid) ->
            let auctionId = Command.getAuction cmd
@@ -219,7 +219,7 @@ type AuctionDelegator(auctions: (Auction*S) list, onIncomingCommand, now, observ
          | GetAuction (auctionId,reply) ->
            do! getAuction auctionId now reply
            return! messageLoop()
-         | GetAuctions (reply) ->
+         | GetAuctions reply ->
            let auctions =agents
                           |> Map.toList
                           |> List.map (snd>>fst)
@@ -233,9 +233,9 @@ type AuctionDelegator(auctions: (Auction*S) list, onIncomingCommand, now, observ
     messageLoop())
   do
     agent.Error.Add exitOnException
-  member __.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
-  member __.WakeUp () = agent.PostAndAsyncReply WakeUp
-  member __.GetAuctions ()= agent.PostAndAsyncReply(GetAuctions)
-  member __.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
+  member _.UserCommand cmd = agent.PostAndAsyncReply(fun reply -> UserCommand(cmd, reply))
+  member _.WakeUp () = agent.PostAndAsyncReply WakeUp
+  member _.GetAuctions ()= agent.PostAndAsyncReply(GetAuctions)
+  member _.GetAuction auctionId= agent.PostAndAsyncReply(fun reply -> GetAuction(auctionId,reply))
 module AuctionDelegator=
   let create r = AuctionDelegator r

@@ -1,10 +1,6 @@
 module Auctions.Environment
-open Suave
 open System
 
-open FSharpPlus
-open FSharpPlus.Data
-open FSharpPlus.Operators
 
 type DictEntry = System.Collections.DictionaryEntry
 

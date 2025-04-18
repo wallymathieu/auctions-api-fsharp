@@ -1,10 +1,10 @@
 ﻿namespace Tests
 
 open Auctions.Domain
-open System
 open Xunit
 open FSharpPlus
 open TestData
+
 module ``Auction Bid tests`` =
   let validBid = { auction =auctionId
                    user=buyer

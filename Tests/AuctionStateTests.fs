@@ -46,7 +46,7 @@ module ``Auction state tests`` =
   [<Fact>]
   let ``english auction Can't place bid lower than highest bid``() =
     // setup
-    let (state,res) = Auction.emptyState timedAscAuction
+    let state,_ = Auction.emptyState timedAscAuction
                        |> S.addBid {bid with at=startsAt.AddHours(1.0)}
     let nextBid = {bid with at=startsAt.AddHours(2.0)}
 
