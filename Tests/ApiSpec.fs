@@ -6,9 +6,7 @@ open FSharpPlus.Data
 open Suave
 open Suave.Testing
 open Xunit
-open FsUnit.Xunit
 open Tests.TestsModule.Json
-open Suave.Http
 open System.Net.Http
 
 let auctionAndStates = []
@@ -31,7 +29,8 @@ let firstAuctionRequest ="""{
     "startsAt": "2022-07-01T10:00:00.000Z",
     "endsAt": "2022-09-18T10:00:00.000Z",
     "title": "Some auction",
-    "currency": "VAC"
+    "currency": "VAC",
+    "open": true
 }"""
 let seller1 = "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="
 let buyer1 = "eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K"
@@ -53,7 +52,8 @@ let ``create auction 1``() =
           "expiry": "2022-09-18T10:00:00.000Z",
           "user": "BuyerOrSeller|a1|Test",
           "type": "English|VAC0|VAC0|0",
-          "currency": "VAC"
+          "currency": "VAC",
+          "open": true
       }
   }""", res)
 
@@ -82,7 +82,8 @@ let ``create auction 2``() =
           "expiry": "2022-12-18T10:00:00.000Z",
           "user": "BuyerOrSeller|a1|Test",
           "type": "English|VAC0|VAC0|0",
-          "currency": "VAC"
+          "currency": "VAC",
+          "open": false
       }
   }""", res)
 

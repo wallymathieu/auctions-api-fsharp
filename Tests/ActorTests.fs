@@ -1,7 +1,5 @@
 ﻿namespace Tests
-
 open Auctions.Domain
-open Auctions
 open Auctions.Actors
 open FSharpPlus
 open System
@@ -27,6 +25,7 @@ module ``Auction agent tests`` =
                     minRaise =parse "VAC0"
                     timeFrame = TimeSpan.FromSeconds(0.0)
                   }
+                  openBidders = false
                 }
 
   let buyer = BuyerOrSeller(UserId "x2", "Buyer")

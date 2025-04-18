@@ -162,6 +162,7 @@ type Auction =
     user : User
     typ : Type
     currency:Currency
+    openBidders : bool
   }
 
 type Bid =
@@ -201,7 +202,7 @@ module Auction=
   let user (auction : Auction) = auction.user
   /// if the bidders are open or anonymous
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
-  let biddersAreOpen (auction : Auction) = true
+  let biddersAreOpen (auction : Auction) = auction.openBidders
 
   let (|ValidBid|InvalidBid|) (auction : Auction, bid : Bid) =
     if bid.user = auction.user then InvalidBid(SellerCannotPlaceBids(User.getId bid.user, auction.id))
@@ -469,7 +470,15 @@ type Auction with
     and! user = jreq "user" (fun x -> Some x.user)
     and! typ = jreq "type" (fun x -> Some x.typ)
     and! currency = jreq "currency" (fun x -> Some x.currency)
-    return { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency } }
+    and! openBidders = jopt "open" (fun x -> Some x.openBidders)
+    return { id = id
+             startsAt = startsAt
+             title = title
+             expiry = expiry
+             user = user
+             typ = typ
+             currency = currency
+             openBidders = Option.defaultValue false openBidders } }
 type Bid with
   static member JsonObjCodec = codec {
     let! auction = jreq "auction" (fun x -> Some x.auction)

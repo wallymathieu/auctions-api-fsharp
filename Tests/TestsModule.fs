@@ -20,6 +20,7 @@ module TestData =
       user = seller
       currency=Currency CurrencyCode.SEK
       typ= typ
+      openBidders = false
      }
 
   let auction : Auction = auctionOfTyp (SingleSealedBid Vickrey)

@@ -81,17 +81,18 @@ module OfJson=
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
   let addAuctionReq (user) (json:JsonValue) =
-    let create id startsAt title endsAt (currency:string option) (typ:string option)
+    let create id startsAt title endsAt (currency:string option) (typ:string option) (``open``:bool option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
         let defaultTyp = TimedAscending { reservePrice = Amount.zero currency; minRaise = Amount.zero currency;
           timeFrame =TimeSpan.FromSeconds(0.0) }
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
-        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
+        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ
+          openBidders = Option.defaultValue false ``open`` }
     match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
-                   <*> (o .@? "currency")<*> (o .@? "type")
+                   <*> (o .@? "currency")<*> (o .@? "type")<*> (o .@? "open")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
 

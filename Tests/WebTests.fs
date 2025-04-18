@@ -100,6 +100,7 @@ module ``auction deserialization spec``=
                          user = seller
                          typ = TimedAscending { reservePrice = Amount.zero Currency.VAC
                                                 minRaise = Amount.zero Currency.VAC
-                                                timeFrame = TimeSpan.Zero } }
+                                                timeFrame = TimeSpan.Zero }
+                         openBidders = false }
         Assert.Equal(expected, auctionReq)
     | Error err-> failwithf $"Did not expect error %A{err}"

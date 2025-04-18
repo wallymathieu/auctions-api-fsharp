@@ -28,7 +28,8 @@ let tryParseDateTime (t:RedisValue) : Result<DateTime,_> =
   Result.bindError parsedParsedAsInt parsedAsString
 let ofDateTime (d:DateTime) : RedisValue = implicit <| d.ToString dateTimeFormat
 let timeAndAuctionCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTime*Auction),(DateTime*Auction)> =
-  fun id title expiry startsAt at typ currency user -> (at, { id=AuctionId id;title=title; expiry =expiry; startsAt=startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
+  fun id title expiry startsAt at typ currency user openBidders -> (at, { id=AuctionId id;title=title; expiry =expiry; startsAt=startsAt; typ= typ; currency=Currency.ofValue currency; user= user
+                                                                          openBidders= Option.defaultValue false openBidders })
   <!> rreq "Id" (snd >> Auction.getId >> AuctionId.unwrap >> Some)
   <*> rreq "Title" (snd >> Auction.title >> Some)
   <*> rreqWith (tryParseDateTime,ofDateTime) "Expiry" (snd >> Auction.expiry >> Some)
@@ -37,6 +38,7 @@ let timeAndAuctionCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTim
   <*> rreqWith (tryParseType, (string>>implicit)) "Typ" (snd >> Auction.typ >> Some)
   <*> rreq "Currency" (snd >> Auction.currency >> Currency.value >> Some)
   <*> rreqWith (tryParseUser, (string>>implicit)) "User" (snd >> Auction.user >> Some )
+  <*> ropt "Open" (snd >> Auction.biddersAreOpen >> Some)
 let timeAndBidCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTime*Bid),(DateTime*Bid)> =
   fun auction amountValue amountCurrency at bidAt user -> (at, { auction=AuctionId auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at= Option.defaultValue at bidAt })
   <!> rreq "Auction" (snd >> Bid.auction >> AuctionId.unwrap >> Some)
