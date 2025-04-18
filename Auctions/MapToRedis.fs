@@ -78,7 +78,7 @@ module Command =
   let codec : ConcreteCodec<HashEntry list,HashEntry list,Command,Command> =
     let addAuctionCodec = withCase AddAuction (function | AddAuction (a,b)-> Some (a,b) | _ -> None) timeAndAuctionCodec
     let placeBidCodec = withCase PlaceBid (function | PlaceBid (a,b)-> Some (a,b) | _ -> None) timeAndBidCodec
-    (tag "Type" "AddAuction" addAuctionCodec) <|> (tag "Type" "PlaceBid" placeBidCodec)
+    tag "Type" "AddAuction" addAuctionCodec <|> tag "Type" "PlaceBid" placeBidCodec
 
   let mapToHashEntries command = Codec.encode (Codec.ofConcrete codec) command
 
@@ -90,7 +90,7 @@ module Event =
   let codec : ConcreteCodec<HashEntry list,HashEntry list,Event,Event> =
     let addAuctionCodec = withCase AuctionAdded (function | AuctionAdded (a,b)-> Some (a,b) | _ -> None) timeAndAuctionCodec
     let placeBidCodec = withCase BidAccepted (function | BidAccepted (a,b)-> Some (a,b) | _ -> None) timeAndBidCodec
-    (tag "Type" "AuctionAdded" addAuctionCodec) <|> (tag "Type" "BidAccepted" placeBidCodec)
+    tag "Type" "AuctionAdded" addAuctionCodec <|> tag "Type" "BidAccepted" placeBidCodec
 
   let mapToHashEntries event = Codec.encode (Codec.ofConcrete codec) event
 
