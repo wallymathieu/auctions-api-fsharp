@@ -62,8 +62,11 @@ with
 
 let (|Currency|_|) = Currency.tryParse
 
+type AmountValue = int64
+module AmountValue=
+  let zero:AmountValue = 0L
 type Amount =
-  { value : int64
+  { value : AmountValue
     currency : Currency }
   override this.ToString() =
     $"{this.currency}%i{this.value}"
@@ -72,7 +75,7 @@ type Amount =
     let m = Amount.Regex.Match(amount)
     if m.Success then
       match (m.Groups["currency"].Value, m.Groups["value"].Value) with
-      | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
+      | Currency c, amount -> Some { currency=c; value=AmountValue.Parse amount }
       | _, _ -> None
     else None
   static member Parse amount : Amount= tryParse amount |> Option.defaultWith (fun ()-> failwithf $"Unable to parse %s{amount}")
@@ -86,9 +89,10 @@ type Amount =
 module Amount =
   let currency (a:Amount) = a.currency
   let value (a:Amount) = a.value
-  let zero c= { currency=c ; value=0L}
+  let zero c= { currency=c ; value=AmountValue.zero }
 
 let (|Amount|_|) : string -> Amount option = tryParse
+let (|AmountValue|_|) : string -> AmountValue option = tryParse
 let (|Int64|_|) : string -> int64 option = tryParse
 
 module Timed =
@@ -100,10 +104,10 @@ module Auctions=
       /// the seller has set a minimum sale price in advance (the 'reserve' price)
       /// and the final bid does not reach that price the item remains unsold
       /// If the reserve price is 0, that is the equivalent of not setting it.
-      reservePrice: Amount
+      reservePrice: AmountValue
       /// Sometimes the auctioneer sets a minimum amount by which the next bid must exceed the current highest bid.
       /// Having min raise equal to 0 is the equivalent of not setting it.
-      minRaise: Amount
+      minRaise: AmountValue
       /// If no competing bidder challenges the standing bid within a given time frame,
       /// the standing bid becomes the winner, and the item is sold to the highest bidder
       /// at a price equal to his or her bid.
@@ -143,7 +147,7 @@ type Type=
       None
     else
       match (typ.Split('|') |> Seq.toList) with
-      | "English"::Amount reservePrice::Amount minRaise:: [ (Int64 timeframe) ] ->
+      | "English"::AmountValue reservePrice::AmountValue minRaise:: [ (Int64 timeframe) ] ->
          Some (TimedAscending {
                 reservePrice=reservePrice
                 minRaise=minRaise
@@ -168,7 +172,7 @@ type Auction =
 type Bid =
   { auction : AuctionId
     user : User
-    amount : Amount
+    amount : AmountValue
     at : DateTime
   }
 
@@ -186,9 +190,8 @@ type Errors =
   | AuctionHasNotStarted of AuctionId
   | AuctionNotFound of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
-  | BidCurrencyConversion of Currency
   | InvalidUserData of String
-  | MustPlaceBidOverHighestBid of Amount
+  | MustPlaceBidOverHighestBid of AmountValue
   | AlreadyPlacedBid
 
 [<RequireQualifiedAccess>]
@@ -206,7 +209,6 @@ module Auction=
 
   let (|ValidBid|InvalidBid|) (auction : Auction, bid : Bid) =
     if bid.user = auction.user then InvalidBid(SellerCannotPlaceBids(User.getId bid.user, auction.id))
-    else if bid.amount.currency <> auction.currency then InvalidBid(Errors.BidCurrencyConversion(bid.amount.currency))
     else if bid.at < auction.startsAt then InvalidBid(Errors.AuctionHasNotStarted auction.id)
     else if bid.at > auction.expiry then InvalidBid(Errors.AuctionHasEnded auction.id)
     else ValidBid
@@ -227,7 +229,7 @@ module State=
     /// get bids for state (will return empty if in a state that does not disclose bids)
     abstract GetBids: unit -> Bid list
     /// try to get amount and winner, will return None if no winner
-    abstract TryGetAmountAndWinner: unit -> (Amount * User) option
+    abstract TryGetAmountAndWinner: unit -> (AmountValue * User) option
     /// returns true if state has ended
     abstract HasEnded: unit -> bool
 
@@ -456,7 +458,6 @@ type Errors with
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
     | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
-    | BidCurrencyConversion c -> jobj [ "type".="BidCurrencyConversion"; "currency" .= c]
     | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
     | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]

@@ -51,7 +51,7 @@ let ``create auction 1``() =
           "title": "Some auction",
           "expiry": "2022-09-18T10:00:00.000Z",
           "user": "BuyerOrSeller|a1|Test",
-          "type": "English|VAC0|VAC0|0",
+          "type": "English|0|0|0",
           "currency": "VAC",
           "open": true
       }
@@ -81,7 +81,7 @@ let ``create auction 2``() =
           "title": "Some auction",
           "expiry": "2022-12-18T10:00:00.000Z",
           "user": "BuyerOrSeller|a1|Test",
-          "type": "English|VAC0|VAC0|0",
+          "type": "English|0|0|0",
           "currency": "VAC",
           "open": false
       }
@@ -94,7 +94,7 @@ let ``Place bid as buyer on auction 1``() =
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
 
-  use bidReq = new StringContent("""{ "auction":"1","amount":"VAC11" }""")
+  use bidReq = new StringContent("""{ "auction":"1","amount":11 }""")
   let statusCode,res =
         (runWebPart app)
         |> reqWithAuth HttpMethod.POST "/auction/1/bid" (Some bidReq) buyer1
@@ -106,7 +106,7 @@ let ``Place bid as buyer on auction 1``() =
     "bid": {
         "auction": 1,
         "user": "BuyerOrSeller|a2|Buyer",
-        "amount": "VAC11",
+        "amount": 11,
         "at": "2022-08-04T00:00:00.000Z"
     }
 }""", res)
@@ -117,7 +117,7 @@ let ``Place bid as buyer on auction 2``() =
   use auctionReq = new StringContent(secondAuctionRequest)
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new StringContent("""{ "amount":"VAC11" }""")
+  use bidReq = new StringContent("""{ "amount":11 }""")
   let statusCode,res =
         (runWebPart app)
         |> reqWithAuth HttpMethod.POST "/auction/2/bid" (Some bidReq) buyer1
@@ -128,7 +128,7 @@ let ``Place bid as buyer on auction 2``() =
     "bid": {
         "auction": 2,
         "user": "BuyerOrSeller|a2|Buyer",
-        "amount": "VAC11",
+        "amount": 11,
         "at": "2022-08-04T00:00:00.000Z"
     }
 }""", res)
@@ -139,7 +139,7 @@ let ``Place bid as seller on auction 1``() =
   use auctionReq = new StringContent(firstAuctionRequest)
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new StringContent("""{ "amount":"VAC11" }""")
+  use bidReq = new StringContent("""{ "amount":11 }""")
   let statusCode,res =
         (runWebPart app)
         |> reqWithAuth HttpMethod.POST "/auction/1/bid" (Some bidReq) seller1
@@ -156,7 +156,7 @@ let ``get auctions``() =
   use auctionReq = new StringContent(firstAuctionRequest)
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new StringContent("""{ "auction":"1","amount":"VAC11" }""")
+  use bidReq = new StringContent("""{ "amount":11 }""")
   (runWebPart app)
   |> reqWithAuth HttpMethod.POST "/auction/1/bid" (Some bidReq) buyer1 |> ignore
 
@@ -172,7 +172,7 @@ let ``get auctions``() =
     "currency": "VAC",
     "bids": [
         {
-            "amount": "VAC11",
+            "amount": 11,
             "bidder": "BuyerOrSeller|a2|Buyer"
         }
     ],
