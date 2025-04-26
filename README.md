@@ -143,7 +143,7 @@ curl -X POST http://localhost:8083/auction/1/bid \
   -H "Content-Type: application/json" \
   -H "x-jwt-payload: $AUCTIONS_TOKEN_BUYER" \
   -d '{
-    "amount": "VAC10"
+    "amount": 10
   }'
 ```
 

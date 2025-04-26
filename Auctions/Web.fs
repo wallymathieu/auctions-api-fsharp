@@ -74,7 +74,7 @@ module Paths =
 module OfJson=
   type Typ = Type
   let bidReq (auctionId, user, at) (json:JsonValue) =
-    let create a = { user = user; amount=a; auction=auctionId; at = at }
+    let create a = { user = user; amount= a ; auction=auctionId; at = at }
     match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
@@ -83,7 +83,7 @@ module OfJson=
     let create id startsAt title endsAt (currency:string option) (typ:string option) (``open``:bool option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
-        let defaultTyp = TimedAscending { reservePrice = Amount.zero currency; minRaise = Amount.zero currency;
+        let defaultTyp = TimedAscending { reservePrice = AmountValue.zero; minRaise = AmountValue.zero;
           timeFrame =TimeSpan.FromSeconds(0.0) }
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp

@@ -9,7 +9,6 @@
   <ItemGroup>
     <Compile Include="TestsModule.fs" />
     <Compile Include="UserTests.fs" />
-    <Content Include="TestData.xml" />
     <Compile Include="AuctionStateSpecs.fs" />
     <Compile Include="VickreyAuctionStateSpec.fs" />
     <Compile Include="BlindAuctionStateSpec.fs" />

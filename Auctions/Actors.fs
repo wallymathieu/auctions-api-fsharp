@@ -47,12 +47,13 @@ type AgentSignals =
   | GetBids of AsyncReplyChannel<Bid list>
   | HasAuctionEnded of DateTime * AsyncReplyChannel<AuctionEnded>
   | CollectAgent of DateTime * AsyncReplyChannel<AuctionEnded>
+let toAmountAndWinner (auction:Auction) (amount,winner) = ({value=amount;currency=auction.currency},winner)
 
 type AuctionAgent(auction, state:S) =
+  let toAmountAndWinner = toAmountAndWinner auction
   let agent = MailboxProcessor<AgentSignals>.Start(fun inbox ->
     (let validateBid = Auction.validateBid auction
      let mutable state = state
-
      let rec messageLoop() =
        async {
          let! msg = inbox.Receive()
@@ -76,7 +77,7 @@ type AuctionAgent(auction, state:S) =
             - make sure to send out signal about auction status (if there is a winner)
             *)
            state <- S.inc now state
-           reply.Reply(S.tryGetAmountAndWinner state)
+           reply.Reply(S.tryGetAmountAndWinner state |> map toAmountAndWinner)
            return! messageLoop()
          | CollectAgent(now, reply) ->
            (*
@@ -86,7 +87,7 @@ type AuctionAgent(auction, state:S) =
             - quit
             *)
            state <- S.inc now state
-           reply.Reply(S.tryGetAmountAndWinner state)
+           reply.Reply(S.tryGetAmountAndWinner state |> map toAmountAndWinner)
            return ()
        }
 
@@ -136,7 +137,7 @@ type AuctionDelegator(auctions: (Auction*S) list, onIncomingCommand, now, observ
                                         auction.id,
                                         if not (S.hasEnded next)
                                         then AuctionDState.started auction (AuctionAgent.create auction next)
-                                        else AuctionDState.ended auction (S.tryGetAmountAndWinner next) (S.getBids next)
+                                        else AuctionDState.ended auction (S.tryGetAmountAndWinner next |> map (toAmountAndWinner auction)) (S.getBids next)
                                       )
                          |> Map
 

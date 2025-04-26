@@ -40,10 +40,9 @@ let timeAndAuctionCodec : ConcreteCodec<HashEntry list, HashEntry list, DateTime
   <*> rreqWith (tryParseUser, (string>>implicit)) "User" (snd >> Auction.user >> Some )
   <*> ropt "Open" (snd >> Auction.biddersAreOpen >> Some)
 let timeAndBidCodec : ConcreteCodec<HashEntry list, HashEntry list, DateTime * Bid, DateTime * Bid> =
-  fun auction amountValue amountCurrency at bidAt user -> (at, { auction=AuctionId auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at= Option.defaultValue at bidAt })
+  fun auction amountValue at bidAt user -> (at, { auction=AuctionId auction; amount=amountValue; user= user; at= Option.defaultValue at bidAt })
   <!> rreq "Auction" (snd >> Bid.auction >> AuctionId.unwrap >> Some)
-  <*> rreq "AmountValue" (snd >> Bid.amount >> Amount.value >> Some)
-  <*> rreq "AmountCurrency" (snd >> Bid.amount >> Amount.currency >> Currency.value >> Some)
+  <*> rreq "AmountValue" (snd >> Bid.amount >> Some)
   <*> rreqWith (tryParseDateTime,ofDateTime) "At" (fst >> Some)
   // since BidAt is a new field, we don't want to require, we will use At if it's missing
   <*> roptWith (tryParseDateTime,ofDateTime) "BidAt" (snd >> Bid.at >> Some)

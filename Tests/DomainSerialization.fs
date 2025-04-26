@@ -11,13 +11,13 @@ open Fleece
 open Fleece.FSharpData
 
 let sampleJsonLines = """
-[{"$type":"AddAuction","at":"2020-05-17T08:05:54.943Z","auction":{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC","open": false}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:05:59.182Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:02.198Z","bid":{"auction":2,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:06:02.197Z"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:06.854Z","bid":{"auction":2,"user":"BuyerOrSeller|a1|Test","amount":"VAC11","at":"2020-05-17T08:06:06.854Z"}}]
-[{"$type":"AddAuction","at":"2020-05-17T08:06:37.128Z","auction":{"id":1,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC","open": false}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:53.148Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:06:53.147Z"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:57.773Z","bid":{"auction":1,"user":"BuyerOrSeller|a1|Test","amount":"VAC11","at":"2020-05-17T08:06:57.773Z"}}]
+[{"$type":"AddAuction","at":"2020-05-17T08:05:54.943Z","auction":{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|0|0|0","currency":"VAC","open": false}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:05:59.182Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:05:59.171Z"}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:02.198Z","bid":{"auction":2,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:06:02.197Z"}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:06.854Z","bid":{"auction":2,"user":"BuyerOrSeller|a1|Test","amount":11,"at":"2020-05-17T08:06:06.854Z"}}]
+[{"$type":"AddAuction","at":"2020-05-17T08:06:37.128Z","auction":{"id":1,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|0|0|0","currency":"VAC","open": false}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:53.148Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:06:53.147Z"}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:57.773Z","bid":{"auction":1,"user":"BuyerOrSeller|a1|Test","amount":11,"at":"2020-05-17T08:06:57.773Z"}}]
 """
 let parseCommands lines =
   let parseLine line=
@@ -46,7 +46,7 @@ module Json =
     let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
     splitLines sampleJsonLines |> Array.iter parseLine
 
-  let bidJson = """{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}"""
+  let bidJson = """{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:05:59.171Z"}"""
   [<Fact>]
   let ``Bid sample json can be deserialized correctly``() =
     let b : Bid ParseResult = ofJsonText bidJson
@@ -54,7 +54,7 @@ module Json =
     | Ok bid->
       Assert.Equal (AuctionId <| 1L, bid.auction)
       Assert.Equal (BuyerOrSeller (UserId "a2","Buyer"), bid.user)
-      Assert.Equal (Amount.Parse "VAC11", bid.amount)
+      Assert.Equal (11L, bid.amount)
       let expectedAt = DateTime.ParseExact ("2020-05-17T08:05:59.171Z", [| "yyyy-MM-ddTHH:mm:ss.fffZ"; |], null, DateTimeStyles.RoundtripKind)
       Assert.Equal (expectedAt, bid.at)
     | Error e -> failwithf $"Error %A{e}"
@@ -67,7 +67,7 @@ module Json =
       assertJsonEqual (JsonValue.Parse bidJson, j)
     | Error e -> failwithf $"Error %A{e}"
 
-  let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC","open": false}"""
+  let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|0|0|0","currency":"VAC","open": false}"""
   [<Fact>]
   let ``Auction sample json can be deserialized correctly``() =
     let a : Auction ParseResult = ofJsonText auctionJson
@@ -79,7 +79,7 @@ module Json =
       Assert.Equal (expectedAt, auction.startsAt)
       Assert.Equal ("Some auction", auction.title)
       Assert.Equal (Currency.VAC, auction.currency)
-      Assert.Equal (Type.Parse "English|VAC0|VAC0|0", auction.typ)
+      Assert.Equal (Type.Parse "English|0|0|0", auction.typ)
     | Error e -> failwithf $"Error %A{e}"
   [<Fact>]
   let ``Auction sample json can be deserialized and serialized to the same json``() =

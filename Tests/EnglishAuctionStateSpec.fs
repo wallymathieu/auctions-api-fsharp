@@ -6,8 +6,8 @@ open System
 open FSharpPlus
 open TestData
 let timedAscAuction = auctionOfTyp (TimedAscending { // let's start out with english auctions
-    reservePrice= parse "SEK0"
-    minRaise =parse "SEK0"
+    reservePrice= parse "0"
+    minRaise =parse "0"
     timeFrame = TimeSpan.FromSeconds(0.0)
   })
 let englishEmptyState = Auction.emptyState timedAscAuction
