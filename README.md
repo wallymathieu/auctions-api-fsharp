@@ -117,7 +117,7 @@ AUCTIONS_TOKEN_BUYER=`echo '{"sub":"a2", "name":"Buyer", "u_typ":"0"}' | base64`
 - `GET /auctions` - List all auctions
 - `GET /auctions/:id` - Get auction details, including bids and winner information if available
 - `POST /auctions` - Create a new auction
-- `POST /auctions/:id/bid` - Place a bid on an auction
+- `POST /auctions/:id/bids` - Place a bid on an auction
 
 ### Example Requests
 
@@ -139,7 +139,7 @@ curl -X POST http://localhost:8083/auctions \
 #### Place a bid
 
 ```bash
-curl -X POST http://localhost:8083/auctions/1/bid \
+curl -X POST http://localhost:8083/auctions/1/bids \
   -H "Content-Type: application/json" \
   -H "x-jwt-payload: $AUCTIONS_TOKEN_BUYER" \
   -d '{

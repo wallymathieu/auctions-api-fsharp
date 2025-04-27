@@ -97,7 +97,7 @@ let ``Place bid as buyer on auction 1``() =
   use bidReq = new StringContent """{ "amount":11 }"""
   let statusCode,res =
         (runWebPart app)
-        |> reqWithAuth HttpMethod.POST "/auctions/1/bid" (Some bidReq) buyer1
+        |> reqWithAuth HttpMethod.POST "/auctions/1/bids" (Some bidReq) buyer1
 
   Assert.Equal (HttpStatusCode.OK, statusCode)
   assertStrJsonEqual ("""{
@@ -120,7 +120,7 @@ let ``Place bid as buyer on auction 2``() =
   use bidReq = new StringContent """{ "amount":11 }"""
   let statusCode,res =
         (runWebPart app)
-        |> reqWithAuth HttpMethod.POST "/auctions/2/bid" (Some bidReq) buyer1
+        |> reqWithAuth HttpMethod.POST "/auctions/2/bids" (Some bidReq) buyer1
   Assert.Equal (HttpStatusCode.OK, statusCode)
   assertStrJsonEqual ("""{
     "$type": "BidAccepted",
@@ -142,7 +142,7 @@ let ``Place bid as seller on auction 1``() =
   use bidReq = new StringContent """{ "amount":11 }"""
   let statusCode,res =
         (runWebPart app)
-        |> reqWithAuth HttpMethod.POST "/auctions/1/bid" (Some bidReq) seller1
+        |> reqWithAuth HttpMethod.POST "/auctions/1/bids" (Some bidReq) seller1
   Assert.Equal (HttpStatusCode.BadRequest, statusCode)
   assertStrJsonEqual ("""{
     "type": "SellerCannotPlaceBids",
@@ -158,7 +158,7 @@ let ``get auctions``() =
   |> reqWithAuth HttpMethod.POST "/auctions" (Some auctionReq) seller1 |> ignore
   use bidReq = new StringContent """{ "amount":11 }"""
   (runWebPart app)
-  |> reqWithAuth HttpMethod.POST "/auctions/1/bid" (Some bidReq) buyer1 |> ignore
+  |> reqWithAuth HttpMethod.POST "/auctions/1/bids" (Some bidReq) buyer1 |> ignore
 
   let statusCode,res =
         (runWebPart app)
