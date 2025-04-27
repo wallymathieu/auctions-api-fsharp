@@ -514,7 +514,7 @@ type Command with
       create
       <!> jreq "at" (function PlaceBid (d,_)-> Some d | _ -> None)
       <*> jreq "bid" (function PlaceBid (_,a)-> Some a | _ -> None)
-    (tag "$type" "AddAuction" auctionCodec) <|> (tag "$type" "PlaceBid" bidCodec)
+    tag "$type" "AddAuction" auctionCodec <|> tag "$type" "PlaceBid" bidCodec
 
 type Event with
   static member JsonObjCodec =
