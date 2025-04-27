@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <ServerGarbageCollection>true</ServerGarbageCollection>
   </PropertyGroup>
   <ItemGroup>
@@ -9,7 +9,6 @@
   <ItemGroup>
     <Compile Include="TestsModule.fs" />
     <Compile Include="UserTests.fs" />
-    <Content Include="TestData.xml" />
     <Compile Include="AuctionStateSpecs.fs" />
     <Compile Include="VickreyAuctionStateSpec.fs" />
     <Compile Include="BlindAuctionStateSpec.fs" />
@@ -20,14 +19,24 @@
     <Compile Include="AmountTests.fs" />
     <Compile Include="AuctionBidValidationTests.fs" />
     <Compile Include="ActorTests.fs" />
+    <Compile Include="DomainSerialization.fs" />
     <Compile Include="EnvironmentTest.fs" />
+    <Compile Include="WebTests.fs" />
+    <Compile Include="ApiSpec.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Update="FSharp.Core" Version="4.7.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.9.0" />
-    <PackageReference Include="xunit" Version="2.4.1" />
-    <PackageReference Include="FsUnit.xUnit" Version="3.4.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.1" />
+    <PackageReference Include="FsCheck.Xunit" Version="2.16.5" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.4.0" />
+    <PackageReference Include="Suave.Testing" Version="2.2.1" />
+    <PackageReference Include="FsCheck.Xunit" Version="2.16.5" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.4.0" />
+    <PackageReference Include="xunit" Version="2.4.2" />
+    <PackageReference Include="FsUnit.xUnit" Version="5.1.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Update="FSharp.Core" Version="6.0.6" />
   </ItemGroup>
 </Project>

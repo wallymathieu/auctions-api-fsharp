@@ -1,8 +1,6 @@
 ﻿module Auctions.Suave
 open FSharpPlus
-open FSharpPlus.Operators
 open FSharpPlus.Data
-open Fleece
 open Fleece.FSharpData
 
 /// The base monad in Suave is SuaveTask<HttpContext>
@@ -50,16 +48,15 @@ module RequestErrors=
   let FORBIDDEN s= OptionT<< (RE.FORBIDDEN s )
   let NOT_FOUND s= OptionT<< (RE.NOT_FOUND s )
   let UNAUTHORIZED s = OptionT<< (RE.UNAUTHORIZED s )
-open FSharpPlus.Lens
 module Writers=
   open Suave
-  module W=Suave.Writers
+  module W=Writers
    //
   let inline _response f ctx = map (fun a' -> { ctx with response=a' }) (f ctx.response)
   let inline _request f ctx = map (fun a' -> { ctx with request=a' }) (f ctx.request)
   module Result =
     let inline _status f (resp:HttpResult) = map (fun a' -> { resp with status=a' }) (f resp.status)
-    //let inline _headers f (resp:HttpResult) = map (fun a' -> { resp with headers=a' }) (f resp.headers)
+
   module Request =
     let inline _url f (req:HttpRequest) = map (fun (a':System.Uri) -> { req with rawPath=a'.AbsolutePath; rawQuery =a'.Query }) (f req.url)
     let inline _method f (req:HttpRequest) = map (fun a' -> { req with rawMethod=string a' }) (f req.method)
@@ -80,14 +77,14 @@ module Json=
   open Successful
   open RequestErrors
   open Writers
-  let inline OK (v:JsonValue) : WebPart=
+  let inline OK (v:Encoding) : WebPart=
     OK (string v)
     >=> setMimeType "application/json; charset=utf-8"
-  let inline BAD_REQUEST (v:JsonValue) : WebPart=
+  let inline BAD_REQUEST (v:Encoding) : WebPart=
     BAD_REQUEST (string v)
     >=> setMimeType "application/json; charset=utf-8"
 
-  let inline ``OK_or_BAD_REQUEST`` (result) : WebPart=
+  let inline OK_or_BAD_REQUEST result : WebPart=
     match result with
     | Ok v -> OK v
     | Error err -> BAD_REQUEST err

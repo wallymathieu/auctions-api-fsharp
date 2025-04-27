@@ -4,9 +4,10 @@ open AuctionStateSpecs
 open Xunit
 open System
 open FSharpPlus
+open TestData
 let timedAscAuction = auctionOfTyp (TimedAscending { // let's start out with english auctions
-    reservePrice= parse "SEK0"
-    minRaise =parse "SEK0"
+    reservePrice= parse "0"
+    minRaise =parse "0"
     timeFrame = TimeSpan.FromSeconds(0.0)
   })
 let englishEmptyState = Auction.emptyState timedAscAuction
@@ -30,9 +31,9 @@ let ``english auction winner and price``() =
 [<Fact>]
 let ``english auction Can't place bid lower than highest bid``() =
     // setup
-    let (state,res) = englishEmptyState
+    let state,_ = englishEmptyState
                        |> S.addBid {bid with at=startsAt.AddHours(1.0)}
-    let nextBid = {bid with at=startsAt.AddHours(2.0); id=BidId.New()}
+    let nextBid = {bid with at=startsAt.AddHours(2.0)}
 
     // act
     let res = S.addBid nextBid state |> snd

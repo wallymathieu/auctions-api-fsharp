@@ -9,12 +9,13 @@ open Xunit
 open System.Globalization
 open FSharpPlus
 open FsUnit.Xunit
+open TestData
 
 module ``Auction agent tests`` =
   //domain specific matchers:
   open NHamcrest.Core
-  let equalError x = CustomMatcher<obj>(sprintf "Equals Error %A" x, fun (a:obj)->match a :?> Result<CommandSuccess,Errors> with | Error err-> err= x | Ok _ -> false)
-  let equalOk x = CustomMatcher<obj>(sprintf "Equals Ok %A" x, fun (a:obj)-> match a :?> Result<CommandSuccess,Errors> with | Error _-> false | Ok ok -> ok =x)
+  let equalError x = CustomMatcher<obj>(sprintf "Equals Error %A" x, fun (a:obj)->match a :?> Result<Event,Errors> with | Error err-> err= x | Ok _ -> false)
+  let equalOk x = CustomMatcher<obj>(sprintf "Equals Ok %A" x, fun (a:obj)-> match a :?> Result<Event,Errors> with | Error _-> false | Ok ok -> ok =x)
 
   let seller = BuyerOrSeller(UserId "x1", "Seller")
 
@@ -24,19 +25,20 @@ module ``Auction agent tests`` =
                   user = seller
                   currency=Currency.VAC
                   typ=TimedAscending { // let's start out with english auctions
-                    reservePrice=parse "VAC0"
-                    minRaise =parse "VAC0"
+                    reservePrice=parse "0"
+                    minRaise =parse "0"
                     timeFrame = TimeSpan.FromSeconds(0.0)
                   }
+                  openBidders = true
                 }
 
   let buyer = BuyerOrSeller(UserId "x2", "Buyer")
 
   let emptyHandler= fun _ -> Job.unit()
-  let validBid = { id = BidId.New()
+  let validBid = {
                    auction =auctionId
                    user=buyer
-                   amount =parse "VAC10"
+                   amount =parse "10"
                    at = DateTime(2008,12,1)
                  }
   [<Fact>]

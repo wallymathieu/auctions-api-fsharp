@@ -3,37 +3,46 @@ open Auctions.Domain
 open Auctions.MapToRedis
 
 open StackExchange.Redis
-open System.Collections.Generic
 open System
 open FSharpPlus
 
-type AppendAndReadBatchRedis(connStr:string) =
-  let conn = ConnectionMultiplexer.Connect(connStr)
-  let db = conn.GetDatabase()
-  let hashCreate (batch : IBatch) command =
+module AppendAndReadBatchRedis =
+  let hashCreate mapToHashEntries (batch : IBatch) event =
     let id = Guid.NewGuid().ToString("N")
-    let entries = mapToHashEntries command
+    let entries = mapToHashEntries event
     batch.HashSetAsync(implicit id, entries |> List.toArray) |> ignore
     id
-
-  let commandsKey:RedisKey = implicit "Commands"
-  interface IAppendBatch with
-
-    member __.Batch commands =
+  let batch (db:IDatabase) mapToHashEntries key entities =
       let batch = db.CreateBatch()
-      let ids = new List<RedisValue>()
-      for command in commands do
-        let id = hashCreate batch command
+      let ids = ResizeArray<RedisValue>()
+      for entity in entities do
+        let id = hashCreate mapToHashEntries batch entity
         ids.Add(implicit (string id))
-      batch.SetAddAsync(commandsKey, ids |> Seq.toArray, CommandFlags.None) |> ignore
+      batch.SetAddAsync(key, ids |> Seq.toArray, CommandFlags.None) |> ignore
       batch.Execute()
       async.Zero()
-
-    member __.ReadAll() =
-      let commandIdToCommand = string >> implicit >> db.HashGetAll >> List.ofArray >> mapFromHashEntries
-      let commands = db.SetMembers(commandsKey, CommandFlags.None)
-      commands
-      |> Array.map commandIdToCommand
+  let readAll (db:IDatabase) mapFromHashEntries getAt key =
+      let entityIdToEntity = string >> implicit >> db.HashGetAll >> List.ofArray >> mapFromHashEntries
+      let entities = db.SetMembers(key, CommandFlags.None)
+      entities
+      |> Array.map entityIdToEntity
       |> Array.toList
-      |> List.sortBy Command.getAt
+      |> List.sortBy getAt
       |> async.Return
+
+type AppendAndReadBatchRedis<'T>(connStr:string, entitiesKey:string, mapToHashEntries, mapFromHashEntries, getAt) =
+  let conn = ConnectionMultiplexer.Connect(connStr)
+  let db = conn.GetDatabase()
+
+  let entitiesKey:RedisKey = implicit entitiesKey
+  interface IAppendBatch<'T> with
+
+    member _.Batch events = AppendAndReadBatchRedis.batch db mapToHashEntries entitiesKey events
+
+    member _.ReadAll() = AppendAndReadBatchRedis.readAll db mapFromHashEntries getAt entitiesKey
+
+type AppendAndReadEventBatchRedis(connStr:string) =
+  inherit AppendAndReadBatchRedis<Event>(connStr, "Events", Event.mapToHashEntries, Event.mapFromHashEntries, Event.getAt)
+
+type AppendAndReadCommandBatchRedis(connStr:string) =
+  inherit AppendAndReadBatchRedis<Command>(connStr, "Commands", Command.mapToHashEntries, Command.mapFromHashEntries, Command.getAt)

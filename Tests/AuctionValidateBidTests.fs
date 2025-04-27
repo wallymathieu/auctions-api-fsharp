@@ -1,31 +1,30 @@
 ﻿namespace Tests
 open Auctions.Domain
-open Auctions
 open System
 open Xunit
 
-module ``Auction validate bid tests`` = 
-
+module ``Auction validate bid tests`` =
+  open TestData
   [<Fact>]
-  let ``Seller cant bid``() = 
+  let ``Seller cant bid``() =
     // setup
-    let validateBid = fun b-> Auction.validateBid b auction
+    let validateBid = Auction.validateBid auction
     let d = DateTime(2016, 1, 2)
-    
+
     // act
-    let res = 
-      validateBid ({ bid with user = seller; at = d })
+    let res =
+      validateBid { bid with user = seller; at = d }
     // assert
     Assert.Equal(Error(SellerCannotPlaceBids(User.getId seller, auctionId)), res)
-  
+
   [<Fact>]
-  let ``Buyer can place bid``() = 
+  let ``Buyer can place bid``() =
     // setup
-    let validateBid = fun b-> Auction.validateBid b auction
+    let validateBid = Auction.validateBid auction
     let d = DateTime(2016, 1, 2)
 
     // act
-    let res = 
+    let res =
       validateBid { bid with at = d }
     // assert
     Assert.Equal(Ok(), res)

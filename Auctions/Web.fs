@@ -2,7 +2,6 @@ module Auctions.Web
 open System
 open FSharpPlus
 open Auctions.Suave
-open Auctions.Suave.Writers
 open Auctions.Suave.Filters
 open Auctions.Suave.Successful
 open Auctions.Suave.RequestErrors
@@ -10,7 +9,6 @@ open Auctions.Security.Cryptography
 
 open Fleece
 open Fleece.FSharpData
-open Fleece.FSharpData.Operators
 open FSharp.Data
 
 open Auctions.Domain
@@ -34,32 +32,40 @@ type Session =
   | NoSession
   | UserLoggedOn of User
 type UserType=
-  | BuyerOrSeller=0
-  | Support=1
-type JwtPayload = { subject:string; name:string; userType:UserType }
+  | BuyerOrSeller = 0
+  | Support = 1
+type JwtPayload = { user:User }
 with
+  static member getUser (payload:JwtPayload)= payload.user
+  static member tryCreate (subject: string) (name: string option) (userType: String) =
+    let userId = UserId subject
+    match tryParse userType, name with
+    | Some UserType.BuyerOrSeller, Some name -> { user = BuyerOrSeller(userId, name) } |> Some
+    | Some UserType.Support,_ -> { user = Support userId } |> Some
+    | _ -> None
+
   static member OfJson json:ParseResult<JwtPayload> =
-    let create sub name userType= {subject =sub ; name=name; userType =parse userType}
     match json with
-    | JObject o -> create <!> (o .@ "sub") <*> (o .@ "name") <*> (o .@ "u_typ")
+    | JObject o ->
+        JwtPayload.tryCreate <!> (o .@ "sub") <*> (o .@? "name") <*> (o .@ "u_typ")
+        >>= (function | Some user-> Ok user | None-> Decode.Fail.invalidValue json "could not interpret as user")
     | x -> Decode.Fail.objExpected x
-let authenticated f = //
-  let context apply (a : Suave.Http.HttpContext) = apply a a
-  context (fun x ->
-    match x.request.header "x-jwt-payload" with
+let decodeXJwtPayloadHeader (headerValue:Choice<String,String>) : Result<JwtPayload,_> =
+    match headerValue with
     | Choice1Of2 u ->
       Convert.FromBase64String u
       |>Encoding.UTF8.GetString
-      |> parseJson
-      |> Result.bind( fun (payload:JwtPayload)->
-        let userId = UserId payload.subject
-        match payload.userType with
-        | UserType.BuyerOrSeller -> BuyerOrSeller(userId, payload.name) |> Ok
-        | UserType.Support -> Support userId |> Ok
-        | v -> Decode.Fail.invalidValue (v |> string |> JString) "Unknown user type")
+      |> ofJsonText
+      |> Result.mapError Choice1Of2
+    | Choice2Of2 _ -> Error <| Choice2Of2 "Missing value"
+
+let authenticated f = //
+  let context apply (a : Suave.Http.HttpContext) = apply a a
+  context (fun (x : Suave.Http.HttpContext) ->
+      decodeXJwtPayloadHeader (x.request.header "x-jwt-payload")
+      |> Result.map JwtPayload.getUser
       |> function | Ok user->f (UserLoggedOn(user))
-                  | Error _ ->f NoSession
-    | Choice2Of2 _ -> f NoSession)
+                  | Error _ ->f NoSession)
 
 module Paths =
   type Int64Path = PrintfFormat<int64 -> string, unit, string, string, int64>
@@ -67,34 +73,35 @@ module Paths =
   module Auction =
     /// /auctions
     let overview = "/auctions"
-    /// /auction
-    let register = "/auction"
-    /// /auction/INT
-    let details : Int64Path = "/auction/%d"
-    /// /auction/INT/bid
-    let placeBid : Int64Path = "/auction/%d/bid"
+    /// /auctions
+    let register = "/auctions"
+    /// /auctions/INT
+    let details : Int64Path = "/auctions/%d"
+    /// /auctions/INT/bid
+    let placeBid : Int64Path = "/auctions/%d/bids"
 
 (* Json API *)
 module OfJson=
-  type Typ = Domain.Auctions.Type
-  let bidReq (auctionId, user, at) json =
-    let create a = { user = user; id= BidId.New(); amount=a; auction=auctionId; at = at }
-    match json with
+  type Typ = Type
+  let bidReq (auctionId, user, at) (json:JsonValue) =
+    let create a = { user = user; amount= a ; auction=auctionId; at = at }
+    match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
-  let addAuctionReq (user) json =
-    let create id startsAt title endsAt (currency:string option) (typ:string option)
+  let addAuctionReq user (json:JsonValue) =
+    let create id startsAt title endsAt (currency:string option) (typ:string option) (``open``:bool option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
-        let defaultTyp = TimedAscending { reservePrice=Amount.zero currency; minRaise =Amount.zero currency;
+        let defaultTyp = TimedAscending { reservePrice = AmountValue.zero; minRaise = AmountValue.zero;
           timeFrame =TimeSpan.FromSeconds(0.0) }
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
-        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
-    match json with
+        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ
+          openBidders = Option.defaultValue false ``open`` }
+    match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
-                   <*> (o .@? "currency")<*> (o .@? "type")
+                   <*> (o .@? "currency")<*> (o .@? "type")<*> (o .@? "open")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
 
@@ -107,14 +114,14 @@ module ToJson=
       "currency" .= auction.currency
     ]
   let auction auction = auctionList auction |> jobj
-  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) : JsonValue =
-    let (winner,winnerPrice) =
+  let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) =
+    let winner,winnerPrice =
             match maybeAmountAndWinner with
             | None -> ("","")
             | Some (amount, winner)->
                 (winner.ToString(), amount.ToString())
     let discloseBidders =Auction.biddersAreOpen auction
-    let bid (x: Bid) :JsonValue =
+    let bid (x: Bid) =
       let userId = string x.user
       jobj [
         "amount" .= x.amount
@@ -127,7 +134,7 @@ module ToJson=
       "winnerPrice" .= winnerPrice
     ] |> jobj
 
-let webPart (agent : AuctionDelegator) =
+let webPart (agent : AuctionDelegator) (time:unit->DateTime) =
   let agent = AgentAdapter(agent)
   let overview : WebPart= GET >=> fun (ctx) -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
@@ -141,7 +148,7 @@ let webPart (agent : AuctionDelegator) =
     return!
        match auctionAndBids with
        | Some v-> Json.OK (ToJson.auctionAndBidsAndMaybeWinnerAndAmount v) ctx
-       | None -> NOT_FOUND (sprintf "Could not find auction with id %O" id) ctx
+       | None -> NOT_FOUND $"Could not find auction with id {id}" ctx
   }
 
   /// handle command and add result to repository
@@ -162,8 +169,8 @@ let webPart (agent : AuctionDelegator) =
   let register =
     let toPostedAuction user =
         Json.getBody
-          >> Result.bind (OfJson.addAuctionReq (user))
-          >> Result.map (Timed.atNow >>AddAuction)
+          >> Result.bind (OfJson.addAuctionReq user)
+          >> Result.map (Timed.at (time()) >>AddAuction)
           >> Result.mapError InvalidUserData
 
     authenticated (function
@@ -176,8 +183,8 @@ let webPart (agent : AuctionDelegator) =
   let placeBid auctionId =
     let toPostedPlaceBid id user =
       Json.getBody
-        >> Result.bind (OfJson.bidReq (id,user,DateTime.UtcNow) )
-        >> Result.map (Timed.atNow >>PlaceBid)
+        >> Result.bind (OfJson.bidReq (id, user, time()) )
+        >> Result.map (Timed.at (time()) >>PlaceBid)
         >> Result.mapError InvalidUserData
 
     authenticated (function

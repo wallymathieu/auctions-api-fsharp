@@ -1,13 +1,11 @@
 module Auctions.Actors
+open System.Collections.Generic
 open Auctions.Domain
 
 open System
-open System.Collections.Generic
-open FSharpPlus
 open Hopac
 
-type AuctionEnded = (Amount * User) option
-
+type AuctionEnded = (AmountValue * User) option
 type AgentSignals =
   | AgentBid of Bid * IVar<Result<unit, Errors>>
   | HasAuctionEnded of DateTime
@@ -19,7 +17,7 @@ with
 
 type AuctionAgent(auction, state:S) =
   let inbox = Ch ()
-  let validateBid = fun b->Auction.validateBid b auction
+  let validateBid = Auction.validateBid auction
   let state = MVar state
   let agent = Job.foreverServer(job {
       let! msg = Ch.take inbox
@@ -61,8 +59,8 @@ type AuctionAgent(auction, state:S) =
   }
   member __.Job = agent
 
-module PersistCommands=
-  let create(appendBatches : (Command list -> Async<unit>) list)=
+module Persister =
+  let create(appendBatches : ('a list -> Async<unit>) list)=
     let inbox = Ch ()
     let agent = Job.foreverServer(job {
       let! command = Ch.take inbox
@@ -106,7 +104,7 @@ type private Repository ()=
     | PlaceBid (_,b)->
         match auctions.TryGetValue b.auction with
         | true, (auction,state) ->
-          match Auction.validateBid b auction with
+          match Auction.validateBid auction b with
           | Ok _ ->
             let (next,_)= S.addBid b state
             auctions.[auction.id]<- (auction,next)
@@ -122,7 +120,7 @@ module AuctionAgent=
 type AuctionAndBidsAndMaybeWinnerAndAmount = Auction * (Bid list) * AuctionEnded
 type DelegatorSignals =
   /// From a user command (i.e. create auction or place bid) you expect either a success or an error
-  | UserCommand of Command * IVar<Result<CommandSuccess, Errors>>
+  | UserCommand of Command * IVar<Result<Event, Errors>>
   | GetAuction of AuctionId * IVar<AuctionAndBidsAndMaybeWinnerAndAmount option>
 
   /// ping delegator to make sure that time based logic can run (i.e. CRON dependent auction logic)
@@ -133,7 +131,7 @@ type DelegatorSignals =
 module AuctionDState=
   type Running=
     | Ongoing of AuctionAgent
-    | Ended of AuctionEnded*Bid list
+    | Ended of AuctionEnded * Bid list
   type T = Auction * Running
   let (|IsOngoing|HasEnded|) state =
      match state with
@@ -148,7 +146,7 @@ type AuctionDelegator(commands:Command list, onIncomingCommand:Command->Job<unit
   let agents : MVar<Map<AuctionId,AuctionDState.T>> = MVar()
 
 
-  let userCommand cmd now (reply:IVar<Result<CommandSuccess, Errors>>) : Job<_>=
+  let userCommand cmd now (reply:IVar<Result<Event, Errors>>) : Job<_>=
     let observeAndReply result=job{
       do! observeResult result
       do! IVar.fill reply result
