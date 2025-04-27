@@ -63,12 +63,12 @@ module Paths =
   module Auction =
     /// /auctions
     let overview = "/auctions"
-    /// /auction
-    let register = "/auction"
-    /// /auction/INT
-    let details : Int64Path = "/auction/%d"
-    /// /auction/INT/bid
-    let placeBid : Int64Path = "/auction/%d/bid"
+    /// /auctions
+    let register = "/auctions"
+    /// /auctions/INT
+    let details : Int64Path = "/auctions/%d"
+    /// /auctions/INT/bid
+    let placeBid : Int64Path = "/auctions/%d/bid"
 
 (* Json API *)
 module OfJson=
