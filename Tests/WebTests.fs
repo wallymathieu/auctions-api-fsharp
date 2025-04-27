@@ -84,12 +84,12 @@ module ``JwtPayload deserialization spec``=
 
 open TestData
 module ``bid deserialization spec``=
-  let ``bid of 10 VAC`` = OfJson.bidReq (auctionId,buyer,endsAt) (JsonValue.Parse """{ "amount":"VAC10" }""")
+  let ``bid of 10`` = OfJson.bidReq (auctionId,buyer,endsAt) (JsonValue.Parse """{ "amount":10 }""")
 
   [<Fact>]
   let ``can parse bid request``() =
-    assertOkWithValue ({ user = buyer; amount={ value=10; currency=Currency.VAC }
-                         auction=auctionId; at = endsAt }, ``bid of 10 VAC``)
+    assertOkWithValue ({ user = buyer; amount=10
+                         auction=auctionId; at = endsAt }, ``bid of 10``)
 
 module ``auction deserialization spec``=
   let ``add first auction`` = OfJson.addAuctionReq seller (JsonValue.Parse """{ "id":1,"startsAt":"2016-01-01T00:00:00.000Z","endsAt":"2016-02-01T00:00:00.000Z","title":"First auction", "currency":"VAC" }""")
@@ -103,8 +103,9 @@ module ``auction deserialization spec``=
                          startsAt = startsAt; expiry = endsAt
                          currency = Currency.VAC
                          user = seller
-                         typ = TimedAscending { reservePrice = Amount.zero Currency.VAC
-                                                minRaise = Amount.zero Currency.VAC
-                                                timeFrame = TimeSpan.Zero } }
+                         typ = TimedAscending { reservePrice = AmountValue.zero
+                                                minRaise = AmountValue.zero
+                                                timeFrame = TimeSpan.Zero }
+                         openBidders = false }
         Assert.Equal(expected, auctionReq)
     | Error err-> failwithf $"Did not expect error %A{err}"

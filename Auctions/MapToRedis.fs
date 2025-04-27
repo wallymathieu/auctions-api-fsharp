@@ -27,8 +27,9 @@ let tryParseDateTime (t:RedisValue) : Result<DateTime,_> =
     | _ -> Decode.Fail.invalidValue t "InvalidType"
   Result.bindError parsedParsedAsInt parsedAsString
 let ofDateTime (d:DateTime) : RedisValue = implicit <| d.ToString dateTimeFormat
-let timeAndAuctionCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTime*Auction),(DateTime*Auction)> =
-  fun id title expiry startsAt at typ currency user -> (at, { id=AuctionId id;title=title; expiry =expiry; startsAt=startsAt; typ= typ; currency=Currency.ofValue currency; user= user })
+let timeAndAuctionCodec : ConcreteCodec<HashEntry list, HashEntry list, DateTime*Auction, DateTime*Auction> =
+  fun id title expiry startsAt at typ currency user openBidders -> (at, { id=AuctionId id;title=title; expiry =expiry; startsAt=startsAt; typ= typ; currency=Currency.ofValue currency; user= user
+                                                                          openBidders= Option.defaultValue false openBidders })
   <!> rreq "Id" (snd >> Auction.getId >> AuctionId.unwrap >> Some)
   <*> rreq "Title" (snd >> Auction.title >> Some)
   <*> rreqWith (tryParseDateTime,ofDateTime) "Expiry" (snd >> Auction.expiry >> Some)
@@ -37,11 +38,11 @@ let timeAndAuctionCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTim
   <*> rreqWith (tryParseType, (string>>implicit)) "Typ" (snd >> Auction.typ >> Some)
   <*> rreq "Currency" (snd >> Auction.currency >> Currency.value >> Some)
   <*> rreqWith (tryParseUser, (string>>implicit)) "User" (snd >> Auction.user >> Some )
-let timeAndBidCodec : ConcreteCodec<HashEntry list, HashEntry list, (DateTime*Bid),(DateTime*Bid)> =
-  fun auction amountValue amountCurrency at bidAt user -> (at, { auction=AuctionId auction; amount={value=amountValue; currency=Currency.ofValue amountCurrency}; user= user; at= Option.defaultValue at bidAt })
+  <*> ropt "Open" (snd >> Auction.biddersAreOpen >> Some)
+let timeAndBidCodec : ConcreteCodec<HashEntry list, HashEntry list, DateTime * Bid, DateTime * Bid> =
+  fun auction amountValue at bidAt user -> (at, { auction=AuctionId auction; amount=amountValue; user= user; at= Option.defaultValue at bidAt })
   <!> rreq "Auction" (snd >> Bid.auction >> AuctionId.unwrap >> Some)
-  <*> rreq "AmountValue" (snd >> Bid.amount >> Amount.value >> Some)
-  <*> rreq "AmountCurrency" (snd >> Bid.amount >> Amount.currency >> Currency.value >> Some)
+  <*> rreq "AmountValue" (snd >> Bid.amount >> Some)
   <*> rreqWith (tryParseDateTime,ofDateTime) "At" (fst >> Some)
   // since BidAt is a new field, we don't want to require, we will use At if it's missing
   <*> roptWith (tryParseDateTime,ofDateTime) "BidAt" (snd >> Bid.at >> Some)
@@ -69,29 +70,29 @@ let inline tag prop value codec =
   |> Codec.toConcrete
 let inline withCase (toType:'a->'t) (ofType:'t->'a option) (codec:ConcreteCodec<HashEntry list,HashEntry list,'a,'a>) =
   let encode v = match ofType v with Some case' -> Codec.encode (Codec.ofConcrete codec) case' | None -> empty
-  let decode = Codec.decode (Codec.ofConcrete codec) >> Result.map (toType)
+  let decode = Codec.decode (Codec.ofConcrete codec) >> Result.map toType
   (decode,encode) |> Codec.toConcrete
 /// to be able to persist commands
 module Command =
   let codec : ConcreteCodec<HashEntry list,HashEntry list,Command,Command> =
     let addAuctionCodec = withCase AddAuction (function | AddAuction (a,b)-> Some (a,b) | _ -> None) timeAndAuctionCodec
     let placeBidCodec = withCase PlaceBid (function | PlaceBid (a,b)-> Some (a,b) | _ -> None) timeAndBidCodec
-    (tag "Type" "AddAuction" addAuctionCodec) <|> (tag "Type" "PlaceBid" placeBidCodec)
+    tag "Type" "AddAuction" addAuctionCodec <|> tag "Type" "PlaceBid" placeBidCodec
 
   let mapToHashEntries command = Codec.encode (Codec.ofConcrete codec) command
 
   let mapFromHashEntries entries : Command =
-    match Codec.decode (Codec.ofConcrete codec) entries with | Ok v -> v | Error err -> failwithf "Unknown %A" err
+    match Codec.decode (Codec.ofConcrete codec) entries with | Ok v -> v | Error err -> failwithf $"Unknown %A{err}"
 
 /// to be able to persist events
 module Event =
   let codec : ConcreteCodec<HashEntry list,HashEntry list,Event,Event> =
     let addAuctionCodec = withCase AuctionAdded (function | AuctionAdded (a,b)-> Some (a,b) | _ -> None) timeAndAuctionCodec
     let placeBidCodec = withCase BidAccepted (function | BidAccepted (a,b)-> Some (a,b) | _ -> None) timeAndBidCodec
-    (tag "Type" "AuctionAdded" addAuctionCodec) <|> (tag "Type" "BidAccepted" placeBidCodec)
+    tag "Type" "AuctionAdded" addAuctionCodec <|> tag "Type" "BidAccepted" placeBidCodec
 
   let mapToHashEntries event = Codec.encode (Codec.ofConcrete codec) event
 
   let mapFromHashEntries entries : Event =
-    match Codec.decode (Codec.ofConcrete codec) entries with | Ok v -> v | Error err -> failwithf "Unknown %A" err
+    match Codec.decode (Codec.ofConcrete codec) entries with | Ok v -> v | Error err -> failwithf $"Unknown %A{err}"
 

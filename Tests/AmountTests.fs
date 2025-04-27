@@ -2,7 +2,6 @@
 
 open Auctions.Domain
 
-open System
 open Xunit
 open FsCheck
 

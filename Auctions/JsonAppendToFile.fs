@@ -25,7 +25,7 @@ module JsonAppendToFile =
       let k = parseJson line
       match k with
       | Ok line ->line
-      | Error err->failwithf "Couldn't parse line %O" err // not an expected error
+      | Error err->failwithf $"Couldn't parse line {err}" // not an expected error
     let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
     return splitLines lines
             |> Array.collect map
@@ -39,8 +39,8 @@ type JsonAppendToFile<'T>(fileName, toJson, parseJson, getAt:'T -> DateTime) =
     if fileDoesNotExist fileName then File.WriteAllText(fileName, "")
 
   interface IAppendBatch<'T> with
-    member __.Batch cs = JsonAppendToFile.batch fileName toJson cs
-    member __.ReadAll() = JsonAppendToFile.readAll parseJson getAt fileName
+    member _.Batch cs = JsonAppendToFile.batch fileName toJson cs
+    member _.ReadAll() = JsonAppendToFile.readAll parseJson getAt fileName
 
 type JsonAppendEventToFile(fileName) =
   inherit JsonAppendToFile<Event> (fileName, toJsonValue, ofJsonText, Event.getAt)

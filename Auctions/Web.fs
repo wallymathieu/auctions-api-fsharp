@@ -60,34 +60,35 @@ module Paths =
   module Auction =
     /// /auctions
     let overview = "/auctions"
-    /// /auction
-    let register = "/auction"
-    /// /auction/INT
-    let details : Int64Path = "/auction/%d"
-    /// /auction/INT/bid
-    let placeBid : Int64Path = "/auction/%d/bid"
+    /// /auctions
+    let register = "/auctions"
+    /// /auctions/INT
+    let details : Int64Path = "/auctions/%d"
+    /// /auctions/INT/bid
+    let placeBid : Int64Path = "/auctions/%d/bids"
 
 (* Json API *)
 module OfJson=
-  type Typ = Domain.Type
+  type Typ = Type
   let bidReq (auctionId, user, at) (json:JsonValue) =
-    let create a = { user = user; amount=a; auction=auctionId; at = at }
+    let create a = { user = user; amount= a ; auction=auctionId; at = at }
     match FSharpData.Encoding json with
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
-  let addAuctionReq (user) (json:JsonValue) =
-    let create id startsAt title endsAt (currency:string option) (typ:string option)
+  let addAuctionReq user (json:JsonValue) =
+    let create id startsAt title endsAt (currency:string option) (typ:string option) (``open``:bool option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
-        let defaultTyp = TimedAscending { reservePrice = Amount.zero currency; minRaise = Amount.zero currency;
+        let defaultTyp = TimedAscending { reservePrice = AmountValue.zero; minRaise = AmountValue.zero;
           timeFrame =TimeSpan.FromSeconds(0.0) }
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
-        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ }
+        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ
+          openBidders = Option.defaultValue false ``open`` }
     match Encoding json with
     | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
-                   <*> (o .@? "currency")<*> (o .@? "type")
+                   <*> (o .@? "currency")<*> (o .@? "type")<*> (o .@? "open")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
 
@@ -101,7 +102,7 @@ module ToJson=
     ]
   let auction auction = auctionList auction |> jobj
   let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) =
-    let (winner,winnerPrice) =
+    let winner,winnerPrice =
             match maybeAmountAndWinner with
             | None -> ("","")
             | Some (amount, winner)->

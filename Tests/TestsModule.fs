@@ -20,6 +20,7 @@ module TestData =
       user = seller
       currency=Currency CurrencyCode.SEK
       typ= typ
+      openBidders = false
      }
 
   let auction : Auction = auctionOfTyp (SingleSealedBid Vickrey)
@@ -31,7 +32,7 @@ module TestData =
   let bid =
       { auction = auctionId
         user = buyer
-        amount = sek 100L
+        amount = 100L
         at = DateTime(2016, 1, 2) }
 
   let buyer1 = BuyerOrSeller(UserId "x2", "Buyer")
@@ -39,12 +40,12 @@ module TestData =
 
   let bid1 = { auction =auctionId
                user=buyer1
-               amount =parse "SEK10"
+               amount =parse "10"
                at = startsAt.AddHours(1.0)
              }
   let bid2 = { auction =auctionId
                user=buyer2
-               amount =parse "SEK12"
+               amount =parse "12"
                at = startsAt.AddHours(2.0)
              }
 

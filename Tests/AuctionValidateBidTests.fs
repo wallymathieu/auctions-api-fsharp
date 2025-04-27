@@ -13,7 +13,7 @@ module ``Auction validate bid tests`` =
 
     // act
     let res =
-      validateBid ({ bid with user = seller; at = d })
+      validateBid { bid with user = seller; at = d }
     // assert
     Assert.Equal(Error(SellerCannotPlaceBids(User.getId seller, auctionId)), res)
 

@@ -60,7 +60,8 @@ let firstAuctionRequest ="""{
     "startsAt": "2022-07-01T10:00:00.000Z",
     "endsAt": "2022-09-18T10:00:00.000Z",
     "title": "Some auction",
-    "currency": "VAC"
+    "currency": "VAC",
+    "open": true
 }"""
 let seller1 = "eyJzdWIiOiJhMSIsICJuYW1lIjoiVGVzdCIsICJ1X3R5cCI6IjAifQo="
 let buyer1 = "eyJzdWIiOiJhMiIsICJuYW1lIjoiQnV5ZXIiLCAidV90eXAiOiIwIn0K"
@@ -69,7 +70,7 @@ let ``create auction 1``() =
   use data = new StringContent(firstAuctionRequest, Encoding.UTF8, appJson)
   //
   let statusCode,res =
-        app() |> reqWithAuth HttpMethod.Post "/auction" (Some data) seller1
+        app() |> reqWithAuth HttpMethod.Post "/auctions" (Some data) seller1
   Assert.Equal (HttpStatusCode.OK, statusCode)
   assertStrJsonEqual ("""{
       "$type": "AuctionAdded",
@@ -80,8 +81,9 @@ let ``create auction 1``() =
           "title": "Some auction",
           "expiry": "2022-09-18T10:00:00.000Z",
           "user": "BuyerOrSeller|a1|Test",
-          "type": "English|VAC0|VAC0|0",
-          "currency": "VAC"
+          "type": "English|0|0|0",
+          "currency": "VAC",
+          "open": true
       }
   }""", res)
 
@@ -97,7 +99,7 @@ let secondAuctionRequest ="""{
 let ``create auction 2``() =
   use data = new StringContent(secondAuctionRequest, Encoding.UTF8, appJson)
   let statusCode,res =
-        app() |> reqWithAuth HttpMethod.Post "/auction" (Some data) seller1
+        app() |> reqWithAuth HttpMethod.Post "/auctions" (Some data) seller1
   Assert.Equal (HttpStatusCode.OK, statusCode)
   assertStrJsonEqual ("""{
       "$type": "AuctionAdded",
@@ -108,8 +110,9 @@ let ``create auction 2``() =
           "title": "Some auction",
           "expiry": "2022-12-18T10:00:00.000Z",
           "user": "BuyerOrSeller|a1|Test",
-          "type": "English|VAC0|VAC0|0",
-          "currency": "VAC"
+          "type": "English|0|0|0",
+          "currency": "VAC",
+          "open": false
       }
   }""", res)
 
@@ -117,11 +120,11 @@ let ``create auction 2``() =
 let ``Place bid as buyer on auction 1``() =
   let app = app()
   use auctionReq = new StringContent(firstAuctionRequest, Encoding.UTF8, appJson)
-  app |> reqWithAuth HttpMethod.Post "/auction" (Some auctionReq) seller1 |> ignore
+  app |> reqWithAuth HttpMethod.Post "/auctions" (Some auctionReq) seller1 |> ignore
 
-  use bidReq = new StringContent("""{ "auction":"1","amount":"VAC11" }""", Encoding.UTF8, appJson)
+  use bidReq = new StringContent("""{ "amount":11 }""", Encoding.UTF8, appJson)
   let statusCode,res =
-        app |> reqWithAuth HttpMethod.Post "/auction/1/bid" (Some bidReq) buyer1
+        app |> reqWithAuth HttpMethod.Post "/auctions/1/bids" (Some bidReq) buyer1
 
   Assert.Equal (HttpStatusCode.OK, statusCode)
   assertStrJsonEqual ("""{
@@ -130,7 +133,7 @@ let ``Place bid as buyer on auction 1``() =
     "bid": {
         "auction": 1,
         "user": "BuyerOrSeller|a2|Buyer",
-        "amount": "VAC11",
+        "amount": 11,
         "at": "2022-08-04T00:00:00.000Z"
     }
 }""", res)
@@ -139,10 +142,10 @@ let ``Place bid as buyer on auction 1``() =
 let ``Place bid as buyer on auction 2``() =
   let app = app()
   use auctionReq = new StringContent(secondAuctionRequest, Encoding.UTF8, appJson)
-  app |> reqWithAuth HttpMethod.Post "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new StringContent("""{ "amount":"VAC11" }""")
+  app |> reqWithAuth HttpMethod.Post "/auctions" (Some auctionReq) seller1 |> ignore
+  use bidReq = new StringContent("""{ "amount":11 }""")
   let statusCode,res =
-        app |> reqWithAuth HttpMethod.Post "/auction/2/bid" (Some bidReq) buyer1
+        app |> reqWithAuth HttpMethod.Post "/auctions/2/bids" (Some bidReq) buyer1
   Assert.Equal (HttpStatusCode.OK, statusCode)
   assertStrJsonEqual ("""{
     "$type": "BidAccepted",
@@ -150,7 +153,7 @@ let ``Place bid as buyer on auction 2``() =
     "bid": {
         "auction": 2,
         "user": "BuyerOrSeller|a2|Buyer",
-        "amount": "VAC11",
+        "amount": 11,
         "at": "2022-08-04T00:00:00.000Z"
     }
 }""", res)
@@ -159,10 +162,10 @@ let ``Place bid as buyer on auction 2``() =
 let ``Place bid as seller on auction 1``() =
   let app = app()
   use auctionReq = new StringContent(firstAuctionRequest, Encoding.UTF8, appJson)
-  app |> reqWithAuth HttpMethod.Post "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new StringContent("""{ "amount":"VAC11" }""")
+  app |> reqWithAuth HttpMethod.Post "/auctions" (Some auctionReq) seller1 |> ignore
+  use bidReq = new StringContent("""{ "amount":11 }""")
   let statusCode,res =
-        app |> reqWithAuth HttpMethod.Post "/auction/1/bid" (Some bidReq) seller1
+        app |> reqWithAuth HttpMethod.Post "/auctions/1/bids" (Some bidReq) seller1
   Assert.Equal (HttpStatusCode.BadRequest, statusCode)
   assertStrJsonEqual ("""{
     "type": "SellerCannotPlaceBids",
@@ -174,12 +177,12 @@ let ``Place bid as seller on auction 1``() =
 let ``get auctions``() =
   let app = app()
   use auctionReq = new StringContent(firstAuctionRequest, Encoding.UTF8, appJson)
-  app |> reqWithAuth HttpMethod.Post "/auction" (Some auctionReq) seller1 |> ignore
-  use bidReq = new StringContent("""{ "auction":"1","amount":"VAC11" }""", Encoding.UTF8, appJson)
-  app |> reqWithAuth HttpMethod.Post "/auction/1/bid" (Some bidReq) buyer1 |> ignore
+  app |> reqWithAuth HttpMethod.Post "/auctions" (Some auctionReq) seller1 |> ignore
+  use bidReq = new StringContent("""{ "amount":11 }""", Encoding.UTF8, appJson)
+  app |> reqWithAuth HttpMethod.Post "/auctions/1/bids" (Some bidReq) buyer1 |> ignore
 
   let statusCode,res =
-        app |> reqWithAuth HttpMethod.Get "/auction/1" None seller1
+        app |> reqWithAuth HttpMethod.Get "/auctions/1" None seller1
   Assert.Equal (HttpStatusCode.OK, statusCode)
   assertStrJsonEqual ("""{
     "id": 1,
@@ -189,7 +192,7 @@ let ``get auctions``() =
     "currency": "VAC",
     "bids": [
         {
-            "amount": "VAC11",
+            "amount": 11,
             "bidder": "BuyerOrSeller|a2|Buyer"
         }
     ],

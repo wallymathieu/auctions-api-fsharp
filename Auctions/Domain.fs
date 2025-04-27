@@ -62,8 +62,11 @@ with
 
 let (|Currency|_|) = Currency.tryParse
 
+type AmountValue = int64
+module AmountValue=
+  let zero:AmountValue = 0L
 type Amount =
-  { value : int64
+  { value : AmountValue
     currency : Currency }
   override this.ToString() =
     $"{this.currency}%i{this.value}"
@@ -72,7 +75,7 @@ type Amount =
     let m = Amount.Regex.Match(amount)
     if m.Success then
       match (m.Groups["currency"].Value, m.Groups["value"].Value) with
-      | Currency c, amount -> Some { currency=c; value=Int64.Parse amount }
+      | Currency c, amount -> Some { currency=c; value=AmountValue.Parse amount }
       | _, _ -> None
     else None
   static member Parse amount : Amount= tryParse amount |> Option.defaultWith (fun ()-> failwithf $"Unable to parse %s{amount}")
@@ -86,9 +89,10 @@ type Amount =
 module Amount =
   let currency (a:Amount) = a.currency
   let value (a:Amount) = a.value
-  let zero c= { currency=c ; value=0L}
+  let zero c= { currency=c ; value=AmountValue.zero }
 
 let (|Amount|_|) : string -> Amount option = tryParse
+let (|AmountValue|_|) : string -> AmountValue option = tryParse
 let (|Int64|_|) : string -> int64 option = tryParse
 
 module Timed =
@@ -100,10 +104,10 @@ module Auctions=
       /// the seller has set a minimum sale price in advance (the 'reserve' price)
       /// and the final bid does not reach that price the item remains unsold
       /// If the reserve price is 0, that is the equivalent of not setting it.
-      reservePrice: Amount
+      reservePrice: AmountValue
       /// Sometimes the auctioneer sets a minimum amount by which the next bid must exceed the current highest bid.
       /// Having min raise equal to 0 is the equivalent of not setting it.
-      minRaise: Amount
+      minRaise: AmountValue
       /// If no competing bidder challenges the standing bid within a given time frame,
       /// the standing bid becomes the winner, and the item is sold to the highest bidder
       /// at a price equal to his or her bid.
@@ -143,7 +147,7 @@ type Type=
       None
     else
       match (typ.Split('|') |> Seq.toList) with
-      | "English"::Amount reservePrice::Amount minRaise:: [ (Int64 timeframe) ] ->
+      | "English"::AmountValue reservePrice::AmountValue minRaise:: [ (Int64 timeframe) ] ->
          Some (TimedAscending {
                 reservePrice=reservePrice
                 minRaise=minRaise
@@ -162,12 +166,13 @@ type Auction =
     user : User
     typ : Type
     currency:Currency
+    openBidders : bool
   }
 
 type Bid =
   { auction : AuctionId
     user : User
-    amount : Amount
+    amount : AmountValue
     at : DateTime
   }
 
@@ -185,9 +190,8 @@ type Errors =
   | AuctionHasNotStarted of AuctionId
   | AuctionNotFound of AuctionId
   | SellerCannotPlaceBids of UserId * AuctionId
-  | BidCurrencyConversion of Currency
   | InvalidUserData of String
-  | MustPlaceBidOverHighestBid of Amount
+  | MustPlaceBidOverHighestBid of AmountValue
   | AlreadyPlacedBid
 
 [<RequireQualifiedAccess>]
@@ -201,11 +205,10 @@ module Auction=
   let user (auction : Auction) = auction.user
   /// if the bidders are open or anonymous
   /// for instance in a 'swedish' type auction you get to know the other bidders as the winner
-  let biddersAreOpen (auction : Auction) = true
+  let biddersAreOpen (auction : Auction) = auction.openBidders
 
   let (|ValidBid|InvalidBid|) (auction : Auction, bid : Bid) =
     if bid.user = auction.user then InvalidBid(SellerCannotPlaceBids(User.getId bid.user, auction.id))
-    else if bid.amount.currency <> auction.currency then InvalidBid(Errors.BidCurrencyConversion(bid.amount.currency))
     else if bid.at < auction.startsAt then InvalidBid(Errors.AuctionHasNotStarted auction.id)
     else if bid.at > auction.expiry then InvalidBid(Errors.AuctionHasEnded auction.id)
     else ValidBid
@@ -226,7 +229,7 @@ module State=
     /// get bids for state (will return empty if in a state that does not disclose bids)
     abstract GetBids: unit -> Bid list
     /// try to get amount and winner, will return None if no winner
-    abstract TryGetAmountAndWinner: unit -> (Amount * User) option
+    abstract TryGetAmountAndWinner: unit -> (AmountValue * User) option
     /// returns true if state has ended
     abstract HasEnded: unit -> bool
 
@@ -352,13 +355,13 @@ type Command =
 
 module Command =
   /// the time when the command was issued
-  let getAt command =
-    match command with
+  let getAt =
+    function
     | AddAuction(at, _) -> at
     | PlaceBid(at, _) -> at
 
-  let getAuction command =
-    match command with
+  let getAuction =
+    function
     | AddAuction(_,auction) -> auction.id
     | PlaceBid(_,bid) -> bid.auction
 
@@ -366,21 +369,21 @@ module Command =
   let foldToMap commands =
     let folder auctions =
           function
-          | AddAuction (at,auction)->
+          | AddAuction (at,auction) ->
             if auction.expiry > at && not (Map.containsKey auction.id auctions) then
               let empty =Auction.emptyState auction
               Map.add auction.id (auction,empty) auctions
             else
               auctions
-          | PlaceBid (_,b)->
-              match auctions.TryGetValue b.auction with
-              | true, (auction,state) ->
-                match (auction,b) with
-                | Auction.ValidBid ->
-                  let next,_= S.addBid b state
-                  Map.add auction.id (auction, next) auctions
-                | Auction.InvalidBid _ -> auctions
-              | false, _ -> auctions
+          | PlaceBid (_,b) ->
+            match Map.tryFind b.auction auctions with
+            | Some (auction,state) ->
+              match (auction,b) with
+              | Auction.ValidBid ->
+                let next,_= S.addBid b state
+                Map.add auction.id (auction, next) auctions
+              | Auction.InvalidBid _ -> auctions
+            | None -> auctions
     (Map.empty, commands) ||> List.fold folder
 type Event =
   | AuctionAdded of DateTime * Auction
@@ -455,7 +458,6 @@ type Errors with
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]
     | AuctionNotFound b-> jobj [ "type".="AuctionNotFound"; "bidId" .= b]
     | SellerCannotPlaceBids (u,a)-> jobj [ "type".="SellerCannotPlaceBids"; "userId" .= string u; "auctionId" .=a]
-    | BidCurrencyConversion c -> jobj [ "type".="BidCurrencyConversion"; "currency" .= c]
     | InvalidUserData u-> jobj [ "type".="InvalidUserData"; "user" .= string u]
     | MustPlaceBidOverHighestBid a-> jobj [ "type".="MustPlaceBidOverHighestBid"; "amount" .= a]
     | AlreadyPlacedBid -> jobj [ "type".="AlreadyPlacedBid"]
@@ -469,7 +471,15 @@ type Auction with
     and! user = jreq "user" (fun x -> Some x.user)
     and! typ = jreq "type" (fun x -> Some x.typ)
     and! currency = jreq "currency" (fun x -> Some x.currency)
-    return { id =id; startsAt =startsAt; title = title; expiry=expiry; user=user; typ=typ; currency=currency } }
+    and! openBidders = jopt "open" (fun x -> Some x.openBidders)
+    return { id = id
+             startsAt = startsAt
+             title = title
+             expiry = expiry
+             user = user
+             typ = typ
+             currency = currency
+             openBidders = Option.defaultValue false openBidders } }
 type Bid with
   static member JsonObjCodec = codec {
     let! auction = jreq "auction" (fun x -> Some x.auction)
@@ -504,7 +514,7 @@ type Command with
       create
       <!> jreq "at" (function PlaceBid (d,_)-> Some d | _ -> None)
       <*> jreq "bid" (function PlaceBid (_,a)-> Some a | _ -> None)
-    (tag "$type" "AddAuction" auctionCodec) <|> (tag "$type" "PlaceBid" bidCodec)
+    tag "$type" "AddAuction" auctionCodec <|> tag "$type" "PlaceBid" bidCodec
 
 type Event with
   static member JsonObjCodec =

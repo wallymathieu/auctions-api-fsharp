@@ -37,9 +37,9 @@ type AppendAndReadBatchRedis<'T>(connStr:string, entitiesKey:string, mapToHashEn
   let entitiesKey:RedisKey = implicit entitiesKey
   interface IAppendBatch<'T> with
 
-    member __.Batch events = AppendAndReadBatchRedis.batch db mapToHashEntries entitiesKey events
+    member _.Batch events = AppendAndReadBatchRedis.batch db mapToHashEntries entitiesKey events
 
-    member __.ReadAll() = AppendAndReadBatchRedis.readAll db mapFromHashEntries getAt entitiesKey
+    member _.ReadAll() = AppendAndReadBatchRedis.readAll db mapFromHashEntries getAt entitiesKey
 
 type AppendAndReadEventBatchRedis(connStr:string) =
   inherit AppendAndReadBatchRedis<Event>(connStr, "Events", Event.mapToHashEntries, Event.mapFromHashEntries, Event.getAt)

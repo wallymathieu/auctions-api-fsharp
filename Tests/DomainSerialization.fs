@@ -11,20 +11,20 @@ open Fleece
 open Fleece.FSharpData
 
 let sampleJsonLines = """
-[{"$type":"AddAuction","at":"2020-05-17T08:05:54.943Z","auction":{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:05:59.182Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:02.198Z","bid":{"auction":2,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:06:02.197Z"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:06.854Z","bid":{"auction":2,"user":"BuyerOrSeller|a1|Test","amount":"VAC11","at":"2020-05-17T08:06:06.854Z"}}]
-[{"$type":"AddAuction","at":"2020-05-17T08:06:37.128Z","auction":{"id":1,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:53.148Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:06:53.147Z"}}]
-[{"$type":"PlaceBid","at":"2020-05-17T08:06:57.773Z","bid":{"auction":1,"user":"BuyerOrSeller|a1|Test","amount":"VAC11","at":"2020-05-17T08:06:57.773Z"}}]
+[{"$type":"AddAuction","at":"2020-05-17T08:05:54.943Z","auction":{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|0|0|0","currency":"VAC","open": false}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:05:59.182Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:05:59.171Z"}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:02.198Z","bid":{"auction":2,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:06:02.197Z"}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:06.854Z","bid":{"auction":2,"user":"BuyerOrSeller|a1|Test","amount":11,"at":"2020-05-17T08:06:06.854Z"}}]
+[{"$type":"AddAuction","at":"2020-05-17T08:06:37.128Z","auction":{"id":1,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|0|0|0","currency":"VAC","open": false}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:53.148Z","bid":{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:06:53.147Z"}}]
+[{"$type":"PlaceBid","at":"2020-05-17T08:06:57.773Z","bid":{"auction":1,"user":"BuyerOrSeller|a1|Test","amount":11,"at":"2020-05-17T08:06:57.773Z"}}]
 """
 let parseCommands lines =
   let parseLine line=
     let k : Command array ParseResult = ofJsonText line
     match k with
     | Ok line -> line
-    | Error err->failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
+    | Error err->failwithf $"Couldn't parse line due to error:\n%A{err}\n for line\n%s{line}"
   let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
   splitLines lines |> Array.collect parseLine |> Array.toList
 
@@ -42,11 +42,11 @@ module Json =
       | Ok commands ->
         let j = toJsonValue commands
         assertJsonEqual (JsonValue.Parse line, j)
-      | Error err -> failwithf "Couldn't parse line due to error:\n%A\nfor line\n%s" err line
+      | Error err -> failwithf $"Couldn't parse line due to error:\n%A{err}\n for line\n%s{line}"
     let splitLines (s:string)=s.Split([|'\r';'\n'|], StringSplitOptions.RemoveEmptyEntries)
     splitLines sampleJsonLines |> Array.iter parseLine
 
-  let bidJson = """{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":"VAC11","at":"2020-05-17T08:05:59.171Z"}"""
+  let bidJson = """{"auction":1,"user":"BuyerOrSeller|a2|Buyer","amount":11,"at":"2020-05-17T08:05:59.171Z"}"""
   [<Fact>]
   let ``Bid sample json can be deserialized correctly``() =
     let b : Bid ParseResult = ofJsonText bidJson
@@ -54,10 +54,10 @@ module Json =
     | Ok bid->
       Assert.Equal (AuctionId <| 1L, bid.auction)
       Assert.Equal (BuyerOrSeller (UserId "a2","Buyer"), bid.user)
-      Assert.Equal (Amount.Parse "VAC11", bid.amount)
+      Assert.Equal (11L, bid.amount)
       let expectedAt = DateTime.ParseExact ("2020-05-17T08:05:59.171Z", [| "yyyy-MM-ddTHH:mm:ss.fffZ"; |], null, DateTimeStyles.RoundtripKind)
       Assert.Equal (expectedAt, bid.at)
-    | Error e -> failwithf "Error %A" e
+    | Error e -> failwithf $"Error %A{e}"
   [<Fact>]
   let ``Bid sample json can be deserialized and serialized to the same json``() =
     let b : Bid ParseResult = ofJsonText bidJson
@@ -65,9 +65,9 @@ module Json =
     | Ok bid->
       let j = toJsonValue bid
       assertJsonEqual (JsonValue.Parse bidJson, j)
-    | Error e -> failwithf "Error %A" e
+    | Error e -> failwithf $"Error %A{e}"
 
-  let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|VAC0|VAC0|0","currency":"VAC"}"""
+  let auctionJson = """{"id":2,"startsAt":"2018-12-01T10:00:00.000Z","title":"Some auction","expiry":"2020-05-18T10:00:00.000Z","user":"BuyerOrSeller|a1|Test","type":"English|0|0|0","currency":"VAC","open": false}"""
   [<Fact>]
   let ``Auction sample json can be deserialized correctly``() =
     let a : Auction ParseResult = ofJsonText auctionJson
@@ -79,8 +79,8 @@ module Json =
       Assert.Equal (expectedAt, auction.startsAt)
       Assert.Equal ("Some auction", auction.title)
       Assert.Equal (Currency.VAC, auction.currency)
-      Assert.Equal (Type.Parse "English|VAC0|VAC0|0", auction.typ)
-    | Error e -> failwithf "Error %A" e
+      Assert.Equal (Type.Parse "English|0|0|0", auction.typ)
+    | Error e -> failwithf $"Error %A{e}"
   [<Fact>]
   let ``Auction sample json can be deserialized and serialized to the same json``() =
     let a : Auction ParseResult = ofJsonText auctionJson
@@ -88,7 +88,7 @@ module Json =
     | Ok auction->
       let j = toJsonValue auction
       assertJsonEqual (JsonValue.Parse auctionJson, j)
-    | Error e -> failwithf "Error %A" e
+    | Error e -> failwithf $"Error %A{e}"
 
   let inline roundtripEq (isEq: 'a -> 'a -> bool) p =
       let actual = p |> toJson |> ofJson
@@ -96,7 +96,7 @@ module Json =
           match actual with
           | Ok actual -> isEq actual p
           | _ -> false
-      if not ok then printfn "Got %A from %A" actual p
+      if not ok then printfn $"Got %A{actual} from %A{p}"
       ok
 
   let inline roundtrip p = roundtripEq (=) p
@@ -114,7 +114,7 @@ module Json =
   [<Property>]
   let ``serialized AuctionId is the same as the input`` (u: AuctionId) = roundtrip u
   [<Property>]
-  let ``serialized Amount is the same as the input`` (PositiveInt u) c = roundtrip ({ value =int64 u; currency=c })
+  let ``serialized Amount is the same as the input`` (PositiveInt u) c = roundtrip { value =int64 u; currency=c }
   (*[<Property>]
   let ``serialized Type is the same as the input`` (u: Type) = roundtrip u *)
   (*[<Property>]
@@ -133,8 +133,8 @@ module Redis =
   let ``sample commands can be deserialized and serialized to the same values``() =
     let commands = parseCommands sampleJsonLines
     for command in commands do
-       let redisvalue = Command.mapToHashEntries command
-       let deserialized = Command.mapFromHashEntries redisvalue
+       let redisValue = Command.mapToHashEntries command
+       let deserialized = Command.mapFromHashEntries redisValue
        match command,deserialized with
 
        | PlaceBid (at1,{auction=auctionId1;user=user1;amount=amount1;at=at1_1}),
@@ -147,4 +147,4 @@ module Redis =
        | AddAuction (at1,auction1), AddAuction (at2,auction2) ->
          Assert.Equal (at1,at2)
          Assert.Equal (auction1,auction2)
-       | _, _ -> Assert.True ((command = deserialized), sprintf "Expected:\n%A\nto equal:\n%A" command deserialized)
+       | _, _ -> Assert.True ((command = deserialized), $"Expected:\n%A{command}\nto equal:\n%A{deserialized}")
