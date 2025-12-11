@@ -1,7 +1,7 @@
 sudo: false
 language: csharp
 dist: xenial
-dotnet: 6.0
+dotnet: 10.0
 services:
   - redis
 script:
