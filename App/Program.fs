@@ -11,7 +11,7 @@ type DictEntry = System.Collections.DictionaryEntry
 
 type CmdArgs =
   { IP : System.Net.IPAddress
-    Port : Sockets.Port
+    Port : uint16
     Redis : string option
     Json : string option
     Event : bool

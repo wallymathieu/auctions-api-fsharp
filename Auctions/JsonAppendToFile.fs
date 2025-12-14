@@ -6,9 +6,10 @@ open System
 open FSharp.Data
 open Fleece
 open Fleece.FSharpData
+open System.Threading.Tasks
 
 module JsonAppendToFile =
-  let batch fileName (toJson:'cs -> JsonValue) cs = async{
+  let batch fileName (toJson:'cs -> JsonValue) cs = task{
     use fs = File.Open(fileName, FileMode.Append, FileAccess.Write, FileShare.Read)
     use w = new StreamWriter(fs)
     let json = toJson cs
@@ -17,7 +18,7 @@ module JsonAppendToFile =
     do! fs.FlushAsync()
     return ()
   }
-  let readAll (parseJson: string -> 'c array ParseResult) getAt fileName = async{
+  let readAll (parseJson: string -> 'c array ParseResult) getAt fileName = task{
     use fs = File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.Read)
     use r = new StreamReader(fs)
     let! lines = r.ReadToEndAsync()
@@ -39,8 +40,8 @@ type JsonAppendToFile<'T>(fileName, toJson, parseJson, getAt:'T -> DateTime) =
     if fileDoesNotExist fileName then File.WriteAllText(fileName, "")
 
   interface IAppendBatch<'T> with
-    member _.Batch cs = JsonAppendToFile.batch fileName toJson cs
-    member _.ReadAll() = JsonAppendToFile.readAll parseJson getAt fileName
+    member _.Batch cs = JsonAppendToFile.batch fileName toJson cs |> Async.AwaitTask
+    member _.ReadAll() = JsonAppendToFile.readAll parseJson getAt fileName |> Async.AwaitTask
 
 type JsonAppendEventToFile(fileName) =
   inherit JsonAppendToFile<Event> (fileName, toJsonValue, ofJsonText, Event.getAt)

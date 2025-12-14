@@ -6,6 +6,7 @@ open Auctions.Domain
 
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 open Fleece
 open Fleece.FSharpData
@@ -107,10 +108,10 @@ module Json =
   let ``serialized Currency is the same as the input`` (u: Currency) = roundtrip u
   [<Fact>]
   let ``serialized Buyer or seller User is the same as the input``() =
-    fsCheck (Prop.forAll Arb.buyerOrSeller roundtrip)
+    fsCheck (Prop.forAll Arbitrary.buyerOrSeller roundtrip)
   [<Fact>]
   let ``serialized Support User is the same as the input``() =
-    fsCheck (Prop.forAll Arb.support roundtrip)
+    fsCheck (Prop.forAll Arbitrary.support roundtrip)
   [<Property>]
   let ``serialized AuctionId is the same as the input`` (u: AuctionId) = roundtrip u
   [<Property>]
