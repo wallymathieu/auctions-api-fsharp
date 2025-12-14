@@ -4,6 +4,7 @@ open Auctions.Domain
 
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 
 module ``Amount tests`` =
   let amountMax = {value=12L; currency=Currency.VAC}
@@ -31,4 +32,4 @@ module ``Amount tests`` =
     let roundtrip orig =
       let parsed = orig |> string |> Amount.TryParse
       Some orig ?=? parsed
-    fsCheck (Prop.forAll Arb.amount roundtrip)
+    fsCheck (Prop.forAll Arbitrary.amount roundtrip)
