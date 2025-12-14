@@ -1,6 +1,7 @@
 module Suave.Testing
 
-(** For testing suave applications easily
+(** From https://github.com/SuaveIO/suave/blob/master/src/Suave.Tests/Testing.fs
+For testing suave applications easily
 
 Example:
 
