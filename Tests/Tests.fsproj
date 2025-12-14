@@ -7,6 +7,7 @@
     <ProjectReference Include="..\Auctions\Auctions.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="SuaveTesting.fs" />
     <Compile Include="TestsModule.fs" />
     <Compile Include="UserTests.fs" />
     <Compile Include="AuctionStateSpecs.fs" />
@@ -27,7 +28,6 @@
   <ItemGroup>
     <PackageReference Include="FsCheck.Xunit" Version="2.16.5" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
-    <PackageReference Include="Suave.Testing" Version="2.2.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="FsUnit.xUnit" Version="7.1.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
