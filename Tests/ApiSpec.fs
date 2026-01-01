@@ -151,6 +151,26 @@ let ``Place bid as seller on auction 1``() =
 }""", res)
 
 [<Fact>]
+let ``create auction with duplicate id fails``() =
+  let app = app()
+  use auctionReq1 = new StringContent(firstAuctionRequest)
+  let statusCode1,res1 =
+        (runWebPart app)
+        |> reqWithAuth HttpMethod.POST "/auctions" (Some auctionReq1) seller1
+  Assert.Equal (HttpStatusCode.OK, statusCode1)
+
+  // Try to create another auction with the same ID
+  use auctionReq2 = new StringContent(firstAuctionRequest)
+  let statusCode2,res2 =
+        (runWebPart app)
+        |> reqWithAuth HttpMethod.POST "/auctions" (Some auctionReq2) seller1
+  Assert.Equal (HttpStatusCode.BadRequest, statusCode2)
+  assertStrJsonEqual ("""{
+    "type": "AuctionAlreadyExists",
+    "auctionId": 1
+}""", res2)
+
+[<Fact>]
 let ``get auctions``() =
   let app = app()
   use auctionReq = new StringContent(firstAuctionRequest)
