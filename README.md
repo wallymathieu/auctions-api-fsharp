@@ -72,6 +72,34 @@ dotnet restore
 dotnet run --project App --redis CONN --json FILE --web-hook URI
 ```
 
+### Docker
+
+Build the image:
+
+```bash
+docker build -t auctions-api .
+```
+
+Run with in-memory storage (no persistence):
+
+```bash
+docker run -p 8083:8083 auctions-api
+```
+
+Run with a JSON file for persistence (mount a host directory):
+
+```bash
+docker run -p 8083:8083 -v $(pwd)/data:/data -e AUCTIONS_JSON=/data/commands.json auctions-api
+```
+
+Run with Redis persistence:
+
+```bash
+docker run -p 8083:8083 -e AUCTIONS_REDIS=redis://localhost:6379 auctions-api
+```
+
+Environment variables mirror the CLI flags with an `AUCTIONS_` prefix: `AUCTIONS_IP`, `AUCTIONS_PORT`, `AUCTIONS_REDIS`, `AUCTIONS_JSON`, `AUCTIONS_EVENT`, `AUCTIONS_WEB_HOOK`. The image defaults to `AUCTIONS_IP=0.0.0.0` and `AUCTIONS_PORT=8083`.
+
 
 ## API Endpoints
 
