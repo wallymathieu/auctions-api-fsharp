@@ -87,7 +87,7 @@ module ``bid deserialization spec``=
                          auction=auctionId; at = endsAt }, ``bid of 10``)
 
 module ``auction deserialization spec``=
-  let ``add first auction`` = OfJson.addAuctionReq seller (JsonValue.Parse """{ "id":1,"startsAt":"2016-01-01T00:00:00.000Z","endsAt":"2016-02-01T00:00:00.000Z","title":"First auction", "currency":"VAC" }""")
+  let ``add first auction`` = OfJson.addAuctionReq seller (fun () -> AuctionId 0L) (JsonValue.Parse """{ "id":1,"startsAt":"2016-01-01T00:00:00.000Z","endsAt":"2016-02-01T00:00:00.000Z","title":"First auction", "currency":"VAC" }""")
 
   [<Fact>]
   let ``can add auction request``() =

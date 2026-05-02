@@ -184,7 +184,6 @@ module Bid=
   let at (bid: Bid) = bid.at
 
 type Errors =
-  | UnknownAuction of AuctionId
   | AuctionAlreadyExists of AuctionId
   | AuctionHasEnded of AuctionId
   | AuctionHasNotStarted of AuctionId
@@ -452,7 +451,6 @@ type Type with
 type Errors with
   static member ToJson (x: Errors) =
     match x with
-    | UnknownAuction a-> jobj [ "type".="UnknownAuction"; "auctionId" .= a] //NOTE: Duplicate
     | AuctionAlreadyExists a-> jobj [ "type".="AuctionAlreadyExists"; "auctionId" .= a]
     | AuctionHasEnded a-> jobj [ "type".="AuctionHasEnded"; "auctionId" .= a]
     | AuctionHasNotStarted a-> jobj [ "type".="AuctionHasNotStarted"; "auctionId" .= a]

@@ -84,6 +84,10 @@ module Json=
     BAD_REQUEST (string v)
     >=> setMimeType "application/json; charset=utf-8"
 
+  let inline NOT_FOUND (v:Encoding) : WebPart=
+    NOT_FOUND (string v)
+    >=> setMimeType "application/json; charset=utf-8"
+
   let inline OK_or_BAD_REQUEST result : WebPart=
     match result with
     | Ok v -> OK v

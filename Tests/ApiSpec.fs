@@ -176,6 +176,6 @@ let ``get auctions``() =
             "bidder": "BuyerOrSeller|a2|Buyer"
         }
     ],
-    "winner": "",
-    "winnerPrice": ""
+    "winner": null,
+    "winnerPrice": null
 }""", res)
