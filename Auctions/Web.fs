@@ -79,7 +79,7 @@ module OfJson=
     | JObject o -> create <!> (o .@ "amount")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
-  let addAuctionReq user (json:JsonValue) =
+  let addAuctionReq user getNextAuctionId (json:JsonValue) =
     let create id startsAt title endsAt (currency:string option) (typ:string option) (``open``:bool option)
       =
         let currency= currency |> Option.bind Currency.tryParse |> Option.defaultValue Currency.VAC
@@ -87,10 +87,10 @@ module OfJson=
           timeFrame =TimeSpan.FromSeconds(0.0) }
         let typ = typ |> Option.bind Typ.TryParse
                       |> Option.defaultValue defaultTyp
-        { user = user; id=id; startsAt=startsAt; expiry=endsAt; title=title; currency=currency; typ=typ
+        { user = user; id = id |> Option.defaultWith getNextAuctionId; startsAt = startsAt; expiry = endsAt; title = title; currency = currency; typ = typ
           openBidders = Option.defaultValue false ``open`` }
     match FSharpData.Encoding json with
-    | JObject o -> create <!> (o .@ "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
+    | JObject o -> create <!> (o .@? "id") <*> (o .@ "startsAt") <*> (o .@ "title")<*> (o .@ "endsAt")
                    <*> (o .@? "currency")<*> (o .@? "type")<*> (o .@? "open")
     | x -> Decode.Fail.objExpected x
     |> Result.mapError string
@@ -107,9 +107,9 @@ module ToJson=
   let auctionAndBidsAndMaybeWinnerAndAmount (auction, bids, maybeAmountAndWinner) =
     let winner,winnerPrice =
             match maybeAmountAndWinner with
-            | None -> ("","")
+            | None -> (null, Unchecked.defaultof<_>)
             | Some (amount, winner)->
-                (winner.ToString(), amount.ToString())
+                (string winner, Nullable amount.value)
     let discloseBidders =Auction.biddersAreOpen auction
     let bid (x: Bid) =
       let userId = string x.user
@@ -125,6 +125,10 @@ module ToJson=
     ] |> jobj
 
 let webPart (agent : AuctionDelegator) (time:unit->DateTime) =
+  let getNextAuctionId () = agent.GetAuctions() |> Async.map (fun auctions ->
+    match auctions |> List.map (Auction.getId >> AuctionId.unwrap) with
+    | [] -> AuctionId 1L
+    | ids -> AuctionId (List.max ids + 1L))
 
   let overview : WebPart= GET >=> fun ctx -> monad {
     let! auctionList =  agent.GetAuctions() |> liftM Some |> OptionT
@@ -151,22 +155,31 @@ let webPart (agent : AuctionDelegator) (time:unit->DateTime) =
           match! lift asyncResult with
           | Ok commandSuccess->
             return! Json.OK (toJson commandSuccess) ctx
+          | Error (AuctionNotFound _ as e) -> return! Json.NOT_FOUND (toJson e) ctx
           | Error e-> return! Json.BAD_REQUEST (toJson e) ctx
       | Error c'->return! Json.BAD_REQUEST (toJson c') ctx
     }
 
   /// register auction
-  let register =
-    let toPostedAuction user =
-        Json.getBody
-          >> Result.bind (OfJson.addAuctionReq user)
-          >> Result.map (Timed.at (time()) >>AddAuction)
-          >> Result.mapError InvalidUserData
-
+  let register : WebPart =
     authenticated (function
       | NoSession -> UNAUTHORIZED "Not logged in"
       | UserLoggedOn user ->
-        POST >=> handleCommandAsync (toPostedAuction user)
+        POST >=> fun ctx -> monad {
+            let! nextId = getNextAuctionId() |> liftM Some |> OptionT
+            let command =
+                Json.getBody ctx
+                  |> Result.bind (OfJson.addAuctionReq user (fun () -> nextId))
+                  |> Result.map (Timed.at (time()) >> AddAuction)
+                  |> Result.mapError InvalidUserData
+            match agent.UserCommand <!> command with
+            | Ok asyncResult ->
+                match! lift asyncResult with
+                | Ok commandSuccess -> return! Json.OK (toJson commandSuccess) ctx
+                | Error (AuctionNotFound _ as e) -> return! Json.NOT_FOUND (toJson e) ctx
+                | Error e -> return! Json.BAD_REQUEST (toJson e) ctx
+            | Error c' -> return! Json.BAD_REQUEST (toJson c') ctx
+        }
       )
 
   /// place bid
